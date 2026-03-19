@@ -1,0 +1,381 @@
+import Foundation
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Models — 1:1 with DB Migrations (001–010)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// MARK: - 001 approval_tier_configs
+
+struct ApprovalTierConfig: Identifiable, Codable, Equatable {
+    let id: String
+    var projectId: String
+    var module: String
+    var scope: String            // "all" | "department"
+    var departmentId: String?
+    var tiers: [TierDef]
+    var createdBy: String
+    var updatedBy: String
+    var createdAt: Int64
+    var updatedAt: Int64
+
+    enum CodingKeys: String, CodingKey {
+        case id, module, scope, tiers
+        case projectId = "project_id"
+        case departmentId = "department_id"
+        case createdBy = "created_by"
+        case updatedBy = "updated_by"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+}
+
+struct TierDef: Codable, Equatable {
+    let order: Int
+    let gate: TierGate?
+    let rules: [TierRule]
+}
+
+struct TierGate: Codable, Equatable {
+    let enabled: Bool
+    let type: String
+    let amountThreshold: Double?
+    enum CodingKeys: String, CodingKey {
+        case enabled, type
+        case amountThreshold = "amount_threshold"
+    }
+}
+
+struct TierRule: Codable, Equatable {
+    let type: String             // "default" | "amount"
+    let amountThreshold: Double?
+    let userIds: [String]
+    enum CodingKeys: String, CodingKey {
+        case type
+        case amountThreshold = "amount_threshold"
+        case userIds = "user_ids"
+    }
+}
+
+// MARK: - 002 vendors
+
+struct Vendor: Identifiable, Codable, Equatable {
+    let id: String
+    var projectId: String
+    var userId: String
+    var name: String
+    var address: VendorAddress
+    var email: String
+    var phone: VendorPhone
+    var contactPerson: String
+    var vatNumber: String?
+    var status: String
+    var verifiedAt: Int64?
+    var verifiedBy: String?
+    var addedBy: String
+    var updatedBy: String?
+    var departmentId: String?
+    var createdAt: Int64
+    var updatedAt: Int64
+
+    var verified: Bool { verifiedAt != nil }
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, address, email, phone, status
+        case projectId = "project_id"
+        case userId = "user_id"
+        case contactPerson = "contact_person"
+        case vatNumber = "vat_number"
+        case verifiedAt = "verified_at"
+        case verifiedBy = "verified_by"
+        case addedBy = "added_by"
+        case updatedBy = "updated_by"
+        case departmentId = "department_id"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+
+    init(id: String = UUID().uuidString, projectId: String = "", userId: String = "",
+         name: String = "", address: VendorAddress = VendorAddress(), email: String = "",
+         phone: VendorPhone = VendorPhone(), contactPerson: String = "",
+         vatNumber: String? = nil, status: String = "PENDING",
+         verifiedAt: Int64? = nil, verifiedBy: String? = nil,
+         addedBy: String = "", updatedBy: String? = nil, departmentId: String? = nil,
+         createdAt: Int64 = 0, updatedAt: Int64 = 0) {
+        self.id = id; self.projectId = projectId; self.userId = userId
+        self.name = name; self.address = address; self.email = email; self.phone = phone
+        self.contactPerson = contactPerson; self.vatNumber = vatNumber; self.status = status
+        self.verifiedAt = verifiedAt; self.verifiedBy = verifiedBy; self.addedBy = addedBy
+        self.updatedBy = updatedBy; self.departmentId = departmentId
+        self.createdAt = createdAt; self.updatedAt = updatedAt
+    }
+}
+
+struct VendorPhone: Codable, Equatable {
+    var countryCode: String
+    var number: String
+    enum CodingKeys: String, CodingKey { case countryCode = "country_code"; case number }
+    init(countryCode: String = "", number: String = "") {
+        self.countryCode = countryCode; self.number = number
+    }
+}
+
+struct VendorAddress: Codable, Equatable {
+    var line1: String?; var line2: String?; var city: String?
+    var state: String?; var postalCode: String?; var country: String?
+    enum CodingKeys: String, CodingKey {
+        case line1, line2, city, state, country; case postalCode = "postal_code"
+    }
+    init(line1: String? = nil, line2: String? = nil, city: String? = nil,
+         state: String? = nil, postalCode: String? = nil, country: String? = nil) {
+        self.line1 = line1; self.line2 = line2; self.city = city
+        self.state = state; self.postalCode = postalCode; self.country = country
+    }
+    var formatted: String {
+        [line1, line2, city, state, postalCode, country].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
+    }
+}
+
+// MARK: - 003 purchase_orders
+
+struct PurchaseOrder: Identifiable, Equatable {
+    var id: String = UUID().uuidString
+    var projectId: String = ""
+    var userId: String = ""
+    var poNumber: String = ""
+    var vendorId: String?
+    var departmentId: String?
+    var nominalCode: String?
+    var description: String?
+    var currency: String = "GBP"
+    var effectiveDate: Int64?
+    var notes: String?
+    var netAmount: Double = 0
+    var status: String = "DRAFT"
+    var assignedTo: String?
+    var raisedBy: String?
+    var raisedAt: Int64?
+    var approvedBy: String?
+    var approvedAt: Int64?
+    var postedBy: String?
+    var postedAt: Int64?
+    var rejectedBy: String?
+    var rejectedAt: Int64?
+    var rejectionReason: String?
+    var reassignmentReason: String?
+    var reassignedBy: String?
+    var reassignedAt: Int64?
+    var vatTreatment: String = "pending"
+    var deliveryAddress: DeliveryAddress?
+    var deliveryDate: Int64?
+    var closedBy: String?
+    var closedAt: Int64?
+    var closureReason: String?
+    var customFields: [CustomFieldSection] = []
+    var vatAmount: Double?
+    var grossTotal: Double?
+    var approvals: [Approval] = []
+    var createdAt: Int64 = 0
+    var updatedAt: Int64 = 0
+
+    // Display fields (resolved, not in DB)
+    var vendor: String = ""
+    var vendorAddress: String = ""
+    var department: String = ""
+    var lineItems: [LineItem] = []
+
+    static func == (lhs: PurchaseOrder, rhs: PurchaseOrder) -> Bool { lhs.id == rhs.id }
+    var poStatus: POStatus { POStatus.fromAPI(status) }
+    var totalAmount: Double { netAmount }
+}
+
+struct DeliveryAddress: Codable, Equatable {
+    var name: String?; var email: String?; var phoneCode: String?; var phone: String?
+    var line1: String?; var line2: String?; var city: String?
+    var state: String?; var postalCode: String?; var country: String?
+    var formattedAddress: String {
+        [line1, line2, city, state, postalCode].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
+    }
+}
+
+struct Approval: Codable, Equatable {
+    var userId: String; var tierNumber: Int; var approvedAt: Int64
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"; case tierNumber = "tier_number"; case approvedAt = "approved_at"
+    }
+}
+
+struct CustomFieldSection: Codable, Equatable {
+    var section: String?; var fields: [CustomFieldValue]?
+}
+
+struct CustomFieldValue: Codable, Equatable {
+    var name: String; var value: String
+}
+
+enum POStatus: String, CaseIterable {
+    case draft = "DRAFT", pending = "PENDING", approved = "APPROVED"
+    case acctEntered = "ACCT_ENTERED", posted = "POSTED"
+    case rejected = "REJECTED", closed = "CLOSED"
+
+    var displayName: String {
+        switch self {
+        case .draft: return "Draft"; case .pending: return "Pending"
+        case .approved: return "Approved"; case .acctEntered: return "Acct Entered"
+        case .posted: return "Posted"; case .rejected: return "Rejected"
+        case .closed: return "Closed"
+        }
+    }
+    static func fromAPI(_ raw: String) -> POStatus {
+        POStatus(rawValue: raw.uppercased()) ?? .pending
+    }
+}
+
+// MARK: - 004 purchase_order_line_items
+
+struct LineItem: Identifiable, Codable, Equatable {
+    var id: String = UUID().uuidString
+    var projectId: String?; var userId: String?; var poId: String?
+    var lineNumber: Int = 1
+    var description: String = ""
+    var quantity: Double = 1
+    var unitPrice: Double = 0
+    var total: Double = 0
+    var account: String = ""
+    var department: String = ""
+    var expenditureType: String = "Purchase"
+    var rentalStart: Int64?; var rentalEnd: Int64?
+    var splitParentId: String?
+    var customFields: [CustomFieldValue] = []
+    var createdAt: Int64?; var updatedAt: Int64?
+
+    enum CodingKeys: String, CodingKey {
+        case id, description, quantity, total, account, department
+        case projectId = "project_id"; case userId = "user_id"; case poId = "po_id"
+        case lineNumber = "line_number"; case unitPrice = "unit_price"
+        case expenditureType = "expenditure_type"
+        case rentalStart = "rental_start"; case rentalEnd = "rental_end"
+        case splitParentId = "split_parent_id"; case customFields = "custom_fields"
+        case createdAt = "created_at"; case updatedAt = "updated_at"
+    }
+
+    init(id: String = UUID().uuidString, description: String = "", quantity: Double = 1,
+         unitPrice: Double = 0, total: Double = 0, account: String = "",
+         department: String = "", expenditureType: String = "Purchase") {
+        self.id = id; self.description = description; self.quantity = quantity
+        self.unitPrice = unitPrice; self.total = total; self.account = account
+        self.department = department; self.expenditureType = expenditureType
+    }
+}
+
+// MARK: - 005 po_templates
+
+struct POTemplate: Identifiable, Codable, Equatable {
+    let id: String
+    var templateNumber: String?; var templateName: String
+    var vendorId: String?; var departmentId: String?; var nominalCode: String?
+    var description: String?; var currency: String?; var notes: String?
+    var netAmount: Double?; var vatTreatment: String?
+    var deliveryAddress: String?; var deliveryDate: Int64?
+    var customFields: [CustomFieldSection]?; var effectiveDate: Int64?
+    var createdAt: Int64?; var updatedAt: Int64?
+
+    enum CodingKeys: String, CodingKey {
+        case id, description, currency, notes
+        case templateNumber = "template_number"; case templateName = "template_name"
+        case vendorId = "vendor_id"; case departmentId = "department_id"
+        case nominalCode = "nominal_code"; case netAmount = "net_amount"
+        case vatTreatment = "vat_treatment"; case deliveryAddress = "delivery_address"
+        case deliveryDate = "delivery_date"; case customFields = "custom_fields"
+        case effectiveDate = "effective_date"
+        case createdAt = "created_at"; case updatedAt = "updated_at"
+    }
+}
+
+// MARK: - 007 po_assignment_rules
+
+struct POAssignmentRule: Identifiable, Codable, Equatable {
+    let id: String
+    var projectId: String; var userId: String; var name: String?
+    var departments: [String]; var vendors: [String]; var nominalCodes: [String]
+    var amountMin: Double?; var targetUserId: String; var priority: Int
+    var isActive: Bool; var createdAt: Int64; var updatedAt: Int64
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, departments, vendors, priority
+        case projectId = "project_id"; case userId = "user_id"
+        case nominalCodes = "nominal_codes"; case amountMin = "amount_min"
+        case targetUserId = "target_user_id"; case isActive = "is_active"
+        case createdAt = "created_at"; case updatedAt = "updated_at"
+    }
+}
+
+// MARK: - 009 po_settings_metadata
+
+struct POSettingsMetadata: Identifiable, Codable, Equatable {
+    let id: String
+    var projectId: String; var descriptionFormat: String
+    var autoSplitRentals: Bool; var defaultSplitType: String
+    var requireEffectiveDate: Bool; var enforcePeriodClose: Bool
+    var createdBy: String; var updatedBy: String
+    var createdAt: Int64; var updatedAt: Int64
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case projectId = "project_id"; case descriptionFormat = "description_format"
+        case autoSplitRentals = "auto_split_rentals"; case defaultSplitType = "default_split_type"
+        case requireEffectiveDate = "require_effective_date"; case enforcePeriodClose = "enforce_period_close"
+        case createdBy = "created_by"; case updatedBy = "updated_by"
+        case createdAt = "created_at"; case updatedAt = "updated_at"
+    }
+}
+
+// MARK: - Non-DB models
+
+typealias LegacyTierConfig = [String: [LegacyTierEntry]]
+struct LegacyTierEntry { let userId: String; let departmentId: String?; let tierNumber: Int }
+
+struct AppUser: Identifiable, Equatable {
+    let id: String; let fullName: String; let firstName: String; let lastName: String
+    let departmentId: String; let departmentName: String; let departmentIdentifier: String
+    let designationId: String; let designationName: String; let designationIdentifier: String
+    let status: String; let isAdmin: Bool; let isOwner: Bool; let email: String
+    var displayDesignation: String { FormatUtils.formatLabel(designationName) }
+    var displayDepartment: String { FormatUtils.formatLabel(departmentName) }
+    var isAccountant: Bool { departmentIdentifier == "department_accounts" }
+    var initials: String { fullName.split(separator: " ").map { String($0.prefix(1)) }.joined() }
+}
+
+struct Department: Identifiable, Equatable {
+    let id: String; let projectId: String; let departmentName: String
+    let identifier: String; let systemDefined: Bool
+    var displayName: String { FormatUtils.formatLabel(departmentName) }
+}
+
+// Flexible JSON value
+enum AnyCodableValue: Codable, Equatable {
+    case string(String); case int(Int64); case double(Double); case bool(Bool); case null
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if let v = try? c.decode(Bool.self) { self = .bool(v); return }
+        if let v = try? c.decode(Int64.self) { self = .int(v); return }
+        if let v = try? c.decode(Double.self) { self = .double(v); return }
+        if let v = try? c.decode(String.self) { self = .string(v); return }
+        self = .null
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        switch self {
+        case .string(let v): try c.encode(v); case .int(let v): try c.encode(v)
+        case .double(let v): try c.encode(v); case .bool(let v): try c.encode(v)
+        case .null: try c.encodeNil()
+        }
+    }
+    var doubleValue: Double {
+        switch self { case .string(let s): return Double(s) ?? 0; case .int(let i): return Double(i)
+        case .double(let d): return d; default: return 0 }
+    }
+    var int64Value: Int64? {
+        switch self { case .int(let i): return i; case .double(let d): return Int64(d)
+        case .string(let s): return Int64(s); default: return nil }
+    }
+}
