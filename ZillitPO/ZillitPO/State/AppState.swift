@@ -27,7 +27,11 @@ class AppState: ObservableObject {
     @Published var rejectTarget: PurchaseOrder?
     @Published var rejectReason = ""
     @Published var deleteTarget: PurchaseOrder?
+    @Published var deleteTemplateId: String?
+    @Published var deleteDraftId: String?
+    @Published var deleteVendorId: String?
     @Published var resumeDraft: PurchaseOrder?
+    @Published var prefilledVendorId: String?
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -113,10 +117,16 @@ class AppState: ObservableObject {
 
     func loadTemplates() {
         APIClient.shared.get("/api/v2/purchase-orders/templates")
-            .map { tryDecode([POTemplate].self, from: $0) ?? [] }
+            .map { data -> [POTemplate] in
+                let result = tryDecode([POTemplate].self, from: data) ?? []
+                if result.isEmpty, let raw = String(data: data, encoding: .utf8) {
+                    print("⚠️ Templates decode returned empty. Raw: \(raw.prefix(500))")
+                }
+                return result
+            }
             .replaceError(with: [])
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] t in self?.templates = t }
+            .sink { [weak self] t in self?.templates = t; print("📋 Templates: \(t.count)") }
             .store(in: &cancellables)
     }
 
@@ -128,7 +138,7 @@ class AppState: ObservableObject {
         switch activeTab {
         case .all: list = list.filter { isVisible($0) }
         case .my: list = list.filter { $0.userId == user.id }
-        case .department: list = list.filter { ($0.departmentId ?? "") == user.departmentId }
+        case .department: list = list.filter { ($0.departmentId ?? "") == user.departmentId && $0.userId != user.id }
         default: return []
         }
         switch activeFilter {
@@ -163,7 +173,7 @@ class AppState: ObservableObject {
         guard let u = currentUser else { return [:] }
         return [.all: purchaseOrders.filter { isVisible($0) }.count,
                 .my: purchaseOrders.filter { $0.userId == u.id }.count,
-                .department: purchaseOrders.filter { ($0.departmentId ?? "") == u.departmentId }.count]
+                .department: purchaseOrders.filter { ($0.departmentId ?? "") == u.departmentId && $0.userId != u.id }.count]
     }
 
     var pendingCount: Int { filteredPOs.filter { $0.poStatus == .pending }.count }
@@ -197,11 +207,16 @@ class AppState: ObservableObject {
     func deletePO(_ po: PurchaseOrder) {
         APIClient.shared.del("/api/v2/purchase-orders/\(po.id)")
             .receive(on: DispatchQueue.main)
-            .sink(receiveCompletion: { _ in }, receiveValue: { [weak self] _ in self?.loadPOs(); self?.deleteTarget = nil })
+            .sink(receiveCompletion: { [weak self] c in
+                if case .failure(let e) = c { print("❌ Delete PO failed: \(e)") }
+                self?.deleteTarget = nil
+            }, receiveValue: { [weak self] _ in
+                print("✅ PO deleted"); self?.loadPOs(); self?.loadDrafts()
+            })
             .store(in: &cancellables)
     }
 
-    func submitPO(_ fd: POFormData) {
+    func submitPO(_ fd: POFormData, onComplete: (() -> Void)? = nil) {
         guard let u = currentUser else { return }; formSubmitting = true
         let dept = u.departmentId.isEmpty ? fd.departmentId : u.departmentId
         let cfg = ApprovalHelpers.resolveConfig(tierConfigRows, deptId: dept, amount: fd.netAmount)
@@ -219,11 +234,11 @@ class AppState: ObservableObject {
 
         pub.receive(on: DispatchQueue.main)
             .sink(receiveCompletion: { [weak self] _ in self?.formSubmitting = false },
-                  receiveValue: { [weak self] _ in self?.loadPOs(); self?.loadDrafts(); self?.showCreatePO = false; self?.resumeDraft = nil; self?.activeTab = .my })
+                  receiveValue: { [weak self] _ in self?.loadPOs(); self?.loadDrafts(); self?.showCreatePO = false; self?.resumeDraft = nil; self?.editingPO = nil; self?.activeTab = .my; onComplete?() })
             .store(in: &cancellables)
     }
 
-    func saveDraft(_ fd: POFormData) {
+    func saveDraft(_ fd: POFormData, onComplete: (() -> Void)? = nil) {
         guard let u = currentUser else { return }
         let dept = u.departmentId.isEmpty ? fd.departmentId : u.departmentId
         var p: [String: Any] = ["vendor_id": fd.vendorId, "department_id": dept, "nominal_code": fd.nominalCode,
@@ -237,21 +252,68 @@ class AppState: ObservableObject {
         else { pub = APIClient.shared.post("/api/v2/purchase-orders", body: p) }
 
         pub.receive(on: DispatchQueue.main)
-            .sink(receiveCompletion: { _ in }, receiveValue: { [weak self] _ in self?.loadDrafts(); self?.showCreatePO = false; self?.resumeDraft = nil; self?.activeTab = .drafts })
+            .sink(receiveCompletion: { _ in }, receiveValue: { [weak self] _ in self?.loadDrafts(); self?.showCreatePO = false; self?.resumeDraft = nil; self?.editingPO = nil; self?.activeTab = .drafts; onComplete?() })
+            .store(in: &cancellables)
+    }
+
+    func saveTemplate(_ fd: POFormData, templateName: String, onComplete: (() -> Void)? = nil) {
+        guard let u = currentUser else { return }
+        let dept: String = {
+            if let d = DepartmentsData.all.first(where: { $0.identifier == fd.departmentId }) { return d.id }
+            if !u.departmentId.isEmpty { return u.departmentId }
+            return fd.departmentId
+        }()
+        let name = templateName.trimmingCharacters(in: .whitespaces).isEmpty ? "Untitled" : templateName.trimmingCharacters(in: .whitespaces)
+        var body: [String: Any] = [
+            "template_name": name,
+            "department_id": dept, "nominal_code": fd.nominalCode,
+            "description": fd.description, "currency": fd.currency, "vat_treatment": fd.vatTreatment,
+            "notes": fd.notes, "net_amount": fd.netAmount,
+            "line_items": fd.lineItems.map { ["id":$0.id,"description":$0.description,"quantity":$0.quantity,
+                                               "unit_price":$0.unitPrice,"total":$0.total] as [String: Any] }]
+        if !fd.vendorId.isEmpty { body["vendor_id"] = fd.vendorId }
+        APIClient.shared.post("/api/v2/purchase-orders/templates", body: body)
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { c in
+                if case .failure(let e) = c { print("❌ Save template failed: \(e)") }
+            }, receiveValue: { [weak self] _ in
+                print("✅ Template saved"); self?.loadTemplates(); self?.activeTab = .templates; onComplete?()
+            })
             .store(in: &cancellables)
     }
 
     func deleteTemplate(_ id: String) {
         APIClient.shared.del("/api/v2/purchase-orders/templates/\(id)")
             .receive(on: DispatchQueue.main)
-            .sink(receiveCompletion: { _ in }, receiveValue: { [weak self] _ in self?.loadTemplates() })
+            .sink(receiveCompletion: { c in
+                if case .failure(let e) = c { print("❌ Delete template failed: \(e)") }
+            }, receiveValue: { [weak self] _ in
+                print("✅ Template deleted"); self?.loadTemplates()
+            })
             .store(in: &cancellables)
     }
 
     func deleteDraft(_ id: String) {
         APIClient.shared.del("/api/v2/purchase-orders/\(id)")
             .receive(on: DispatchQueue.main)
-            .sink(receiveCompletion: { _ in }, receiveValue: { [weak self] _ in self?.loadDrafts() })
+            .sink(receiveCompletion: { c in
+                if case .failure(let e) = c { print("❌ Delete draft failed: \(e)") }
+            }, receiveValue: { [weak self] _ in
+                print("✅ Draft deleted"); self?.loadDrafts()
+            })
+            .store(in: &cancellables)
+    }
+
+    func deleteVendor(_ id: String) {
+        APIClient.shared.del("/api/v2/vendors/\(id)")
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { c in
+                if case .failure(let e) = c { print("❌ Delete vendor failed: \(e)") }
+            }, receiveValue: { [weak self] _ in
+                print("✅ Vendor deleted")
+                self?.vendors.removeAll { $0.id == id }
+                self?.loadAllData()
+            })
             .store(in: &cancellables)
     }
 }

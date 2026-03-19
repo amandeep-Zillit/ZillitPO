@@ -69,15 +69,19 @@ struct Vendor: Identifiable, Codable, Equatable {
     var contactPerson: String
     var vatNumber: String?
     var status: String
-    var verifiedAt: Int64?
+    var verifiedAt: AnyCodableValue?
     var verifiedBy: String?
-    var addedBy: String
+    var addedBy: String?
     var updatedBy: String?
     var departmentId: String?
-    var createdAt: Int64
-    var updatedAt: Int64
+    var createdAt: AnyCodableValue?
+    var updatedAt: AnyCodableValue?
 
-    var verified: Bool { verifiedAt != nil }
+    var verified: Bool {
+        guard let v = verifiedAt else { return false }
+        if case .null = v { return false }
+        return true
+    }
 
     enum CodingKeys: String, CodingKey {
         case id, name, address, email, phone, status
@@ -98,9 +102,9 @@ struct Vendor: Identifiable, Codable, Equatable {
          name: String = "", address: VendorAddress = VendorAddress(), email: String = "",
          phone: VendorPhone = VendorPhone(), contactPerson: String = "",
          vatNumber: String? = nil, status: String = "PENDING",
-         verifiedAt: Int64? = nil, verifiedBy: String? = nil,
-         addedBy: String = "", updatedBy: String? = nil, departmentId: String? = nil,
-         createdAt: Int64 = 0, updatedAt: Int64 = 0) {
+         verifiedAt: AnyCodableValue? = nil, verifiedBy: String? = nil,
+         addedBy: String? = nil, updatedBy: String? = nil, departmentId: String? = nil,
+         createdAt: AnyCodableValue? = nil, updatedAt: AnyCodableValue? = nil) {
         self.id = id; self.projectId = projectId; self.userId = userId
         self.name = name; self.address = address; self.email = email; self.phone = phone
         self.contactPerson = contactPerson; self.vatNumber = vatNumber; self.status = status
@@ -269,15 +273,18 @@ struct LineItem: Identifiable, Codable, Equatable {
 
 // MARK: - 005 po_templates
 
-struct POTemplate: Identifiable, Codable, Equatable {
+struct POTemplate: Identifiable, Codable {
     let id: String
-    var templateNumber: String?; var templateName: String
+    var templateNumber: String?; var templateName: String?
     var vendorId: String?; var departmentId: String?; var nominalCode: String?
     var description: String?; var currency: String?; var notes: String?
-    var netAmount: Double?; var vatTreatment: String?
-    var deliveryAddress: String?; var deliveryDate: Int64?
-    var customFields: [CustomFieldSection]?; var effectiveDate: Int64?
-    var createdAt: Int64?; var updatedAt: Int64?
+    var netAmount: AnyCodableValue?; var vatTreatment: String?
+    var deliveryAddress: FlexibleDeliveryAddress?; var deliveryDate: AnyCodableValue?
+    var customFields: FlexibleCustomFields?; var effectiveDate: AnyCodableValue?
+    var createdAt: AnyCodableValue?; var updatedAt: AnyCodableValue?
+    var lineItems: FlexibleLineItems?
+
+    var displayName: String { templateName ?? "Untitled" }
 
     enum CodingKeys: String, CodingKey {
         case id, description, currency, notes
@@ -286,7 +293,7 @@ struct POTemplate: Identifiable, Codable, Equatable {
         case nominalCode = "nominal_code"; case netAmount = "net_amount"
         case vatTreatment = "vat_treatment"; case deliveryAddress = "delivery_address"
         case deliveryDate = "delivery_date"; case customFields = "custom_fields"
-        case effectiveDate = "effective_date"
+        case effectiveDate = "effective_date"; case lineItems = "line_items"
         case createdAt = "created_at"; case updatedAt = "updated_at"
     }
 }

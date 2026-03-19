@@ -1,61 +1,113 @@
 import SwiftUI
+import Combine
+
+enum DeleteAlertType: Identifiable {
+    case po(PurchaseOrder)
+    case template(String)
+    case draft(String)
+    case vendor(String)
+    var id: String {
+        switch self {
+        case .po(let p): return "po-\(p.id)"
+        case .template(let id): return "tpl-\(id)"
+        case .draft(let id): return "dft-\(id)"
+        case .vendor(let id): return "vnd-\(id)"
+        }
+    }
+}
 
 struct DepartmentPOModule: View {
     @EnvironmentObject var appState: AppState
+    @State private var navigateToForm = false
+    @State private var activeDeleteAlert: DeleteAlertType?
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .bottomTrailing) {
             Color.bgBase.edgesIgnoringSafeArea(.all)
-            mainBody
-        }
-        .navigationBarTitle(Text(appState.showCreatePO || appState.editingPO != nil ? "Create PO" : "Purchase Orders"), displayMode: .inline)
-        .navigationBarBackButtonHidden(appState.showCreatePO || appState.editingPO != nil)
-        .navigationBarItems(leading: (appState.showCreatePO || appState.editingPO != nil) ?
-            AnyView(Button(action: { appState.showCreatePO = false; appState.editingPO = nil; appState.resumeDraft = nil }) {
-                HStack(spacing: 4) {
-                    Image(systemName: "chevron.left").font(.system(size: 14, weight: .semibold))
-                    Text("Back").font(.system(size: 16))
-                }.foregroundColor(.goldDark)
-            }) : AnyView(EmptyView())
-        )
-        .sheet(isPresented: $appState.showRejectSheet) { RejectSheetView().environmentObject(appState) }
-        .alert(isPresented: .init(get: { appState.deleteTarget != nil }, set: { if !$0 { appState.deleteTarget = nil } })) {
-            Alert(title: Text("Delete PO?"), message: Text("This cannot be undone."),
-                  primaryButton: .destructive(Text("Delete")) { if let t = appState.deleteTarget { appState.deletePO(t) } },
-                  secondaryButton: .cancel())
-        }
-    }
 
-    @ViewBuilder
-    private var mainBody: some View {
-        if appState.showCreatePO || appState.editingPO != nil {
-            POFormView(editingPO: appState.editingPO, resumeDraft: appState.resumeDraft,
-                       onBack: { appState.showCreatePO = false; appState.editingPO = nil; appState.resumeDraft = nil })
-        } else {
-            ZStack(alignment: .bottomTrailing) {
+            VStack(spacing: 0) {
+                // Pinned tab bar
+                tabBar.padding(.horizontal, 16).padding(.top, 12)
+                    .background(Color.bgBase)
+
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
-                        tabBar
                         tabContent
-                    }.padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 80)
+                    }.padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 80)
                 }
-
-                // Floating Create PO button
-                Button(action: { appState.showCreatePO = true }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus").font(.system(size: 14, weight: .bold))
-                        Text("Create PO").font(.system(size: 14, weight: .bold))
-                    }
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 14)
-                    .background(Color.gold)
-                    .cornerRadius(28)
-                    .shadow(color: Color.gold.opacity(0.4), radius: 8, x: 0, y: 4)
-                }
-                .padding(.trailing, 20)
-                .padding(.bottom, 24)
             }
+
+            // Floating Create PO button
+            Button(action: {
+                appState.editingPO = nil
+                appState.resumeDraft = nil
+                navigateToForm = true
+            }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus").font(.system(size: 14, weight: .bold))
+                    Text("Create PO").font(.system(size: 14, weight: .bold))
+                }
+                .foregroundColor(.black)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 14)
+                .background(Color.gold)
+                .cornerRadius(28)
+                .shadow(color: Color.gold.opacity(0.4), radius: 8, x: 0, y: 4)
+            }
+            .padding(.trailing, 20)
+            .padding(.bottom, 24)
+
+            // Hidden NavigationLink to push form page
+            NavigationLink(
+                destination: POFormPage(
+                    editingPO: appState.editingPO,
+                    resumeDraft: appState.resumeDraft
+                ).environmentObject(appState),
+                isActive: $navigateToForm
+            ) { EmptyView() }
+            .hidden()
+        }
+        .navigationBarTitle(Text("Purchase Orders"), displayMode: .inline)
+        .sheet(isPresented: $appState.showRejectSheet) { RejectSheetView().environmentObject(appState) }
+        .alert(isPresented: .init(get: { activeDeleteAlert != nil }, set: { if !$0 { activeDeleteAlert = nil } })) {
+            switch activeDeleteAlert {
+            case .po(let po):
+                return Alert(title: Text("Delete PO?"), message: Text("This cannot be undone."),
+                      primaryButton: .destructive(Text("Delete")) { appState.deletePO(po) },
+                      secondaryButton: .cancel())
+            case .template(let id):
+                return Alert(title: Text("Delete Template?"), message: Text("This cannot be undone."),
+                      primaryButton: .destructive(Text("Delete")) { appState.deleteTemplate(id) },
+                      secondaryButton: .cancel())
+            case .draft(let id):
+                return Alert(title: Text("Delete Draft?"), message: Text("This cannot be undone."),
+                      primaryButton: .destructive(Text("Delete")) { appState.deleteDraft(id) },
+                      secondaryButton: .cancel())
+            case .vendor(let id):
+                return Alert(title: Text("Delete Vendor?"), message: Text("This cannot be undone."),
+                      primaryButton: .destructive(Text("Delete")) { appState.deleteVendor(id) },
+                      secondaryButton: .cancel())
+            case .none:
+                return Alert(title: Text("Delete?"))
+            }
+        }
+        .onReceive(appState.$deleteTarget) { po in
+            if let po = po { activeDeleteAlert = .po(po); appState.deleteTarget = nil }
+        }
+        .onReceive(appState.$deleteTemplateId) { id in
+            if let id = id { activeDeleteAlert = .template(id); appState.deleteTemplateId = nil }
+        }
+        .onReceive(appState.$deleteDraftId) { id in
+            if let id = id { activeDeleteAlert = .draft(id); appState.deleteDraftId = nil }
+        }
+        .onReceive(appState.$deleteVendorId) { id in
+            if let id = id { activeDeleteAlert = .vendor(id); appState.deleteVendorId = nil }
+        }
+        .onReceive(appState.$editingPO) { po in
+            if po != nil { navigateToForm = true }
+        }
+        .onReceive(appState.$resumeDraft) { draft in
+            if draft != nil { navigateToForm = true }
         }
     }
 
@@ -118,6 +170,50 @@ struct DepartmentPOModule: View {
         case .vendors: VendorsModuleView()
         case .templates: POTemplatesListView()
         case .drafts: PODraftsListView()
+        }
+    }
+}
+
+// MARK: - PO Form Page (Navigation destination)
+
+struct POFormPage: View {
+    @EnvironmentObject var appState: AppState
+    @Environment(\.presentationMode) var presentationMode
+    var editingPO: PurchaseOrder?
+    var resumeDraft: PurchaseOrder?
+    var prefilledVendorId: String?
+
+    private var title: String {
+        if editingPO != nil { return "Edit PO" }
+        if resumeDraft != nil { return "Resume Draft" }
+        return "Create PO"
+    }
+
+    var body: some View {
+        ZStack {
+            Color.bgBase.edgesIgnoringSafeArea(.all)
+            POFormView(
+                editingPO: editingPO,
+                resumeDraft: resumeDraft,
+                prefilledVendorId: prefilledVendorId,
+                onBack: { presentationMode.wrappedValue.dismiss() }
+            )
+        }
+        .navigationBarTitle(Text(title), displayMode: .inline)
+        .navigationBarBackButtonHidden(true)
+        .navigationBarItems(leading:
+            Button(action: { presentationMode.wrappedValue.dismiss() }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left").font(.system(size: 14, weight: .semibold))
+                    Text("Back").font(.system(size: 16))
+                }.foregroundColor(.goldDark)
+            }
+        )
+        .onDisappear {
+            appState.editingPO = nil
+            appState.resumeDraft = nil
+            appState.showCreatePO = false
+            appState.prefilledVendorId = nil
         }
     }
 }

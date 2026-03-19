@@ -339,7 +339,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 8L9XZ22RX8;
+				DEVELOPMENT_TEAM = NW826YVGWW;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ZillitPO/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
@@ -348,7 +348,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.zillit.coda.po;
+				PRODUCT_BUNDLE_IDENTIFIER = com2.zillit.coda.po;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -360,7 +360,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 8L9XZ22RX8;
+				DEVELOPMENT_TEAM = NW826YVGWW;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ZillitPO/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
@@ -369,7 +369,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.zillit.coda.po;
+				PRODUCT_BUNDLE_IDENTIFIER = com2.zillit.coda.po;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};

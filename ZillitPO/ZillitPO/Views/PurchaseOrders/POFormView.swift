@@ -5,6 +5,7 @@ struct POFormView: View {
     @EnvironmentObject var appState: AppState
     var editingPO: PurchaseOrder?
     var resumeDraft: PurchaseOrder?
+    var prefilledVendorId: String?
     var onBack: () -> Void
 
     @State private var vendorId = ""
@@ -30,11 +31,18 @@ struct POFormView: View {
     @State private var daPostal = ""
     @State private var daCountry = ""
     @State private var cancellables = Set<AnyCancellable>()
+    @State private var showTemplateNameSheet = false
+    @State private var templateName = ""
 
     var isEdit: Bool { editingPO != nil }
 
     var body: some View {
         List {
+            // Vendor Info
+            Section(header: sectionHeader(icon: "person.crop.square", title: "VENDOR INFORMATION")) {
+                vendorInfoContent
+            }
+
             // PO Details
             Section(header: sectionHeader(icon: "doc.text", title: "PO DETAILS", trailing: "All fields required unless noted")) {
                 poDetailsContent
@@ -50,6 +58,11 @@ struct POFormView: View {
                 lineItemsContent
             }
 
+            // Notes
+            Section(header: sectionHeader(icon: "note.text", title: "ADDITIONAL NOTES")) {
+                notesContent
+            }
+
             // Summary
             Section(header: sectionHeader(icon: "sum", title: "SUMMARY")) {
                 summaryContent
@@ -62,6 +75,11 @@ struct POFormView: View {
         }
         .listStyle(GroupedListStyle())
         .onAppear { loadData() }
+        .sheet(isPresented: $showTemplateNameSheet) {
+            TemplateNameSheet(templateName: $templateName, isPresented: $showTemplateNameSheet) {
+                saveTemplate()
+            }
+        }
     }
 
     // MARK: - Section Headers
@@ -77,114 +95,98 @@ struct POFormView: View {
         }
     }
 
+    // MARK: - Vendor Information
+
+    private var vendorInfoContent: some View {
+        VStack(spacing: 14) {
+            FieldGroup(label: "VENDOR") {
+                VendorSearchField(
+                    vendorId: $vendorId,
+                    vendors: appState.vendors
+                )
+            }
+            FieldGroup(label: "VENDOR ADDRESS") {
+                Text(vendorAddressText)
+                    .font(.system(size: 13))
+                    .foregroundColor(vendorId.isEmpty ? .gray : .primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10).padding(.vertical, 9)
+                    .background(Color(red: 0.97, green: 0.97, blue: 0.98))
+                    .cornerRadius(6)
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
+            }
+        }
+    }
+
     // MARK: - PO Details
 
     private var poDetailsContent: some View {
         VStack(spacing: 14) {
-                // Row 1: Vendor | Vendor Address | Department
-                HStack(spacing: 10) {
-                    FieldGroup(label: "VENDOR") {
-                        VendorSearchField(
-                            vendorId: $vendorId,
-                            vendors: appState.vendors
-                        )
-                    }
-                    FieldGroup(label: "VENDOR ADDRESS") {
-                        Text(vendorAddressText)
-                            .font(.system(size: 13))
-                            .foregroundColor(vendorId.isEmpty ? .gray : .primary)
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 10).padding(.vertical, 9)
-                            .background(Color(red: 0.97, green: 0.97, blue: 0.98))
-                            .cornerRadius(6)
-                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
-                    }
-                    FieldGroup(label: "DEPARTMENT") {
-                        PickerField(selection: $departmentId, placeholder: "Select...") {
-                            Text("Select...").tag("")
-                            ForEach(DepartmentsData.sorted, id: \.id) { Text($0.displayName).tag($0.identifier) }
-                        }
-                    }
+            FieldGroup(label: "DEPARTMENT") {
+                PickerField(selection: $departmentId, placeholder: "Select department...",
+                    options: DepartmentsData.sorted.map { DropdownOption($0.identifier, $0.displayName) })
+            }
+            FieldGroup(label: "NOMINAL CODE") {
+                PickerField(selection: $nominalCode, placeholder: "Select nominal code...",
+                    options: NominalCodes.all.map { DropdownOption($0.code, "\($0.code) — \($0.label)") })
+            }
+            FieldGroup(label: "DESCRIPTION", optional: true) {
+                InputField(text: $desc, placeholder: "e.g. Studio hire — Stage G, 12 weeks")
+            }
+            HStack(spacing: 10) {
+                FieldGroup(label: "CURRENCY") {
+                    PickerField(selection: $currency, placeholder: "Select currency...",
+                        options: [DropdownOption("GBP", "GBP — British Pound"),
+                                  DropdownOption("USD", "USD — US Dollar"),
+                                  DropdownOption("EUR", "EUR — Euro")])
                 }
-
-                // Row 2: Nominal Code | Description | Currency
-                HStack(spacing: 10) {
-                    FieldGroup(label: "NOMINAL CODE") {
-                        PickerField(selection: $nominalCode, placeholder: "Select...") {
-                            Text("Select...").tag("")
-                            ForEach(NominalCodes.all, id: \.code) { Text("\($0.code) — \($0.label)").tag($0.code) }
-                        }
-                    }
-                    FieldGroup(label: "DESCRIPTION", optional: true) {
-                        InputField(text: $desc, placeholder: "e.g. Studio hire — Stage G, 12 weeks")
-                    }
-                    FieldGroup(label: "CURRENCY") {
-                        PickerField(selection: $currency, placeholder: "GBP") {
-                            Text("GBP — British Pound").tag("GBP")
-                            Text("USD — US Dollar").tag("USD")
-                            Text("EUR — Euro").tag("EUR")
-                        }
-                    }
-                }
-
-                // Row 3: VAT Treatment | Delivery Date | Notes
-                HStack(spacing: 10) {
-                    FieldGroup(label: "VAT TREATMENT") {
-                        PickerField(selection: $vatTreatment, placeholder: "Select...") {
-                            ForEach(VATHelpers.options, id: \.value) { Text($0.label).tag($0.value) }
-                        }
-                    }
-                    FieldGroup(label: "DELIVERY DATE") {
-                        if hasDelDate {
-                            HStack {
-                                DatePicker("", selection: $deliveryDate, displayedComponents: .date).labelsHidden()
-                                Button(action: { hasDelDate = false }) {
-                                    Image(systemName: "xmark.circle.fill").foregroundColor(.gray.opacity(0.4)).font(.system(size: 14))
-                                }.buttonStyle(PlainButtonStyle())
-                            }
-                        } else {
-                            Button(action: { hasDelDate = true }) {
-                                HStack {
-                                    Text("dd/mm/yyyy").foregroundColor(.gray).font(.system(size: 14))
-                                    Spacer()
-                                    Image(systemName: "calendar").foregroundColor(.gray).font(.system(size: 13))
-                                }
-                            }.buttonStyle(PlainButtonStyle())
-                        }
-                    }
-                    FieldGroup(label: "NOTES", optional: true) {
-                        InputField(text: $notes, placeholder: "Internal notes...")
-                    }
+                FieldGroup(label: "VAT TREATMENT") {
+                    PickerField(selection: $vatTreatment, placeholder: "Select VAT...",
+                        options: VATHelpers.options.map { DropdownOption($0.value, $0.label) })
                 }
             }
+            FieldGroup(label: "DELIVERY DATE") {
+                if hasDelDate {
+                    HStack {
+                        DatePicker("", selection: $deliveryDate, displayedComponents: .date).labelsHidden()
+                        Spacer()
+                        Button(action: { hasDelDate = false }) {
+                            Image(systemName: "xmark.circle.fill").foregroundColor(.gray.opacity(0.4)).font(.system(size: 14))
+                        }.buttonStyle(PlainButtonStyle())
+                    }
+                } else {
+                    Button(action: { hasDelDate = true }) {
+                        HStack {
+                            Text("dd/mm/yyyy").foregroundColor(.gray).font(.system(size: 14))
+                            Spacer()
+                            Image(systemName: "calendar").foregroundColor(.gray).font(.system(size: 13))
+                        }
+                    }.buttonStyle(PlainButtonStyle())
+                }
+            }
+        }
     }
 
     // MARK: - Delivery Address
 
     private var deliveryAddressContent: some View {
         VStack(spacing: 14) {
-                // Row 1: Name | Email | Phone
-                HStack(spacing: 10) {
-                    FieldGroup(label: "NAME") { InputField(text: $daName, placeholder: "Recipient name...") }
-                    FieldGroup(label: "EMAIL") { InputField(text: $daEmail, placeholder: "email@example.com") }
-                    FieldGroup(label: "PHONE") { InputField(text: $daPhone, placeholder: "Phone number") }
-                }
-
-                // Row 2: Address 1 | Address 2 | City
-                HStack(spacing: 10) {
-                    FieldGroup(label: "ADDRESS LINE 1") { InputField(text: $daLine1, placeholder: "Street address...") }
-                    FieldGroup(label: "ADDRESS LINE 2") { InputField(text: $daLine2, placeholder: "Suite, unit, building...") }
-                    FieldGroup(label: "CITY") { InputField(text: $daCity, placeholder: "City...") }
-                }
-
-                // Row 3: State | Postal | Country
-                HStack(spacing: 10) {
-                    FieldGroup(label: "STATE") { InputField(text: $daState, placeholder: "State / County...") }
-                    FieldGroup(label: "POSTAL CODE") { InputField(text: $daPostal, placeholder: "Postal code...") }
-                    FieldGroup(label: "COUNTRY") { InputField(text: $daCountry, placeholder: "Country") }
-                }
+            FieldGroup(label: "RECIPIENT NAME") { InputField(text: $daName, placeholder: "Recipient name...") }
+            HStack(spacing: 10) {
+                FieldGroup(label: "EMAIL") { InputField(text: $daEmail, placeholder: "email@example.com") }
+                FieldGroup(label: "PHONE") { InputField(text: $daPhone, placeholder: "Phone number") }
             }
+            FieldGroup(label: "ADDRESS LINE 1") { InputField(text: $daLine1, placeholder: "Street address...") }
+            FieldGroup(label: "ADDRESS LINE 2") { InputField(text: $daLine2, placeholder: "Suite, unit, building...") }
+            HStack(spacing: 10) {
+                FieldGroup(label: "CITY") { InputField(text: $daCity, placeholder: "City...") }
+                FieldGroup(label: "STATE") { InputField(text: $daState, placeholder: "State / County...") }
+            }
+            HStack(spacing: 10) {
+                FieldGroup(label: "POSTAL CODE") { InputField(text: $daPostal, placeholder: "Postal code...") }
+                FieldGroup(label: "COUNTRY") { InputField(text: $daCountry, placeholder: "Country") }
+            }
+        }
     }
 
     // MARK: - Line Items
@@ -203,44 +205,71 @@ struct POFormView: View {
         }
     }
 
+    private func bindingForItem(_ id: String) -> (desc: Binding<String>, qty: Binding<Double>, price: Binding<Double>) {
+        let descBinding = Binding<String>(
+            get: { lineItems.first(where: { $0.id == id })?.description ?? "" },
+            set: { val in if let i = lineItems.firstIndex(where: { $0.id == id }) { lineItems[i].description = val } }
+        )
+        let qtyBinding = Binding<Double>(
+            get: { lineItems.first(where: { $0.id == id })?.quantity ?? 1 },
+            set: { val in if let i = lineItems.firstIndex(where: { $0.id == id }) { lineItems[i].quantity = val } }
+        )
+        let priceBinding = Binding<Double>(
+            get: { lineItems.first(where: { $0.id == id })?.unitPrice ?? 0 },
+            set: { val in if let i = lineItems.firstIndex(where: { $0.id == id }) { lineItems[i].unitPrice = val } }
+        )
+        return (descBinding, qtyBinding, priceBinding)
+    }
+
     private var lineItemsContent: some View {
         Group {
-
-            VStack(spacing: 0) {
-                ForEach(lineItems.indices, id: \.self) { idx in
+            VStack(spacing: 12) {
+                ForEach(Array(lineItems.enumerated()), id: \.element.id) { idx, item in
                     VStack(spacing: 10) {
-                        HStack(spacing: 10) {
-                            FieldGroup(label: idx == 0 ? "DESCRIPTION" : "") {
-                                InputField(text: $lineItems[idx].description, placeholder: "Item description")
+                        HStack {
+                            Text("Item \(idx + 1)").font(.system(size: 11, weight: .semibold)).foregroundColor(.goldDark)
+                            Spacer()
+                            if lineItems.count > 1 {
+                                Button(action: { lineItems.removeAll(where: { $0.id == item.id }) }) {
+                                    HStack(spacing: 3) {
+                                        Image(systemName: "trash").font(.system(size: 10))
+                                        Text("Remove").font(.system(size: 10))
+                                    }.foregroundColor(.red.opacity(0.6))
+                                }.buttonStyle(PlainButtonStyle())
                             }
-                            FieldGroup(label: idx == 0 ? "QTY" : "") {
-                                TextField("1", value: $lineItems[idx].quantity, formatter: NumberFormatter())
+                        }
+                        FieldGroup(label: "DESCRIPTION") {
+                            InputField(text: bindingForItem(item.id).desc, placeholder: "Item description")
+                        }
+                        HStack(spacing: 10) {
+                            FieldGroup(label: "QTY") {
+                                TextField("1", value: bindingForItem(item.id).qty, formatter: NumberFormatter())
                                     .font(.system(size: 14)).padding(10)
                                     .background(Color.white).cornerRadius(6)
                                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
-                            }.frame(width: 60)
-                            FieldGroup(label: idx == 0 ? "UNIT PRICE" : "") {
-                                TextField("0.00", value: $lineItems[idx].unitPrice, formatter: decimalFormatter)
+                            }
+                            FieldGroup(label: "UNIT PRICE") {
+                                TextField("0.00", value: bindingForItem(item.id).price, formatter: decimalFormatter)
                                     .font(.system(size: 14, design: .monospaced)).padding(10)
                                     .background(Color.white).cornerRadius(6)
                                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
-                            }.frame(width: 100)
-                            FieldGroup(label: idx == 0 ? "TOTAL" : "") {
-                                Text(FormatUtils.formatGBP(lineItems[idx].quantity * lineItems[idx].unitPrice))
+                            }
+                            FieldGroup(label: "TOTAL") {
+                                Text(FormatUtils.formatGBP(item.quantity * item.unitPrice))
                                     .font(.system(size: 14, weight: .medium, design: .monospaced))
                                     .foregroundColor(.goldDark)
-                                    .frame(height: 20)
-                            }.frame(width: 90)
-                            if lineItems.count > 1 {
-                                Button(action: { lineItems.remove(at: idx) }) {
-                                    Image(systemName: "trash").font(.system(size: 12)).foregroundColor(.red.opacity(0.4))
-                                }.buttonStyle(PlainButtonStyle()).padding(.top, idx == 0 ? 18 : 0)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 10).padding(.vertical, 9)
+                                    .background(Color(red: 0.97, green: 0.97, blue: 0.98))
+                                    .cornerRadius(6)
+                                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
                             }
                         }
-                        if idx < lineItems.count - 1 {
-                            Divider()
-                        }
-                    }.padding(.vertical, 4)
+                    }
+                    .padding(12)
+                    .background(Color.bgBase)
+                    .cornerRadius(8)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                 }
             }
 
@@ -249,7 +278,15 @@ struct POFormView: View {
                 Spacer()
                 Text("Net Total").font(.system(size: 13, weight: .semibold)).foregroundColor(.secondary)
                 Text(FormatUtils.formatGBP(netTotal)).font(.system(size: 17, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
-            }
+            }.padding(.top, 4)
+        }
+    }
+
+    // MARK: - Notes
+
+    private var notesContent: some View {
+        FieldGroup(label: "NOTES", optional: true) {
+            InputField(text: $notes, placeholder: "Internal notes...")
         }
     }
 
@@ -295,16 +332,16 @@ struct POFormView: View {
                     }.foregroundColor(.secondary).frame(maxWidth: .infinity).padding(.vertical, 12)
                     .background(Color.white).cornerRadius(8)
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
-                }
+                }.buttonStyle(BorderlessButtonStyle())
 
-                Button(action: { saveTemplate() }) {
+                Button(action: { templateName = desc; showTemplateNameSheet = true }) {
                     HStack(spacing: 6) {
                         Image(systemName: "doc.on.doc").font(.system(size: 13))
                         Text("Save Template").font(.system(size: 13, weight: .semibold))
                     }.foregroundColor(.secondary).frame(maxWidth: .infinity).padding(.vertical, 12)
                     .background(Color.white).cornerRadius(8)
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
-                }
+                }.buttonStyle(BorderlessButtonStyle())
             }
 
             Button(action: { submitPO() }) {
@@ -340,6 +377,10 @@ struct POFormView: View {
             departmentId = u.departmentIdentifier
             nominalCode = NominalCodes.deptToNominal[u.departmentIdentifier] ?? ""
         }
+        if let vid = prefilledVendorId ?? appState.prefilledVendorId, !vid.isEmpty {
+            vendorId = vid
+            appState.prefilledVendorId = nil
+        }
         if let po = editingPO ?? resumeDraft {
             vendorId = po.vendorId ?? ""; departmentId = po.departmentId ?? ""
             nominalCode = po.nominalCode ?? ""; desc = po.description ?? ""
@@ -364,21 +405,66 @@ struct POFormView: View {
                           lineItems: lineItems, existingDraftId: (editingPO ?? resumeDraft)?.id)
     }
 
-    private func submitPO() { appState.submitPO(buildForm()) }
-    private func saveDraft() { appState.saveDraft(buildForm()) }
+    private func submitPO() { appState.submitPO(buildForm(), onComplete: onBack) }
+    private func saveDraft() { appState.saveDraft(buildForm(), onComplete: onBack) }
 
-    private func saveTemplate() {
-        for i in lineItems.indices { lineItems[i].total = lineItems[i].quantity * lineItems[i].unitPrice }
-        let net = lineItems.reduce(0) { $0 + $1.total }
-        let body: [String: Any] = ["template_name": desc.isEmpty ? "Untitled" : desc, "vendor_id": vendorId,
-            "department_id": departmentId, "nominal_code": nominalCode, "description": desc,
-            "currency": currency, "vat_treatment": vatTreatment, "notes": notes, "net_amount": net,
-            "line_items": lineItems.map { ["id":$0.id,"description":$0.description,"quantity":$0.quantity,
-                                           "unit_price":$0.unitPrice,"total":$0.total] as [String:Any] }]
-        APIClient.shared.post("/api/v2/purchase-orders/templates", body: body)
-            .receive(on: DispatchQueue.main)
-            .sink(receiveCompletion: { _ in }, receiveValue: { [self] _ in appState.loadTemplates(); onBack() })
-            .store(in: &cancellables)
+    private func saveTemplate() { appState.saveTemplate(buildForm(), templateName: templateName, onComplete: onBack) }
+}
+
+// MARK: - Template Name Sheet
+
+struct TemplateNameSheet: View {
+    @Binding var templateName: String
+    @Binding var isPresented: Bool
+    var onSave: () -> Void
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 20) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "doc.on.doc").font(.system(size: 14)).foregroundColor(.goldDark)
+                        Text("Save as Template").font(.system(size: 18, weight: .bold))
+                    }
+                    Text("Give your template a name so you can reuse it later.")
+                        .font(.system(size: 13)).foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 8)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("TEMPLATE NAME").font(.system(size: 9, weight: .bold)).tracking(0.3)
+                        .foregroundColor(Color(red: 0.45, green: 0.47, blue: 0.5))
+                    TextField("e.g. Weekly Catering Order", text: $templateName)
+                        .font(.system(size: 14))
+                        .padding(.horizontal, 12).padding(.vertical, 10)
+                        .background(Color.white).cornerRadius(8)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                }
+
+                Button(action: {
+                    isPresented = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { onSave() }
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark").font(.system(size: 13, weight: .bold))
+                        Text("Save Template").font(.system(size: 14, weight: .bold))
+                    }
+                    .foregroundColor(.black)
+                    .frame(maxWidth: .infinity).padding(.vertical, 13)
+                    .background(Color.gold).cornerRadius(8)
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .background(Color.bgBase.edgesIgnoringSafeArea(.all))
+            .navigationBarTitle(Text("Template Name"), displayMode: .inline)
+            .navigationBarItems(trailing:
+                Button("Cancel") { isPresented = false }
+                    .font(.system(size: 16)).foregroundColor(.goldDark)
+            )
+        }
     }
 }
 
@@ -462,26 +548,100 @@ struct InputField: View {
     }
 }
 
-struct PickerField<Content: View>: View {
+struct DropdownOption: Identifiable {
+    let id: String
+    let label: String
+    init(_ id: String, _ label: String) { self.id = id; self.label = label }
+}
+
+struct PickerField: View {
     @Binding var selection: String
     var placeholder: String
-    let content: () -> Content
-    init(selection: Binding<String>, placeholder: String, @ViewBuilder content: @escaping () -> Content) {
-        self._selection = selection; self.placeholder = placeholder; self.content = content
+    var options: [DropdownOption]
+    @State private var showSheet = false
+
+    private var selectedLabel: String {
+        options.first { $0.id == selection }?.label ?? ""
     }
+
     var body: some View {
-        HStack(spacing: 0) {
-            Picker(placeholder, selection: $selection) { content() }
-                .pickerStyle(DefaultPickerStyle())
-                .font(.system(size: 13))
-                .lineLimit(1)
-            Spacer(minLength: 0)
+        Button(action: { showSheet = true }) {
+            HStack {
+                Text(selection.isEmpty ? placeholder : selectedLabel)
+                    .font(.system(size: 13))
+                    .foregroundColor(selection.isEmpty ? .gray : .primary)
+                    .lineLimit(1)
+                Spacer()
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.gray)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
+            .background(Color.white)
+            .cornerRadius(6)
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 5)
-        .background(Color.white)
-        .cornerRadius(6)
-        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
+        .buttonStyle(PlainButtonStyle())
+        .sheet(isPresented: $showSheet) {
+            PickerSheetView(selection: $selection, options: options, isPresented: $showSheet)
+        }
+    }
+}
+
+struct PickerSheetView: View {
+    @Binding var selection: String
+    let options: [DropdownOption]
+    @Binding var isPresented: Bool
+    @State private var searchText = ""
+
+    private var filteredOptions: [DropdownOption] {
+        if searchText.isEmpty { return options }
+        let q = searchText.lowercased()
+        return options.filter { $0.label.lowercased().contains(q) }
+    }
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Search bar
+                if options.count > 5 {
+                    HStack(spacing: 6) {
+                        Image(systemName: "magnifyingglass").foregroundColor(.gray).font(.system(size: 12))
+                        TextField("Search...", text: $searchText).font(.system(size: 13))
+                    }
+                    .padding(10).background(Color.white).cornerRadius(8)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                    .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 4)
+                }
+
+                List {
+                    ForEach(filteredOptions) { option in
+                        Button(action: {
+                            selection = option.id
+                            isPresented = false
+                        }) {
+                            HStack {
+                                Text(option.label)
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.primary)
+                                Spacer()
+                                if option.id == selection {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundColor(.goldDark)
+                                }
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                }
+                .listStyle(GroupedListStyle())
+            }
+            .navigationBarTitle(Text("Select Option"), displayMode: .inline)
+            .navigationBarItems(trailing: Button("Done") { isPresented = false }
+                .font(.system(size: 16, weight: .semibold)).foregroundColor(.goldDark))
+        }
     }
 }
 

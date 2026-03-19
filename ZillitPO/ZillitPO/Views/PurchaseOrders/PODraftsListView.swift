@@ -2,8 +2,6 @@ import SwiftUI
 
 struct PODraftsListView: View {
     @EnvironmentObject var appState: AppState
-    @State private var showDeleteAlert = false
-    @State private var deleteId: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -19,7 +17,7 @@ struct PODraftsListView: View {
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
             } else {
                 ForEach(appState.drafts, id: \.id) { draft in
-                    Button(action: { appState.resumeDraft = draft; appState.showCreatePO = true }) {
+                    HStack(spacing: 0) {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(draft.poNumber.isEmpty ? "—" : draft.poNumber).font(.system(size: 11, design: .monospaced)).foregroundColor(.goldDark)
@@ -29,19 +27,19 @@ struct PODraftsListView: View {
                             Text(FormatUtils.formatGBP(draft.netAmount)).font(.system(size: 13, design: .monospaced)).foregroundColor(.primary)
                             Text("Draft").font(.system(size: 10, weight: .medium)).foregroundColor(.goldDark)
                                 .padding(.horizontal, 6).padding(.vertical, 2).background(Color.gold.opacity(0.15)).cornerRadius(4)
-                            Button(action: { deleteId = draft.id; showDeleteAlert = true }) {
-                                Image(systemName: "trash").font(.system(size: 11)).foregroundColor(.red.opacity(0.4))
-                            }.buttonStyle(PlainButtonStyle())
-                        }.padding(12)
-                    }.buttonStyle(PlainButtonStyle()).background(Color.white).cornerRadius(8)
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture { appState.resumeDraft = draft }
+
+                        Image(systemName: "trash").font(.system(size: 11)).foregroundColor(.red.opacity(0.6))
+                            .padding(10)
+                            .contentShape(Rectangle())
+                            .onTapGesture { appState.deleteDraftId = draft.id }
+                    }.padding(12)
+                    .background(Color.white).cornerRadius(8)
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                 }
             }
-        }
-        .alert(isPresented: $showDeleteAlert) {
-            Alert(title: Text("Delete Draft?"), message: Text("This cannot be undone."),
-                  primaryButton: .destructive(Text("Delete")) { if let id = deleteId { appState.deleteDraft(id) } },
-                  secondaryButton: .cancel())
         }
     }
 }
