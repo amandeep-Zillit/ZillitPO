@@ -641,14 +641,14 @@ struct POFormView: View {
         VStack(spacing: 10) {
             HStack(spacing: 10) {
                 // Attach button (outlined)
-                Button(action: { showAttachSheet = true }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "paperclip").font(.system(size: 13))
-                        Text("Attach").font(.system(size: 13, weight: .semibold))
-                    }.foregroundColor(.secondary).frame(maxWidth: .infinity).padding(.vertical, 12)
-                    .background(Color.white).cornerRadius(8)
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
-                }.buttonStyle(BorderlessButtonStyle())
+                HStack(spacing: 6) {
+                    Image(systemName: "paperclip").font(.system(size: 13))
+                    Text("Attach").font(.system(size: 13, weight: .semibold))
+                }.foregroundColor(.secondary).frame(maxWidth: .infinity).padding(.vertical, 12)
+                .background(Color.white).cornerRadius(8)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                .contentShape(Rectangle())
+                .onTapGesture { showAttachSheet = true }
                 .actionSheet(isPresented: $showAttachSheet) {
                     ActionSheet(title: Text("Attach"), buttons: [
                         .default(Text("Quote")) { /* TODO: attach quote */ },
@@ -659,14 +659,14 @@ struct POFormView: View {
                 }
 
                 // Save button (gold, dropdown)
-                Button(action: { showSaveSheet = true }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "square.and.arrow.down").font(.system(size: 13))
-                        Text("Save").font(.system(size: 13, weight: .semibold))
-                        Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
-                    }.foregroundColor(.black).frame(maxWidth: .infinity).padding(.vertical, 12)
-                    .background(Color.gold).cornerRadius(8)
-                }.buttonStyle(BorderlessButtonStyle())
+                HStack(spacing: 6) {
+                    Image(systemName: "square.and.arrow.down").font(.system(size: 13))
+                    Text("Save").font(.system(size: 13, weight: .semibold))
+                    Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+                }.foregroundColor(.black).frame(maxWidth: .infinity).padding(.vertical, 12)
+                .background(Color.gold).cornerRadius(8)
+                .contentShape(Rectangle())
+                .onTapGesture { showSaveSheet = true }
                 .actionSheet(isPresented: $showSaveSheet) {
                     if resumeDraft != nil {
                         return ActionSheet(title: Text("Save Options"), buttons: [
@@ -686,13 +686,14 @@ struct POFormView: View {
             }
 
             // Submit PO button (full width, dark gold)
-            Button(action: { validateAndSubmit() }) {
-                HStack(spacing: 6) {
-                    Text(isEdit ? "Update PO" : "Submit PO").font(.system(size: 14, weight: .bold))
-                    Image(systemName: "arrow.right").font(.system(size: 12, weight: .bold))
-                }.foregroundColor(.black).frame(maxWidth: .infinity).padding(.vertical, 13)
-                .background(canSubmit ? Color.gold : Color.gold.opacity(0.4)).cornerRadius(8)
-            }.disabled(appState.formSubmitting)
+            HStack(spacing: 6) {
+                Text(isEdit ? "Update PO" : "Submit PO").font(.system(size: 14, weight: .bold))
+                Image(systemName: "arrow.right").font(.system(size: 12, weight: .bold))
+            }.foregroundColor(.black).frame(maxWidth: .infinity).padding(.vertical, 13)
+            .background(canSubmit ? Color.gold : Color.gold.opacity(0.4)).cornerRadius(8)
+            .contentShape(Rectangle())
+            .onTapGesture { if !appState.formSubmitting { validateAndSubmit() } }
+            .opacity(appState.formSubmitting ? 0.5 : 1.0)
             .alert(isPresented: $showValidationAlert) {
                 Alert(title: Text("Missing Required Fields"), message: Text(validationMessage), dismissButton: .default(Text("OK")))
             }
@@ -950,7 +951,13 @@ struct LineItemsPage: View {
         .navigationBarTitle(Text("Line Items"), displayMode: .inline)
         .navigationBarBackButtonHidden(true)
         .navigationBarItems(
-            leading: Button(action: { presentationMode.wrappedValue.dismiss() }) {
+            leading: Button(action: {
+                // Dismiss keyboard first so TextFields commit their values
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    presentationMode.wrappedValue.dismiss()
+                }
+            }) {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.left").font(.system(size: 14, weight: .semibold))
                     Text("Back").font(.system(size: 16))
@@ -1014,14 +1021,14 @@ struct LineItemsPage: View {
             }
         } else if field.label == "line_quantity" {
             FieldGroup(label: field.name.uppercased()) {
-                TextField("1", value: liBindQty(itemId), formatter: NumberFormatter())
+                TextField("1", text: liBindQty(itemId))
                     .font(.system(size: 14)).keyboardType(.numberPad).padding(10)
                     .background(Color.white).cornerRadius(6)
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
             }
         } else if field.label == "line_unit_price" {
             FieldGroup(label: field.name.uppercased()) {
-                TextField("0.00", value: liBindPrice(itemId), formatter: decimalFormatter)
+                TextField("0.00", text: liBindPrice(itemId))
                     .font(.system(size: 14, design: .monospaced)).keyboardType(.decimalPad).padding(10)
                     .background(Color.white).cornerRadius(6)
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
@@ -1063,12 +1070,12 @@ struct LineItemsPage: View {
         FieldGroup(label: "DESCRIPTION") { InputField(text: liBindDesc(item.id), placeholder: "Item description") }
         HStack(spacing: 10) {
             FieldGroup(label: "QTY") {
-                TextField("1", value: liBindQty(item.id), formatter: NumberFormatter())
+                TextField("1", text: liBindQty(item.id))
                     .font(.system(size: 14)).keyboardType(.numberPad).padding(10).background(Color.white).cornerRadius(6)
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
             }
             FieldGroup(label: "UNIT PRICE") {
-                TextField("0.00", value: liBindPrice(item.id), formatter: decimalFormatter)
+                TextField("0.00", text: liBindPrice(item.id))
                     .font(.system(size: 14, design: .monospaced)).keyboardType(.decimalPad).padding(10).background(Color.white).cornerRadius(6)
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
             }
@@ -1108,13 +1115,29 @@ struct LineItemsPage: View {
         Binding<String>(get: { lineItems.first { $0.id == id }?.description ?? "" },
                         set: { v in if let i = lineItems.firstIndex(where: { $0.id == id }) { lineItems[i].description = v } })
     }
-    private func liBindQty(_ id: String) -> Binding<Double> {
-        Binding<Double>(get: { lineItems.first { $0.id == id }?.quantity ?? 1 },
-                        set: { v in if let i = lineItems.firstIndex(where: { $0.id == id }) { lineItems[i].quantity = v } })
+    private func liBindQty(_ id: String) -> Binding<String> {
+        Binding<String>(
+            get: {
+                let q = lineItems.first { $0.id == id }?.quantity ?? 1
+                return q == Double(Int(q)) ? "\(Int(q))" : "\(q)"
+            },
+            set: { v in
+                if let i = lineItems.firstIndex(where: { $0.id == id }) {
+                    lineItems[i].quantity = Double(v) ?? lineItems[i].quantity
+                }
+            })
     }
-    private func liBindPrice(_ id: String) -> Binding<Double> {
-        Binding<Double>(get: { lineItems.first { $0.id == id }?.unitPrice ?? 0 },
-                        set: { v in if let i = lineItems.firstIndex(where: { $0.id == id }) { lineItems[i].unitPrice = v } })
+    private func liBindPrice(_ id: String) -> Binding<String> {
+        Binding<String>(
+            get: {
+                let p = lineItems.first { $0.id == id }?.unitPrice ?? 0
+                return String(format: "%.2f", p)
+            },
+            set: { v in
+                if let i = lineItems.firstIndex(where: { $0.id == id }) {
+                    lineItems[i].unitPrice = Double(v) ?? lineItems[i].unitPrice
+                }
+            })
     }
     private func liBindAccount(_ id: String) -> Binding<String> {
         Binding<String>(get: { lineItems.first { $0.id == id }?.account ?? "" },

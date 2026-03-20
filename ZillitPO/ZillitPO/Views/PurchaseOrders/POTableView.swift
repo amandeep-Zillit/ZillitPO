@@ -38,6 +38,12 @@ struct POTableView: View {
             ) { EmptyView() }
             .hidden()
         }
+        .onReceive(appState.$popToRoot) { pop in
+            if pop {
+                navigateToDetail = false
+                appState.popToRoot = false
+            }
+        }
     }
 }
 
@@ -62,24 +68,28 @@ struct PORow: View {
     }
 
     private var statusBadge: some View {
-        let cfg = ApprovalHelpers.resolveConfig(appState.tierConfigRows, deptId: po.departmentId, amount: po.totalAmount)
-        let total = ApprovalHelpers.getTotalTiers(cfg)
+        // Resolve tier config matching web client: resolveConfigForDepartment(tierConfig, po.department_id, po.totalAmount)
+        let resolvedConfig = ApprovalHelpers.resolveConfig(appState.tierConfigRows, deptId: po.departmentId, amount: po.totalAmount)
+        let totalTiers = ApprovalHelpers.getTotalTiers(resolvedConfig)
+        let approvedCount = po.approvals.count
         let label: String = {
-            switch po.poStatus {
-            case .rejected: return "Rejected"; case .posted: return "Posted"; case .closed: return "Closed"
-            case .acctEntered: return "Acct Entered"; case .approved: return "Approved"; case .draft: return "Draft"
-            case .pending: return total > 0 ? "Pending (\(po.approvals.count)/\(total))" : "Pending"
-            }
+            if po.poStatus == .rejected { return "Rejected" }
+            if po.poStatus == .posted { return "Posted" }
+            if po.poStatus == .closed { return "Closed" }
+            if po.poStatus == .acctEntered { return "Acct Entered" }
+            if po.poStatus == .approved { return "Approved" }
+            if po.poStatus == .draft { return "Draft" }
+            // pending
+            if totalTiers > 0 { return "Pending (\(approvedCount)/\(totalTiers))" }
+            return "Pending"
         }()
         let colors: (Color, Color) = {
-            switch po.poStatus {
-            case .rejected: return (.red, Color.red.opacity(0.1))
-            case .posted: return (.blue, Color.blue.opacity(0.1))
-            case .closed: return (.gray, Color.gray.opacity(0.1))
-            case .approved: return (.green, Color.green.opacity(0.1))
-            case .pending, .acctEntered: return (.goldDark, Color.gold.opacity(0.15))
-            case .draft: return (.orange, Color.orange.opacity(0.1))
-            }
+            if po.poStatus == .rejected { return (.red, Color.red.opacity(0.1)) }
+            if po.poStatus == .posted { return (.blue, Color.blue.opacity(0.1)) }
+            if po.poStatus == .closed { return (.gray, Color.gray.opacity(0.1)) }
+            if po.poStatus == .approved { return (.green, Color.green.opacity(0.1)) }
+            if po.poStatus == .draft { return (.orange, Color.orange.opacity(0.1)) }
+            return (.goldDark, Color.gold.opacity(0.15)) // pending, acctEntered
         }()
         return Text(label).font(.system(size: 10, weight: .medium)).foregroundColor(colors.0)
             .padding(.horizontal, 8).padding(.vertical, 3).background(colors.1).cornerRadius(4)

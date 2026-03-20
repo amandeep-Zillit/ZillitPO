@@ -65,10 +65,7 @@ struct DepartmentPOModule: View {
 
             // Hidden NavigationLink to push form page
             NavigationLink(
-                destination: POFormPage(
-                    editingPO: appState.editingPO,
-                    resumeDraft: appState.resumeDraft
-                ).environmentObject(appState),
+                destination: POFormPage().environmentObject(appState),
                 isActive: $navigateToForm
             ) { EmptyView() }
             .hidden()
@@ -267,20 +264,14 @@ struct DraftsTemplatesPage: View {
 
             // Hidden NavigationLink to push form page when resuming a draft
             NavigationLink(
-                destination: POFormPage(
-                    editingPO: nil,
-                    resumeDraft: appState.resumeDraft
-                ).environmentObject(appState),
+                destination: POFormPage().environmentObject(appState),
                 isActive: $navigateToForm
             ) { EmptyView() }
             .hidden()
 
             // Hidden NavigationLink to create new draft
             NavigationLink(
-                destination: POFormPage(
-                    editingPO: nil,
-                    resumeDraft: nil
-                ).environmentObject(appState),
+                destination: POFormPage().environmentObject(appState),
                 isActive: $navigateToCreateDraft
             ) { EmptyView() }
             .hidden()
@@ -1660,13 +1651,14 @@ struct CreateTemplateFormView: View {
 struct POFormPage: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.presentationMode) var presentationMode
-    var editingPO: PurchaseOrder?
-    var resumeDraft: PurchaseOrder?
-    var prefilledVendorId: String?
+    @State private var capturedEditingPO: PurchaseOrder?
+    @State private var capturedResumeDraft: PurchaseOrder?
+    @State private var capturedPrefilledVendorId: String?
+    @State private var didCapture = false
 
     private var title: String {
-        if editingPO != nil { return "Edit PO" }
-        if resumeDraft != nil { return "Resume Draft" }
+        if capturedEditingPO != nil { return "Edit PO" }
+        if capturedResumeDraft != nil { return "Resume Draft" }
         return "Create PO"
     }
 
@@ -1674,9 +1666,9 @@ struct POFormPage: View {
         ZStack {
             Color.bgBase.edgesIgnoringSafeArea(.all)
             POFormView(
-                editingPO: editingPO,
-                resumeDraft: resumeDraft,
-                prefilledVendorId: prefilledVendorId,
+                editingPO: capturedEditingPO,
+                resumeDraft: capturedResumeDraft,
+                prefilledVendorId: capturedPrefilledVendorId,
                 onBack: { presentationMode.wrappedValue.dismiss() }
             )
         }
@@ -1690,6 +1682,14 @@ struct POFormPage: View {
                 }.foregroundColor(.goldDark)
             }
         )
+        .onAppear {
+            if !didCapture {
+                capturedEditingPO = appState.editingPO
+                capturedResumeDraft = appState.resumeDraft
+                capturedPrefilledVendorId = appState.prefilledVendorId
+                didCapture = true
+            }
+        }
         .onDisappear {
             appState.editingPO = nil
             appState.resumeDraft = nil

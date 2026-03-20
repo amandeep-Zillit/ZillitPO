@@ -36,12 +36,50 @@ struct ApprovalTierConfig: Identifiable, Codable, Equatable {
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        projectId = try c.decode(String.self, forKey: .projectId)
+        module = try c.decode(String.self, forKey: .module)
+        scope = try c.decode(String.self, forKey: .scope)
+        departmentId = try? c.decode(String.self, forKey: .departmentId)
+        tiers = (try? c.decode([TierDef].self, forKey: .tiers)) ?? []
+        createdBy = (try? c.decode(String.self, forKey: .createdBy)) ?? ""
+        updatedBy = (try? c.decode(String.self, forKey: .updatedBy)) ?? ""
+        // API may return timestamps as String or Int64
+        if let v = try? c.decode(Int64.self, forKey: .createdAt) { createdAt = v }
+        else if let s = try? c.decode(String.self, forKey: .createdAt) { createdAt = Int64(s) ?? 0 }
+        else { createdAt = 0 }
+        if let v = try? c.decode(Int64.self, forKey: .updatedAt) { updatedAt = v }
+        else if let s = try? c.decode(String.self, forKey: .updatedAt) { updatedAt = Int64(s) ?? 0 }
+        else { updatedAt = 0 }
+    }
+
+    init(id: String, projectId: String, module: String, scope: String, departmentId: String?, tiers: [TierDef], createdBy: String, updatedBy: String, createdAt: Int64, updatedAt: Int64) {
+        self.id = id; self.projectId = projectId; self.module = module; self.scope = scope
+        self.departmentId = departmentId; self.tiers = tiers; self.createdBy = createdBy
+        self.updatedBy = updatedBy; self.createdAt = createdAt; self.updatedAt = updatedAt
+    }
 }
 
 struct TierDef: Codable, Equatable {
     let order: Int
     let gate: TierGate?
     let rules: [TierRule]
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        order = (try? c.decode(Int.self, forKey: .order)) ?? 0
+        gate = try? c.decode(TierGate.self, forKey: .gate)
+        rules = (try? c.decode([TierRule].self, forKey: .rules)) ?? []
+    }
+
+    init(order: Int, gate: TierGate?, rules: [TierRule]) {
+        self.order = order; self.gate = gate; self.rules = rules
+    }
+
+    enum CodingKeys: String, CodingKey { case order, gate, rules }
 }
 
 struct TierGate: Codable, Equatable {
@@ -58,10 +96,22 @@ struct TierRule: Codable, Equatable {
     let type: String             // "default" | "amount"
     let amountThreshold: Double?
     let userIds: [String]
+
     enum CodingKeys: String, CodingKey {
         case type
         case amountThreshold = "amount_threshold"
         case userIds = "user_ids"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        type = (try? c.decode(String.self, forKey: .type)) ?? "default"
+        amountThreshold = try? c.decode(Double.self, forKey: .amountThreshold)
+        userIds = (try? c.decode([String].self, forKey: .userIds)) ?? []
+    }
+
+    init(type: String, amountThreshold: Double?, userIds: [String]) {
+        self.type = type; self.amountThreshold = amountThreshold; self.userIds = userIds
     }
 }
 

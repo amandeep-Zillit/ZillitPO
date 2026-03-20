@@ -238,9 +238,7 @@ struct VendorDetailPage: View {
 
             // Hidden NavigationLink to push Create PO page
             NavigationLink(
-                destination: POFormPage(
-                    prefilledVendorId: vendor.id
-                ).environmentObject(appState),
+                destination: POFormPage().environmentObject(appState),
                 isActive: $navigateToCreatePO
             ) { EmptyView() }
             .hidden()

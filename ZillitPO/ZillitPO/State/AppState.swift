@@ -34,6 +34,7 @@ class AppState: ObservableObject {
     @Published var resumeDraft: PurchaseOrder?
     @Published var editingTemplate: POTemplate?
     @Published var prefilledVendorId: String?
+    @Published var popToRoot = false
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -56,7 +57,13 @@ class AppState: ObservableObject {
             .map { tryDecode([Vendor].self, from: $0) ?? [] }
             .replaceError(with: [])
         let tiersPub = APIClient.shared.get("/api/v2/approval-tiers?module=purchase_orders")
-            .map { tryDecode([ApprovalTierConfig].self, from: $0) ?? [] }
+            .map { data -> [ApprovalTierConfig] in
+                if let result = tryDecode([ApprovalTierConfig].self, from: data) { return result }
+                // Debug: log raw response on decode failure
+                let raw = String(data: data, encoding: .utf8) ?? "<binary>"
+                print("⚠️ Tier config decode failed. Raw: \(raw.prefix(500))")
+                return []
+            }
             .replaceError(with: [])
         let templatesPub = APIClient.shared.get("/api/v2/purchase-orders/templates")
             .map { tryDecode([POTemplate].self, from: $0) ?? [] }
