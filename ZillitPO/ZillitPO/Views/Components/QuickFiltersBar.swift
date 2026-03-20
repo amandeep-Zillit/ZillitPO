@@ -49,14 +49,12 @@ struct QuickFiltersBar: View {
     // Separate views so each can own its own .actionSheet
     private func filterButton(compact: Bool) -> some View {
         Button(action: { showFilterSheet = true }) {
-            HStack(spacing: compact ? 0 : 6) {
+            HStack(spacing: 6) {
                 Image(systemName: "line.3.horizontal.decrease").font(.system(size: 10, weight: .medium)).foregroundColor(.goldDark)
-                if !compact {
-                    Text(appState.activeFilter.rawValue).font(.system(size: 12, weight: .semibold)).foregroundColor(.primary).lineLimit(1)
-                    Image(systemName: "chevron.down").font(.system(size: 8, weight: .medium)).foregroundColor(.gray)
-                }
+                Text(appState.activeFilter.rawValue).font(.system(size: 12, weight: .semibold)).foregroundColor(.primary).lineLimit(1)
+                Image(systemName: "chevron.down").font(.system(size: 8, weight: .medium)).foregroundColor(.gray)
             }
-            .padding(.horizontal, compact ? 10 : 12).padding(.vertical, 8)
+            .padding(.horizontal, 12).padding(.vertical, 8)
             .background(Color.white).cornerRadius(6)
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
             .contentShape(Rectangle())
@@ -75,7 +73,7 @@ struct QuickFiltersBar: View {
 
     private func sortButton(compact: Bool) -> some View {
         Button(action: { showSortSheet = true }) {
-            HStack(spacing: compact ? 0 : 6) {
+            HStack(spacing: 6) {
                 Image(systemName: "arrow.up.arrow.down").font(.system(size: 10, weight: .medium)).foregroundColor(.goldDark)
                 if !compact {
                     Text(appState.sortKey.rawValue).font(.system(size: 12, weight: .semibold)).foregroundColor(.primary).lineLimit(1)
