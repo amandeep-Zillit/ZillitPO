@@ -8,17 +8,72 @@ enum VendorFilter: String, CaseIterable {
     case addedByMe = "Added by Me"
 }
 
-struct VendorsModuleView: View {
+// MARK: - Shared vendor state (used by pinned header + scrollable list)
+
+class VendorListState: ObservableObject {
+    @Published var search = ""
+    @Published var activeFilter: VendorFilter = .all
+    @Published var selectedVendor: Vendor?
+    @Published var navigateToCreate = false
+    @Published var navigateToDetail = false
+}
+
+private let vendorListState = VendorListState()
+
+// MARK: - Vendors Pinned Header (filter buttons + search bar — stays above ScrollView)
+
+struct VendorsPinnedHeader: View {
     @EnvironmentObject var appState: AppState
-    @State private var search = ""; @State private var selectedVendor: Vendor?
-    @State private var navigateToCreate = false
-    @State private var navigateToDetail = false
-    @State private var activeFilter: VendorFilter = .all
+    @ObservedObject private var state = vendorListState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Vendors").font(.system(size: 16, weight: .semibold))
+                Spacer()
+                Button(action: { state.navigateToCreate = true }) {
+                    HStack(spacing: 4) { Image(systemName: "plus"); Text("New Vendor") }
+                        .font(.system(size: 11, weight: .semibold)).foregroundColor(.black)
+                        .padding(.horizontal, 12).padding(.vertical, 6).background(Color.gold).cornerRadius(6)
+                }
+            }
+
+            // Filters
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(VendorFilter.allCases, id: \.self) { filter in
+                        Button(action: { state.activeFilter = filter }) {
+                            Text(filter.rawValue).font(.system(size: 12, weight: state.activeFilter == filter ? .semibold : .regular)).fixedSize()
+                                .foregroundColor(state.activeFilter == filter ? .black : .secondary)
+                                .padding(.horizontal, 12).padding(.vertical, 5)
+                                .background(state.activeFilter == filter ? Color.gold : Color.white).cornerRadius(6)
+                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(state.activeFilter == filter ? Color.gold : Color.borderColor, lineWidth: 1))
+                                .contentShape(Rectangle())
+                        }.buttonStyle(BorderlessButtonStyle())
+                    }
+                }
+            }
+
+            // Search
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass").foregroundColor(.gray).font(.system(size: 12))
+                TextField("Search vendors by name, email...", text: $state.search).font(.system(size: 13))
+            }.padding(10).background(Color.white).cornerRadius(8)
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+        }
+    }
+}
+
+// MARK: - Vendors Scrollable List (vendor cards — scrolls below pinned header)
+
+struct VendorsScrollableList: View {
+    @EnvironmentObject var appState: AppState
+    @ObservedObject private var state = vendorListState
+
     var filtered: [Vendor] {
         var result = appState.vendors
 
-        // Apply filter
-        switch activeFilter {
+        switch state.activeFilter {
         case .all: break
         case .verified: result = result.filter { $0.verified }
         case .nonVerified: result = result.filter { !$0.verified }
@@ -28,9 +83,8 @@ struct VendorsModuleView: View {
             }
         }
 
-        // Apply search
-        if !search.isEmpty {
-            let q = search.lowercased()
+        if !state.search.isEmpty {
+            let q = state.search.lowercased()
             result = result.filter { $0.name.lowercased().contains(q) || $0.email.lowercased().contains(q) }
         }
 
@@ -40,38 +94,6 @@ struct VendorsModuleView: View {
     var body: some View {
         ZStack {
             VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text("Vendors").font(.system(size: 16, weight: .semibold))
-                    Spacer()
-                    Button(action: { navigateToCreate = true }) {
-                        HStack(spacing: 4) { Image(systemName: "plus"); Text("New Vendor") }
-                            .font(.system(size: 11, weight: .semibold)).foregroundColor(.black)
-                            .padding(.horizontal, 12).padding(.vertical, 6).background(Color.gold).cornerRadius(6)
-                    }
-                }
-
-                // Filters
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(VendorFilter.allCases, id: \.self) { filter in
-                            Button(action: { activeFilter = filter }) {
-                                Text(filter.rawValue).font(.system(size: 12, weight: activeFilter == filter ? .semibold : .regular)).fixedSize()
-                                    .foregroundColor(activeFilter == filter ? .black : .secondary)
-                                    .padding(.horizontal, 12).padding(.vertical, 5)
-                                    .background(activeFilter == filter ? Color.gold : Color.white).cornerRadius(6)
-                                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(activeFilter == filter ? Color.gold : Color.borderColor, lineWidth: 1))
-                            }.buttonStyle(PlainButtonStyle())
-                        }
-                    }
-                }
-
-                // Search
-                HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass").foregroundColor(.gray).font(.system(size: 12))
-                    TextField("Search vendors by name, email...", text: $search).font(.system(size: 13))
-                }.padding(10).background(Color.white).cornerRadius(8)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
-
                 if filtered.isEmpty {
                     VStack(spacing: 12) {
                         Image(systemName: "person.2").font(.system(size: 32)).foregroundColor(.gray.opacity(0.3))
@@ -91,7 +113,7 @@ struct VendorsModuleView: View {
                                 Text(vendor.verified ? "Verified" : "Non-Verified").font(.system(size: 10)).foregroundColor(vendor.verified ? .green : .secondary)
                             }
                             .contentShape(Rectangle())
-                            .onTapGesture { selectedVendor = vendor; navigateToDetail = true }
+                            .onTapGesture { state.selectedVendor = vendor; state.navigateToDetail = true }
 
                             Image(systemName: "trash").font(.system(size: 11)).foregroundColor(.red.opacity(0.6))
                                 .padding(10)
@@ -107,22 +129,33 @@ struct VendorsModuleView: View {
             // Hidden NavigationLink to push vendor form page
             NavigationLink(
                 destination: VendorFormPage().environmentObject(appState),
-                isActive: $navigateToCreate
+                isActive: $state.navigateToCreate
             ) { EmptyView() }
             .hidden()
 
             // Hidden NavigationLink to push vendor detail page
             NavigationLink(
                 destination: Group {
-                    if let v = selectedVendor {
+                    if let v = state.selectedVendor {
                         VendorDetailPage(vendor: v).environmentObject(appState)
                     } else {
                         EmptyView()
                     }
                 },
-                isActive: $navigateToDetail
+                isActive: $state.navigateToDetail
             ) { EmptyView() }
             .hidden()
+        }
+    }
+}
+
+// MARK: - Legacy VendorsModuleView (kept for backward compatibility)
+
+struct VendorsModuleView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VendorsPinnedHeader()
+            VendorsScrollableList()
         }
     }
 }
@@ -291,24 +324,10 @@ struct VendorFormView: View {
                         InputField(text: $contact, placeholder: "e.g. Margaret Thornton")
                     }
                     FieldGroup(label: "EMAIL") {
-                        InputField(text: $email, placeholder: "e.g. bookings@studio.co.uk")
+                        InputField(text: $email, placeholder: "e.g. bookings@studio.co.uk", keyboard: .emailAddress)
                     }
                     FieldGroup(label: "PHONE") {
-                        HStack(spacing: 6) {
-                            HStack(spacing: 4) {
-                                TextField("+44", text: $phoneCode)
-                                    .font(.system(size: 13))
-                                    .frame(width: 40)
-                                Button(action: { phoneCode = "" }) {
-                                    Image(systemName: "xmark").font(.system(size: 9)).foregroundColor(.gray.opacity(0.5))
-                                }.buttonStyle(PlainButtonStyle())
-                            }
-                            .padding(.horizontal, 8).padding(.vertical, 9)
-                            .background(Color.white).cornerRadius(6)
-                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
-
-                            InputField(text: $phone, placeholder: "e.g. 1753 651700")
-                        }
+                        PhoneField(phoneCode: $phoneCode, phone: $phone)
                     }
                     FieldGroup(label: "VAT NUMBER", optional: true) {
                         InputField(text: $vat, placeholder: "e.g. GB 123 4567 89")
@@ -358,6 +377,7 @@ struct VendorFormView: View {
             }
         }
         .listStyle(GroupedListStyle())
+        .dismissKeyboardOnTap()
     }
 
     private func vendorSectionHeader(icon: String, title: String, trailing: String? = nil) -> some View {

@@ -3,23 +3,40 @@ import SwiftUI
 struct POTableView: View {
     @EnvironmentObject var appState: AppState
     @State private var selectedPO: PurchaseOrder?
+    @State private var navigateToDetail = false
 
     var body: some View {
-        if appState.filteredPOs.isEmpty {
-            VStack(spacing: 12) {
-                Image(systemName: "doc.text").font(.system(size: 32)).foregroundColor(.gray.opacity(0.3))
-                Text("No purchase orders found").font(.system(size: 13)).foregroundColor(.secondary)
-            }.frame(maxWidth: .infinity).padding(.vertical, 40).background(Color.white).cornerRadius(10)
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
-        } else {
-            VStack(spacing: 0) {
-                ForEach(appState.filteredPOs, id: \.id) { po in
-                    Button(action: { selectedPO = po }) { PORow(po: po) }.buttonStyle(PlainButtonStyle())
-                    Divider().padding(.horizontal, 12)
-                }
-            }.background(Color.white).cornerRadius(10)
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
-            .sheet(item: $selectedPO) { po in PODetailModalView(po: po).environmentObject(appState) }
+        ZStack {
+            if appState.filteredPOs.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "doc.text").font(.system(size: 32)).foregroundColor(.gray.opacity(0.3))
+                    Text("No purchase orders found").font(.system(size: 13)).foregroundColor(.secondary)
+                }.frame(maxWidth: .infinity).padding(.vertical, 40).background(Color.white).cornerRadius(10)
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(appState.filteredPOs, id: \.id) { po in
+                        Button(action: { selectedPO = po; navigateToDetail = true }) {
+                            PORow(po: po)
+                        }.buttonStyle(BorderlessButtonStyle())
+                        Divider().padding(.horizontal, 12)
+                    }
+                }.background(Color.white).cornerRadius(10)
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+            }
+
+            // Hidden NavigationLink to push PO detail page
+            NavigationLink(
+                destination: Group {
+                    if let po = selectedPO {
+                        PODetailPage(po: po).environmentObject(appState)
+                    } else {
+                        EmptyView()
+                    }
+                },
+                isActive: $navigateToDetail
+            ) { EmptyView() }
+            .hidden()
         }
     }
 }
@@ -31,16 +48,17 @@ struct PORow: View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(po.poNumber).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundColor(.goldDark)
-                Text(po.vendor.isEmpty ? "—" : po.vendor).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                Text(po.vendor.isEmpty ? "—" : po.vendor).font(.system(size: 13, weight: .medium)).foregroundColor(.black).lineLimit(1)
                 if !(po.description ?? "").isEmpty { Text(po.description ?? "").font(.system(size: 10)).foregroundColor(.secondary).lineLimit(1) }
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 4) {
-                Text(FormatUtils.formatGBP(VATHelpers.calcVat(po.totalAmount, treatment: po.vatTreatment).gross))
+                Text(FormatUtils.formatCurrency(VATHelpers.calcVat(po.totalAmount, treatment: po.vatTreatment).gross, code: po.currency))
                     .font(.system(size: 13, design: .monospaced))
                 statusBadge
             }
         }.padding(12)
+        .contentShape(Rectangle())
     }
 
     private var statusBadge: some View {

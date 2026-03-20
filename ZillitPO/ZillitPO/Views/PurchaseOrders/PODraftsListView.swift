@@ -24,7 +24,7 @@ struct PODraftsListView: View {
                                 Text(draft.vendor.isEmpty ? "—" : draft.vendor).font(.system(size: 13, weight: .medium)).foregroundColor(.primary).lineLimit(1)
                             }
                             Spacer()
-                            Text(FormatUtils.formatGBP(draft.netAmount)).font(.system(size: 13, design: .monospaced)).foregroundColor(.primary)
+                            Text(FormatUtils.formatCurrency(draft.netAmount, code: draft.currency)).font(.system(size: 13, design: .monospaced)).foregroundColor(.primary)
                             Text("Draft").font(.system(size: 10, weight: .medium)).foregroundColor(.goldDark)
                                 .padding(.horizontal, 6).padding(.vertical, 2).background(Color.gold.opacity(0.15)).cornerRadius(4)
                         }

@@ -19,9 +19,29 @@ struct FormatUtils {
     }
 
     static func formatGBP(_ amount: Double) -> String {
-        let f = NumberFormatter(); f.numberStyle = .currency; f.currencyCode = "GBP"
-        f.locale = Locale(identifier: "en_GB"); f.minimumFractionDigits = 2
-        return f.string(from: NSNumber(value: amount)) ?? "£0.00"
+        formatCurrency(amount, code: "GBP")
+    }
+
+    static func formatCurrency(_ amount: Double, code: String) -> String {
+        let f = NumberFormatter(); f.numberStyle = .currency; f.currencyCode = code
+        f.minimumFractionDigits = 2; f.maximumFractionDigits = 2
+        switch code.uppercased() {
+        case "GBP": f.locale = Locale(identifier: "en_GB")
+        case "USD": f.locale = Locale(identifier: "en_US")
+        case "EUR": f.locale = Locale(identifier: "de_DE")
+        default: f.locale = Locale(identifier: "en_GB")
+        }
+        let fallback = "\(currencySymbol(code))\(String(format: "%.2f", amount))"
+        return f.string(from: NSNumber(value: amount)) ?? fallback
+    }
+
+    static func currencySymbol(_ code: String) -> String {
+        switch code.uppercased() {
+        case "GBP": return "£"
+        case "USD": return "$"
+        case "EUR": return "€"
+        default: return code + " "
+        }
     }
 
     static func formatTimestamp(_ ms: Int64?) -> String {

@@ -13,6 +13,7 @@ class AppState: ObservableObject {
     @Published var templates: [POTemplate] = []
     @Published var drafts: [PurchaseOrder] = []
     @Published var tierConfigRows: [ApprovalTierConfig] = []
+    @Published var formTemplate: FormTemplateResponse?
 
     @Published var isLoading = false
     @Published var activeTab: DeptTab = .all
@@ -31,6 +32,7 @@ class AppState: ObservableObject {
     @Published var deleteDraftId: String?
     @Published var deleteVendorId: String?
     @Published var resumeDraft: PurchaseOrder?
+    @Published var editingTemplate: POTemplate?
     @Published var prefilledVendorId: String?
 
     private var cancellables = Set<AnyCancellable>()
@@ -69,6 +71,31 @@ class AppState: ObservableObject {
                 self.templates = tp; print("✅ Loaded \(tp.count) templates")
                 self.loadPOs()
                 self.loadDrafts()
+                self.loadFormTemplate()
+            }
+            .store(in: &cancellables)
+    }
+
+    func loadFormTemplate() {
+        APIClient.shared.get("/api/v2/purchase-orders/form-templates?module=purchase_orders")
+            .map { data -> FormTemplateResponse? in
+                let result = tryDecode(FormTemplateResponse.self, from: data)
+                if result == nil, let raw = String(data: data, encoding: .utf8) {
+                    print("⚠️ Form template decode failed. Raw: \(raw.prefix(500))")
+                }
+                return result
+            }
+            .replaceError(with: nil)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] tpl in
+                self?.formTemplate = tpl
+                print("📋 Form template: \(tpl?.template.count ?? 0) sections")
+                if let sections = tpl?.template {
+                    for s in sections {
+                        let fieldLabels = s.fields.map { "\($0.name)[\($0.label ?? "nil")]sd=\($0.systemDefault ?? false)" }
+                        print("  📌 Section key=\(s.key) label=\(s.label) order=\(s.order) sysDefault=\(s.isSystemDefault) fields=\(fieldLabels)")
+                    }
+                }
             }
             .store(in: &cancellables)
     }
@@ -217,16 +244,41 @@ class AppState: ObservableObject {
     }
 
     func submitPO(_ fd: POFormData, onComplete: (() -> Void)? = nil) {
-        guard let u = currentUser else { return }; formSubmitting = true
+        guard let u = currentUser else { print("❌ submitPO: no currentUser"); return }; formSubmitting = true
         let dept = u.departmentId.isEmpty ? fd.departmentId : u.departmentId
         let cfg = ApprovalHelpers.resolveConfig(tierConfigRows, deptId: dept, amount: fd.netAmount)
         let auto = ApprovalHelpers.getAutoApprovals(cfg, userId: u.id, deptId: dept)
+        let lineItemPayloads: [[String: Any]] = fd.lineItems.map {
+            var item: [String: Any] = ["id":$0.id,"description":$0.description,"quantity":$0.quantity,"unit_price":$0.unitPrice,"total":$0.total,"account":$0.account,"department":$0.department,"expenditure_type":$0.expenditureType]
+            if let customVals = fd.lineItemCustomValues[$0.id] {
+                var cfArr: [[String: String]] = []
+                for (k, v) in customVals where !v.isEmpty { cfArr.append(["name": k, "value": v]) }
+                if !cfArr.isEmpty { item["custom_fields"] = cfArr }
+            }
+            return item
+        }
         var p: [String: Any] = ["vendor_id": fd.vendorId, "department_id": dept, "nominal_code": fd.nominalCode,
             "description": fd.description, "currency": fd.currency, "vat_treatment": fd.vatTreatment,
             "notes": fd.notes, "net_amount": fd.netAmount, "status": "PENDING",
-            "line_items": fd.lineItems.map { ["id":$0.id,"description":$0.description,"quantity":$0.quantity,"unit_price":$0.unitPrice,"total":$0.total,"account":$0.account,"department":$0.department,"expenditure_type":$0.expenditureType] as [String: Any] },
+            "line_items": lineItemPayloads,
             "approvals": auto.map { ["user_id":$0.userId,"tier_number":$0.tierNumber,"approved_at":$0.approvedAt] as [String: Any] }]
         if let d = fd.effectiveDate { p["effective_date"] = Int64(d.timeIntervalSince1970 * 1000) }
+        if let d = fd.deliveryDate { p["delivery_date"] = Int64(d.timeIntervalSince1970 * 1000) }
+        if let da = fd.deliveryAddress {
+            p["delivery_address"] = ["name": da.name ?? "", "email": da.email ?? "", "phone": da.phone ?? "",
+                "line1": da.line1 ?? "", "line2": da.line2 ?? "", "city": da.city ?? "",
+                "state": da.state ?? "", "postal_code": da.postalCode ?? "", "country": da.country ?? ""] as [String: Any]
+        }
+        if !fd.customFieldValues.isEmpty {
+            var cfSections: [String: [[String: String]]] = [:]
+            for (k, v) in fd.customFieldValues where !v.isEmpty {
+                let parts = k.split(separator: "_", maxSplits: 1)
+                let sec = parts.count > 1 ? String(parts[0]) : "custom"
+                let name = parts.count > 1 ? String(parts[1]) : k
+                cfSections[sec, default: []].append(["name": name, "value": v])
+            }
+            p["custom_fields"] = cfSections.map { ["section": $0.key, "fields": $0.value] as [String: Any] }
+        }
 
         let pub: AnyPublisher<Data, Error>
         if let eid = fd.existingDraftId { pub = APIClient.shared.patch("/api/v2/purchase-orders/\(eid)", body: p) }
@@ -239,45 +291,155 @@ class AppState: ObservableObject {
     }
 
     func saveDraft(_ fd: POFormData, onComplete: (() -> Void)? = nil) {
-        guard let u = currentUser else { return }
+        guard let u = currentUser else { print("❌ saveDraft: no currentUser"); return }
         let dept = u.departmentId.isEmpty ? fd.departmentId : u.departmentId
-        var p: [String: Any] = ["vendor_id": fd.vendorId, "department_id": dept, "nominal_code": fd.nominalCode,
+
+        // Line items — full payload
+        let lineItemPayloads: [[String: Any]] = fd.lineItems.map {
+            var item: [String: Any] = [
+                "id": $0.id, "description": $0.description,
+                "quantity": $0.quantity, "unit_price": $0.unitPrice, "total": $0.total,
+                "account": $0.account, "department": $0.department,
+                "expenditure_type": $0.expenditureType
+            ]
+            if let customVals = fd.lineItemCustomValues[$0.id] {
+                var cfArr: [[String: String]] = []
+                for (k, v) in customVals where !v.isEmpty { cfArr.append(["name": k, "value": v]) }
+                if !cfArr.isEmpty { item["custom_fields"] = cfArr }
+            }
+            return item
+        }
+
+        var p: [String: Any] = [
+            "department_id": dept, "nominal_code": fd.nominalCode,
             "description": fd.description, "currency": fd.currency, "vat_treatment": fd.vatTreatment,
             "notes": fd.notes, "net_amount": fd.netAmount, "status": "DRAFT",
-            "line_items": fd.lineItems.map { ["id":$0.id,"description":$0.description,"quantity":$0.quantity,"unit_price":$0.unitPrice,"total":$0.total] as [String: Any] }]
+            "line_items": lineItemPayloads
+        ]
+        if !fd.vendorId.isEmpty { p["vendor_id"] = fd.vendorId }
         if let d = fd.effectiveDate { p["effective_date"] = Int64(d.timeIntervalSince1970 * 1000) }
+        if let d = fd.deliveryDate { p["delivery_date"] = Int64(d.timeIntervalSince1970 * 1000) }
+        if let da = fd.deliveryAddress {
+            p["delivery_address"] = [
+                "name": da.name ?? "", "email": da.email ?? "",
+                "phone_code": da.phoneCode ?? "", "phone": da.phone ?? "",
+                "line1": da.line1 ?? "", "line2": da.line2 ?? "",
+                "city": da.city ?? "", "state": da.state ?? "",
+                "postal_code": da.postalCode ?? "", "country": da.country ?? ""
+            ] as [String: Any]
+        }
+        if !fd.customFieldValues.isEmpty {
+            var cfSections: [String: [[String: String]]] = [:]
+            for (k, v) in fd.customFieldValues where !v.isEmpty {
+                let parts = k.split(separator: "_", maxSplits: 1)
+                let sec = parts.count > 1 ? String(parts[0]) : "custom"
+                let fieldName = parts.count > 1 ? String(parts[1]) : k
+                cfSections[sec, default: []].append(["name": fieldName, "value": v])
+            }
+            p["custom_fields"] = cfSections.map { ["section": $0.key, "fields": $0.value] as [String: Any] }
+        }
 
         let pub: AnyPublisher<Data, Error>
         if let eid = fd.existingDraftId { pub = APIClient.shared.patch("/api/v2/purchase-orders/\(eid)", body: p) }
         else { pub = APIClient.shared.post("/api/v2/purchase-orders", body: p) }
 
         pub.receive(on: DispatchQueue.main)
-            .sink(receiveCompletion: { _ in }, receiveValue: { [weak self] _ in self?.loadDrafts(); self?.showCreatePO = false; self?.resumeDraft = nil; self?.editingPO = nil; self?.activeTab = .drafts; onComplete?() })
+            .sink(receiveCompletion: { c in
+                if case .failure(let e) = c { print("❌ Save draft failed: \(e)") }
+            }, receiveValue: { [weak self] _ in
+                print("✅ Draft saved")
+                self?.loadDrafts(); self?.showCreatePO = false; self?.resumeDraft = nil; self?.editingPO = nil; onComplete?()
+            })
             .store(in: &cancellables)
     }
 
-    func saveTemplate(_ fd: POFormData, templateName: String, onComplete: (() -> Void)? = nil) {
-        guard let u = currentUser else { return }
+    private func buildTemplateBody(_ fd: POFormData, templateName: String) -> [String: Any] {
+        guard let u = currentUser else { return [:] }
         let dept: String = {
             if let d = DepartmentsData.all.first(where: { $0.identifier == fd.departmentId }) { return d.id }
             if !u.departmentId.isEmpty { return u.departmentId }
             return fd.departmentId
         }()
         let name = templateName.trimmingCharacters(in: .whitespaces).isEmpty ? "Untitled" : templateName.trimmingCharacters(in: .whitespaces)
+
+        // Line items — full payload matching web client
+        let lineItemPayloads: [[String: Any]] = fd.lineItems.map {
+            var item: [String: Any] = [
+                "id": $0.id, "description": $0.description,
+                "quantity": $0.quantity, "unit_price": $0.unitPrice, "total": $0.total,
+                "account": $0.account, "department": $0.department,
+                "expenditure_type": $0.expenditureType
+            ]
+            if let customVals = fd.lineItemCustomValues[$0.id] {
+                var cfArr: [[String: String]] = []
+                for (k, v) in customVals where !v.isEmpty { cfArr.append(["name": k, "value": v]) }
+                if !cfArr.isEmpty { item["custom_fields"] = cfArr }
+            }
+            return item
+        }
+
         var body: [String: Any] = [
             "template_name": name,
             "department_id": dept, "nominal_code": fd.nominalCode,
-            "description": fd.description, "currency": fd.currency, "vat_treatment": fd.vatTreatment,
+            "description": fd.description, "currency": fd.currency,
+            "vat_treatment": fd.vatTreatment,
             "notes": fd.notes, "net_amount": fd.netAmount,
-            "line_items": fd.lineItems.map { ["id":$0.id,"description":$0.description,"quantity":$0.quantity,
-                                               "unit_price":$0.unitPrice,"total":$0.total] as [String: Any] }]
+            "line_items": lineItemPayloads
+        ]
         if !fd.vendorId.isEmpty { body["vendor_id"] = fd.vendorId }
+
+        // Dates — epoch milliseconds matching web client
+        if let d = fd.effectiveDate { body["effective_date"] = Int64(d.timeIntervalSince1970 * 1000) }
+        if let d = fd.deliveryDate { body["delivery_date"] = Int64(d.timeIntervalSince1970 * 1000) }
+
+        // Delivery address
+        if let da = fd.deliveryAddress {
+            body["delivery_address"] = [
+                "name": da.name ?? "", "email": da.email ?? "",
+                "phone_code": da.phoneCode ?? "", "phone": da.phone ?? "",
+                "line1": da.line1 ?? "", "line2": da.line2 ?? "",
+                "city": da.city ?? "", "state": da.state ?? "",
+                "postal_code": da.postalCode ?? "", "country": da.country ?? ""
+            ] as [String: Any]
+        }
+
+        // Custom fields — grouped by section matching web client
+        if !fd.customFieldValues.isEmpty {
+            var cfSections: [String: [[String: String]]] = [:]
+            for (k, v) in fd.customFieldValues where !v.isEmpty {
+                let parts = k.split(separator: "_", maxSplits: 1)
+                let sec = parts.count > 1 ? String(parts[0]) : "custom"
+                let fieldName = parts.count > 1 ? String(parts[1]) : k
+                cfSections[sec, default: []].append(["name": fieldName, "value": v])
+            }
+            body["custom_fields"] = cfSections.map { ["section": $0.key, "fields": $0.value] as [String: Any] }
+        }
+
+        return body
+    }
+
+    func saveTemplate(_ fd: POFormData, templateName: String, onComplete: (() -> Void)? = nil) {
+        let body = buildTemplateBody(fd, templateName: templateName)
+        if body.isEmpty { return }
         APIClient.shared.post("/api/v2/purchase-orders/templates", body: body)
             .receive(on: DispatchQueue.main)
             .sink(receiveCompletion: { c in
                 if case .failure(let e) = c { print("❌ Save template failed: \(e)") }
             }, receiveValue: { [weak self] _ in
-                print("✅ Template saved"); self?.loadTemplates(); self?.activeTab = .templates; onComplete?()
+                print("✅ Template saved"); self?.loadTemplates(); onComplete?()
+            })
+            .store(in: &cancellables)
+    }
+
+    func updateTemplate(_ id: String, _ fd: POFormData, templateName: String, onComplete: (() -> Void)? = nil) {
+        let body = buildTemplateBody(fd, templateName: templateName)
+        if body.isEmpty { return }
+        APIClient.shared.patch("/api/v2/purchase-orders/templates/\(id)", body: body)
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { c in
+                if case .failure(let e) = c { print("❌ Update template failed: \(e)") }
+            }, receiveValue: { [weak self] _ in
+                print("✅ Template updated"); self?.loadTemplates(); self?.editingTemplate = nil; onComplete?()
             })
             .store(in: &cancellables)
     }
@@ -322,7 +484,7 @@ class AppState: ObservableObject {
 
 enum DeptTab: String, CaseIterable, Identifiable {
     case all = "All POs", my = "My POs", department = "My Dept"
-    case vendors = "Vendors", templates = "Templates", drafts = "Drafts"
+    case vendors = "Vendors"
     var id: String { rawValue }
 }
 
@@ -331,7 +493,11 @@ enum SortKey: String, CaseIterable { case dateDesc = "Date ↓", amountDesc = "A
 
 struct POFormData {
     var vendorId = ""; var departmentId = ""; var nominalCode = ""; var description = ""
-    var currency = "GBP"; var vatTreatment = "pending"; var effectiveDate: Date?
+    var currency = "GBP"; var vatTreatment = "pending"; var effectiveDate: Date?; var deliveryDate: Date?
     var notes = ""; var lineItems: [LineItem] = [LineItem()]; var existingDraftId: String?
+    var deliveryAddress: DeliveryAddress?
+    var customFieldValues: [String: String] = [:]
+    var lineItemCustomValues: [String: [String: String]] = [:]
+    var termsOfEngagement: [String] = []
     var netAmount: Double { lineItems.filter { $0.splitParentId == nil }.reduce(0) { $0 + $1.total } }
 }

@@ -13,13 +13,19 @@ struct POTemplatesListView: View {
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
             } else {
                 ForEach(appState.templates, id: \.id) { tpl in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(tpl.displayName).font(.system(size: 14, weight: .medium))
-                            Text(tpl.templateNumber ?? "—").font(.system(size: 11, design: .monospaced)).foregroundColor(.goldDark)
+                    HStack(spacing: 0) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(tpl.displayName).font(.system(size: 14, weight: .medium))
+                                Text(tpl.templateNumber ?? "—").font(.system(size: 11, design: .monospaced)).foregroundColor(.goldDark)
+                            }
+                            Spacer()
+                            Text(FormatUtils.formatCurrency(Double(tpl.netAmount ?? 0), code: tpl.currency ?? "GBP")).font(.system(size: 13, design: .monospaced))
+                            Image(systemName: "chevron.right").font(.system(size: 10, weight: .medium)).foregroundColor(.gray.opacity(0.5)).padding(.leading, 6)
                         }
-                        Spacer()
-                        Text(FormatUtils.formatGBP(tpl.netAmount?.doubleValue ?? 0)).font(.system(size: 13, design: .monospaced))
+                        .contentShape(Rectangle())
+                        .onTapGesture { appState.editingTemplate = tpl }
+
                         Image(systemName: "trash").font(.system(size: 11)).foregroundColor(.red.opacity(0.6))
                             .padding(10)
                             .contentShape(Rectangle())

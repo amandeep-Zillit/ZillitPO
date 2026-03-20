@@ -44,7 +44,8 @@ struct ContentView: View {
                                 Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(.gray)
                             }.padding(14).background(Color.white).cornerRadius(12)
                             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
-                        }.buttonStyle(PlainButtonStyle())
+                            .contentShape(Rectangle())
+                        }.buttonStyle(BorderlessButtonStyle())
 
                         NavigationLink(destination: DepartmentPOModule().onAppear { appState.loadAllData() }, isActive: $showPurchaseOrders) {
                             HStack(spacing: 12) {
@@ -58,7 +59,8 @@ struct ContentView: View {
                                 Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(.goldDark)
                             }.padding(14).background(Color.white).cornerRadius(12)
                             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.gold.opacity(0.3), lineWidth: 1))
-                        }.buttonStyle(PlainButtonStyle())
+                            .contentShape(Rectangle())
+                        }.buttonStyle(BorderlessButtonStyle())
                     }.padding(.horizontal, 20)
 
                     Spacer()

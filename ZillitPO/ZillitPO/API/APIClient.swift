@@ -71,32 +71,113 @@ struct APIResponse<T: Decodable>: Decodable { let data: T? }
 // MARK: - Raw API types
 
 struct PurchaseOrderRaw: Codable {
-    let id: String
-    let project_id: String?; let po_number: String?; let vendor_id: String?
-    let department_id: String?; let nominal_code: String?; let description: String?
-    let currency: String?; let effective_date: AnyCodableValue?; let notes: String?
-    let line_items: FlexibleLineItems?; let net_amount: AnyCodableValue?
-    let status: String?; let assigned_to: String?; let raised_by: String?; let user_id: String?
-    let approvals: FlexibleApprovals?; let vat_treatment: String?
-    let delivery_address: FlexibleDeliveryAddress?; let delivery_date: AnyCodableValue?
-    let rejection_reason: String?; let rejected_by: String?; let rejected_at: AnyCodableValue?
-    let reassignment_reason: String?; let reassigned_by: String?; let reassigned_at: AnyCodableValue?
-    let closure_reason: String?; let closed_by: String?; let closed_at: AnyCodableValue?
-    let vat_amount: AnyCodableValue?; let gross_total: AnyCodableValue?
-    let custom_fields: FlexibleCustomFields?
-    let created_at: AnyCodableValue?; let updated_at: AnyCodableValue?
+    var id: String
+    var project_id: String?; var po_number: String?; var vendor_id: String?
+    var department_id: String?; var nominal_code: String?; var description: String?
+    var currency: String?; var effective_date: Int?; var notes: String?
+    var line_items: FlexibleLineItems?; var net_amount: Int?
+    var status: String?; var assigned_to: String?; var raised_by: String?; var user_id: String?
+    var approvals: FlexibleApprovals?; var vat_treatment: String?
+    var delivery_address: FlexibleDeliveryAddress?; var delivery_date: Int?
+    var rejection_reason: String?; var rejected_by: String?; var rejected_at: Int?
+    var reassignment_reason: String?; var reassigned_by: String?; var reassigned_at: Int?
+    var closure_reason: String?; var closed_by: String?; var closed_at: Int?
+    var vat_amount: Int?; var gross_total: Int?
+    var custom_fields: FlexibleCustomFields?
+    var created_at: Int?; var updated_at: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case id, project_id, po_number, vendor_id, department_id, nominal_code, description
+        case currency, effective_date, notes, line_items, net_amount, status, assigned_to
+        case raised_by, user_id, approvals, vat_treatment, delivery_address, delivery_date
+        case rejection_reason, rejected_by, rejected_at, reassignment_reason, reassigned_by
+        case reassigned_at, closure_reason, closed_by, closed_at, vat_amount, gross_total
+        case custom_fields, created_at, updated_at
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        project_id = try? c.decode(String.self, forKey: .project_id)
+        po_number = try? c.decode(String.self, forKey: .po_number)
+        vendor_id = try? c.decode(String.self, forKey: .vendor_id)
+        department_id = try? c.decode(String.self, forKey: .department_id)
+        nominal_code = try? c.decode(String.self, forKey: .nominal_code)
+        description = try? c.decode(String.self, forKey: .description)
+        currency = try? c.decode(String.self, forKey: .currency)
+        notes = try? c.decode(String.self, forKey: .notes)
+        status = try? c.decode(String.self, forKey: .status)
+        assigned_to = try? c.decode(String.self, forKey: .assigned_to)
+        raised_by = try? c.decode(String.self, forKey: .raised_by)
+        user_id = try? c.decode(String.self, forKey: .user_id)
+        vat_treatment = try? c.decode(String.self, forKey: .vat_treatment)
+        rejection_reason = try? c.decode(String.self, forKey: .rejection_reason)
+        rejected_by = try? c.decode(String.self, forKey: .rejected_by)
+        reassignment_reason = try? c.decode(String.self, forKey: .reassignment_reason)
+        reassigned_by = try? c.decode(String.self, forKey: .reassigned_by)
+        closure_reason = try? c.decode(String.self, forKey: .closure_reason)
+        closed_by = try? c.decode(String.self, forKey: .closed_by)
+        line_items = try? c.decode(FlexibleLineItems.self, forKey: .line_items)
+        approvals = try? c.decode(FlexibleApprovals.self, forKey: .approvals)
+        delivery_address = try? c.decode(FlexibleDeliveryAddress.self, forKey: .delivery_address)
+        custom_fields = try? c.decode(FlexibleCustomFields.self, forKey: .custom_fields)
+        // Flexible Int fields (handle string/double/int from API)
+        effective_date = flexibleIntDecode(c, .effective_date)
+        net_amount = flexibleIntDecode(c, .net_amount)
+        delivery_date = flexibleIntDecode(c, .delivery_date)
+        rejected_at = flexibleIntDecode(c, .rejected_at)
+        reassigned_at = flexibleIntDecode(c, .reassigned_at)
+        closed_at = flexibleIntDecode(c, .closed_at)
+        vat_amount = flexibleIntDecode(c, .vat_amount)
+        gross_total = flexibleIntDecode(c, .gross_total)
+        created_at = flexibleIntDecode(c, .created_at)
+        updated_at = flexibleIntDecode(c, .updated_at)
+    }
 }
 
 struct LineItemRaw: Codable {
-    let id: String?; let description: String?; let quantity: AnyCodableValue?
-    let unit_price: AnyCodableValue?; let total: AnyCodableValue?
-    let account: String?; let department: String?; let expenditure_type: String?
-    let rental_start: AnyCodableValue?; let rental_end: AnyCodableValue?
-    let split_parent_id: String?; let custom_fields: [CustomFieldValue]?
+    var id: String?; var description: String?; var quantity: Int?
+    var unit_price: Int?; var total: Int?
+    var account: String?; var department: String?; var expenditure_type: String?
+    var rental_start: Int?; var rental_end: Int?
+    var split_parent_id: String?; var custom_fields: [CustomFieldValue]?
+
+    enum CodingKeys: String, CodingKey {
+        case id, description, quantity, unit_price, total, account, department
+        case expenditure_type, rental_start, rental_end, split_parent_id, custom_fields
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try? c.decode(String.self, forKey: .id)
+        description = try? c.decode(String.self, forKey: .description)
+        account = try? c.decode(String.self, forKey: .account)
+        department = try? c.decode(String.self, forKey: .department)
+        expenditure_type = try? c.decode(String.self, forKey: .expenditure_type)
+        split_parent_id = try? c.decode(String.self, forKey: .split_parent_id)
+        custom_fields = try? c.decode([CustomFieldValue].self, forKey: .custom_fields)
+        // Flexible Int fields
+        quantity = flexibleIntDecode(c, .quantity)
+        unit_price = flexibleIntDecode(c, .unit_price)
+        total = flexibleIntDecode(c, .total)
+        rental_start = flexibleIntDecode(c, .rental_start)
+        rental_end = flexibleIntDecode(c, .rental_end)
+    }
 }
 
 struct ApprovalRaw: Codable {
-    let user_id: String?; let tier_number: Int?; let approved_at: AnyCodableValue?
+    var user_id: String?; var tier_number: Int?; var approved_at: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case user_id, tier_number, approved_at
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        user_id = try? c.decode(String.self, forKey: .user_id)
+        tier_number = flexibleIntDecode(c, .tier_number)
+        approved_at = flexibleIntDecode(c, .approved_at)
+    }
 }
 
 // MARK: - Flexible decoders (handle string or object)
@@ -205,29 +286,29 @@ extension PurchaseOrderRaw {
         let d = departments.first { $0.id == (department_id ?? "") || $0.identifier == (department_id ?? "") }
         let items = (line_items?.items ?? []).map {
             LineItem(id: $0.id ?? UUID().uuidString, description: $0.description ?? "",
-                     quantity: $0.quantity?.doubleValue ?? 1, unitPrice: $0.unit_price?.doubleValue ?? 0,
-                     total: $0.total?.doubleValue ?? 0, account: $0.account ?? "",
+                     quantity: Double($0.quantity ?? 1), unitPrice: Double($0.unit_price ?? 0),
+                     total: Double($0.total ?? 0), account: $0.account ?? "",
                      department: $0.department ?? "", expenditureType: $0.expenditure_type ?? "Purchase")
         }
         let apps = (approvals?.items ?? []).map {
-            Approval(userId: $0.user_id ?? "", tierNumber: $0.tier_number ?? 0, approvedAt: $0.approved_at?.int64Value ?? 0)
+            Approval(userId: $0.user_id ?? "", tierNumber: $0.tier_number ?? 0, approvedAt: Int64($0.approved_at ?? 0))
         }
         var po = PurchaseOrder()
         po.id = id; po.projectId = project_id ?? ""; po.userId = user_id ?? ""
         po.poNumber = po_number ?? ""; po.vendorId = vendor_id; po.departmentId = department_id
         po.nominalCode = nominal_code; po.description = description; po.currency = currency ?? "GBP"
-        po.effectiveDate = effective_date?.int64Value; po.notes = notes
-        po.netAmount = net_amount?.doubleValue ?? 0; po.status = status ?? "DRAFT"
+        po.effectiveDate = effective_date.map { Int64($0) }; po.notes = notes
+        po.netAmount = Double(net_amount ?? 0); po.status = status ?? "DRAFT"
         po.assignedTo = assigned_to; po.raisedBy = raised_by
-        po.rejectedBy = rejected_by; po.rejectedAt = rejected_at?.int64Value
+        po.rejectedBy = rejected_by; po.rejectedAt = rejected_at.map { Int64($0) }
         po.rejectionReason = rejection_reason; po.reassignmentReason = reassignment_reason
-        po.reassignedBy = reassigned_by; po.reassignedAt = reassigned_at?.int64Value
+        po.reassignedBy = reassigned_by; po.reassignedAt = reassigned_at.map { Int64($0) }
         po.vatTreatment = vat_treatment ?? "pending"; po.deliveryAddress = delivery_address?.address
-        po.deliveryDate = delivery_date?.int64Value; po.closedBy = closed_by
-        po.closedAt = closed_at?.int64Value; po.closureReason = closure_reason
-        po.customFields = custom_fields?.items ?? []; po.vatAmount = vat_amount?.doubleValue
-        po.grossTotal = gross_total?.doubleValue; po.approvals = apps
-        po.createdAt = created_at?.int64Value ?? 0; po.updatedAt = updated_at?.int64Value ?? 0
+        po.deliveryDate = delivery_date.map { Int64($0) }; po.closedBy = closed_by
+        po.closedAt = closed_at.map { Int64($0) }; po.closureReason = closure_reason
+        po.customFields = custom_fields?.items ?? []; po.vatAmount = vat_amount.map { Double($0) }
+        po.grossTotal = gross_total.map { Double($0) }; po.approvals = apps
+        po.createdAt = Int64(created_at ?? 0); po.updatedAt = Int64(updated_at ?? 0)
         po.vendor = v?.name ?? ""; po.department = d?.displayName ?? ""; po.lineItems = items
         po.vendorAddress = [v?.address.line1, v?.address.city, v?.address.postalCode]
             .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
