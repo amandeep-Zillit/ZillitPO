@@ -245,7 +245,7 @@ class AppState: ObservableObject {
                 if case .failure(let e) = c { print("❌ Delete PO failed: \(e)") }
                 self?.deleteTarget = nil
             }, receiveValue: { [weak self] _ in
-                print("✅ PO deleted"); self?.loadPOs(); self?.loadDrafts()
+                print("✅ PO deleted"); self?.loadPOs(); self?.loadDrafts(); self?.popToRoot = true
             })
             .store(in: &cancellables)
     }

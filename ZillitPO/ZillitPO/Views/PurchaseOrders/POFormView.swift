@@ -47,6 +47,8 @@ struct POFormView: View {
     @State private var showSaveSheet = false
     @State private var showValidationAlert = false
     @State private var validationMessage = ""
+    @State private var didLoad = false
+    @State private var showErrors = false
 
     var isEdit: Bool { editingPO != nil }
 
@@ -221,7 +223,12 @@ struct POFormView: View {
             }
             .listStyle(GroupedListStyle())
             .dismissKeyboardOnTap()
-            .onAppear { loadData() }
+            .onAppear {
+                if !didLoad {
+                    loadData()
+                    didLoad = true
+                }
+            }
             .sheet(isPresented: $showTemplateNameSheet) {
                 TemplateNameSheet(templateName: $templateName, isPresented: $showTemplateNameSheet) { saveTemplate() }
             }
@@ -287,8 +294,16 @@ struct POFormView: View {
     @ViewBuilder
     private func poDetailFieldView(_ field: FormField) -> some View {
         if field.label == "vendor" {
-            FieldGroup(label: field.name.uppercased()) {
-                VendorSearchField(vendorId: $vendorId, vendors: appState.vendors)
+            let hasErr = field.isRequired && pickerHasError(vendorId)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 2) {
+                    Text(field.name.uppercased())
+                        .font(.system(size: 9, weight: .bold)).tracking(0.3)
+                        .foregroundColor(hasErr ? .red : Color(red: 0.45, green: 0.47, blue: 0.5))
+                        .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                }
+                VendorSearchField(vendorId: $vendorId, vendors: appState.vendors, hasError: hasErr)
+                if hasErr { Text("Vendor is required").font(.system(size: 10)).foregroundColor(.red) }
             }
         } else if field.label == "vendor_address" {
             FieldGroup(label: field.name.uppercased()) {
@@ -302,45 +317,88 @@ struct POFormView: View {
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
             }
         } else if field.label == "department" {
-            FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
+            errorWrappedPicker(label: field.name.uppercased(), value: departmentId, required: field.isRequired) {
                 PickerField(selection: $departmentId, placeholder: "Select department...",
                     options: DepartmentsData.sorted.map { DropdownOption($0.identifier, $0.displayName) })
             }
         } else if field.label == "account_code" {
-            FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
+            errorWrappedPicker(label: field.name.uppercased(), value: nominalCode, required: field.isRequired) {
                 PickerField(selection: $nominalCode, placeholder: "Select nominal code...",
                     options: NominalCodes.all.map { DropdownOption($0.code, "\($0.code) — \($0.label)") })
             }
         } else if field.label == "description" {
-            FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
-                InputField(text: $desc, placeholder: "e.g. Studio hire — Stage G, 12 weeks")
-            }
+            errorWrappedInput(label: field.name.uppercased(), text: $desc, placeholder: "e.g. Studio hire — Stage G, 12 weeks", required: field.isRequired)
         } else if field.label == "currency" {
-            FieldGroup(label: field.name.uppercased()) {
+            errorWrappedPicker(label: field.name.uppercased(), value: currency, required: field.isRequired) {
                 PickerField(selection: $currency, placeholder: "Select currency...",
                     options: [DropdownOption("GBP", "GBP — British Pound"),
                               DropdownOption("USD", "USD — US Dollar"),
                               DropdownOption("EUR", "EUR — Euro")])
             }
         } else if field.label == "vat" {
-            FieldGroup(label: field.name.uppercased()) {
+            errorWrappedPicker(label: field.name.uppercased(), value: vatTreatment, required: field.isRequired) {
                 PickerField(selection: $vatTreatment, placeholder: "Select VAT...",
                     options: VATHelpers.options.map { DropdownOption($0.value, $0.label) })
             }
         } else if field.label == "delivery_date" {
-            FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
-                dateFieldContent(hasDate: $hasDelDate, date: $deliveryDate)
+            let hasErr = field.isRequired && showErrors && !hasDelDate
+            VStack(alignment: .leading, spacing: 4) {
+                FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
+                    dateFieldContent(hasDate: $hasDelDate, date: $deliveryDate)
+                }
+                if hasErr { Text("\(field.name) is required").font(.system(size: 10)).foregroundColor(.red) }
             }
         } else if field.label == "effective_date" {
-            FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
-                dateFieldContent(hasDate: $hasEffDate, date: $effectiveDate)
+            let hasErr = field.isRequired && showErrors && !hasEffDate
+            VStack(alignment: .leading, spacing: 4) {
+                FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
+                    dateFieldContent(hasDate: $hasEffDate, date: $effectiveDate)
+                }
+                if hasErr { Text("\(field.name) is required").font(.system(size: 10)).foregroundColor(.red) }
             }
         } else if field.label == "notes" {
-            FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
-                InputField(text: $notes, placeholder: "Internal notes...")
-            }
+            errorWrappedInput(label: field.name.uppercased(), text: $notes, placeholder: "Internal notes...", required: field.isRequired)
         } else if !poSystemLabels.contains(field.label ?? "") {
             customFieldView(sectionKey: "po_details", field: field)
+        }
+    }
+
+    // MARK: - Error-wrapped field helpers
+
+    @ViewBuilder
+    private func errorWrappedInput(label: String, text: Binding<String>, placeholder: String, keyboard: UIKeyboardType = .default, required: Bool) -> some View {
+        let hasErr = required && fieldHasError(text.wrappedValue)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 2) {
+                Text(label)
+                    .font(.system(size: 9, weight: .bold)).tracking(0.3)
+                    .foregroundColor(hasErr ? .red : Color(red: 0.45, green: 0.47, blue: 0.5))
+                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                if !required {
+                    Text("(optional)").font(.system(size: 8)).foregroundColor(.gray).italic().lineLimit(1)
+                }
+            }
+            TextField(placeholder, text: text)
+                .font(.system(size: 13)).keyboardType(keyboard)
+                .padding(.horizontal, 10).padding(.vertical, 9)
+                .background(Color.white).cornerRadius(6)
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(hasErr ? Color.red : Color.borderColor, lineWidth: 1))
+            if hasErr {
+                Text("\(label.lowercased().capitalizingFirst()) is required").font(.system(size: 10)).foregroundColor(.red)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func errorWrappedPicker<Content: View>(label: String, value: String, required: Bool, @ViewBuilder content: @escaping () -> Content) -> some View {
+        let hasErr = required && pickerHasError(value)
+        VStack(alignment: .leading, spacing: 4) {
+            FieldGroup(label: label, optional: !required) {
+                content()
+            }
+            if hasErr {
+                Text("\(label.lowercased().capitalizingFirst()) is required").font(.system(size: 10)).foregroundColor(.red)
+            }
         }
     }
 
@@ -372,43 +430,31 @@ struct POFormView: View {
     @ViewBuilder
     private func deliveryFieldView(_ field: FormField) -> some View {
         if field.label == "delivery_name" {
-            FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
-                InputField(text: $daName, placeholder: "Recipient name...")
-            }
+            errorWrappedInput(label: field.name.uppercased(), text: $daName, placeholder: "Recipient name...", required: field.isRequired)
         } else if field.label == "delivery_email" {
-            FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
-                InputField(text: $daEmail, placeholder: "email@example.com", keyboard: .emailAddress)
-            }
+            errorWrappedInput(label: field.name.uppercased(), text: $daEmail, placeholder: "email@example.com", keyboard: .emailAddress, required: field.isRequired)
         } else if field.label == "delivery_phone_code" {
             EmptyView()
         } else if field.label == "delivery_phone" {
-            FieldGroup(label: "PHONE", optional: !field.isRequired) {
-                PhoneField(phoneCode: $daPhoneCode, phone: $daPhone)
+            let hasErr = field.isRequired && fieldHasError(daPhone)
+            VStack(alignment: .leading, spacing: 4) {
+                FieldGroup(label: "PHONE", optional: !field.isRequired) {
+                    PhoneField(phoneCode: $daPhoneCode, phone: $daPhone)
+                }
+                if hasErr { Text("Phone is required").font(.system(size: 10)).foregroundColor(.red) }
             }
         } else if field.label == "delivery_line1" {
-            FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
-                InputField(text: $daLine1, placeholder: "Street address...")
-            }
+            errorWrappedInput(label: field.name.uppercased(), text: $daLine1, placeholder: "Street address...", required: field.isRequired)
         } else if field.label == "delivery_line2" {
-            FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
-                InputField(text: $daLine2, placeholder: "Suite, unit, building...")
-            }
+            errorWrappedInput(label: field.name.uppercased(), text: $daLine2, placeholder: "Suite, unit, building...", required: field.isRequired)
         } else if field.label == "delivery_city" {
-            FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
-                InputField(text: $daCity, placeholder: "City...")
-            }
+            errorWrappedInput(label: field.name.uppercased(), text: $daCity, placeholder: "City...", required: field.isRequired)
         } else if field.label == "delivery_state" {
-            FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
-                InputField(text: $daState, placeholder: "State / County...")
-            }
+            errorWrappedInput(label: field.name.uppercased(), text: $daState, placeholder: "State / County...", required: field.isRequired)
         } else if field.label == "delivery_postal_code" {
-            FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
-                InputField(text: $daPostal, placeholder: "Postal code...")
-            }
+            errorWrappedInput(label: field.name.uppercased(), text: $daPostal, placeholder: "Postal code...", required: field.isRequired)
         } else if field.label == "country" {
-            FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
-                InputField(text: $daCountry, placeholder: "Country")
-            }
+            errorWrappedInput(label: field.name.uppercased(), text: $daCountry, placeholder: "Country", required: field.isRequired)
         } else if !deliverySystemLabels.contains(field.label ?? "") {
             customFieldView(sectionKey: "delivery_address", field: field)
         }
@@ -425,6 +471,7 @@ struct POFormView: View {
         }
     }
 
+    @ViewBuilder
     private var lineItemsSummaryCard: some View {
         Button(action: { showLineItemsPage = true }) {
             VStack(spacing: 10) {
@@ -453,8 +500,13 @@ struct POFormView: View {
             .padding(12)
             .background(Color.bgBase)
             .cornerRadius(8)
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.goldDark.opacity(0.3), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(
+                showErrors && !hasValidLineItem ? Color.red : Color.goldDark.opacity(0.3), lineWidth: 1))
         }.buttonStyle(BorderlessButtonStyle())
+        if showErrors && !hasValidLineItem {
+            Text("At least one line item with description, quantity, and unit price is required")
+                .font(.system(size: 10)).foregroundColor(.red)
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -503,65 +555,54 @@ struct POFormView: View {
             get: { self.customFieldValues[key] ?? "" },
             set: { self.customFieldValues[key] = $0 }
         )
+        let hasErr = field.isRequired && customFieldHasError(sectionKey: sectionKey, fieldName: field.name)
         if field.type == "select" {
             // Handle selection_type for known option sets (matches web client)
             if field.selectionType == "vendor" {
-                FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
+                errorWrappedPicker(label: field.name.uppercased(), value: binding.wrappedValue, required: field.isRequired) {
                     PickerField(selection: binding, placeholder: "Select...",
                         options: appState.vendors.map { DropdownOption($0.id, $0.name) })
                 }
             } else if field.selectionType == "department" {
-                FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
+                errorWrappedPicker(label: field.name.uppercased(), value: binding.wrappedValue, required: field.isRequired) {
                     PickerField(selection: binding, placeholder: "Select department...",
                         options: DepartmentsData.sorted.map { DropdownOption($0.identifier, $0.displayName) })
                 }
             } else if field.selectionType == "currency" {
-                FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
+                errorWrappedPicker(label: field.name.uppercased(), value: binding.wrappedValue, required: field.isRequired) {
                     PickerField(selection: binding, placeholder: "Select currency...",
                         options: [DropdownOption("GBP", "GBP — British Pound"),
                                   DropdownOption("USD", "USD — US Dollar"),
                                   DropdownOption("EUR", "EUR — Euro")])
                 }
             } else if field.selectionType == "vat" {
-                FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
+                errorWrappedPicker(label: field.name.uppercased(), value: binding.wrappedValue, required: field.isRequired) {
                     PickerField(selection: binding, placeholder: "Select VAT...",
                         options: VATHelpers.options.map { DropdownOption($0.value, $0.label) })
                 }
             } else if field.selectionType == "account_code" {
-                FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
+                errorWrappedPicker(label: field.name.uppercased(), value: binding.wrappedValue, required: field.isRequired) {
                     PickerField(selection: binding, placeholder: "Select account...",
                         options: NominalCodes.all.map { DropdownOption($0.code, "\($0.code) — \($0.label)") })
                 }
             } else if field.selectionType == "exp_type" {
-                FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
+                errorWrappedPicker(label: field.name.uppercased(), value: binding.wrappedValue, required: field.isRequired) {
                     PickerField(selection: binding, placeholder: "Select type...",
                         options: expenditureTypes.map { DropdownOption($0, $0) })
                 }
             } else {
-                FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
-                    InputField(text: binding, placeholder: "Enter \(field.name.lowercased())...")
-                }
+                errorWrappedInput(label: field.name.uppercased(), text: binding, placeholder: "Enter \(field.name.lowercased())...", required: field.isRequired)
             }
         } else if field.type == "date" {
-            FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
-                InputField(text: binding, placeholder: "dd/mm/yyyy")
-            }
+            errorWrappedInput(label: field.name.uppercased(), text: binding, placeholder: "dd/mm/yyyy", required: field.isRequired)
         } else if field.type == "number" {
-            FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
-                InputField(text: binding, placeholder: "0", keyboard: .decimalPad)
-            }
+            errorWrappedInput(label: field.name.uppercased(), text: binding, placeholder: "0", keyboard: .decimalPad, required: field.isRequired)
         } else if field.type == "email" {
-            FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
-                InputField(text: binding, placeholder: "email@example.com", keyboard: .emailAddress)
-            }
+            errorWrappedInput(label: field.name.uppercased(), text: binding, placeholder: "email@example.com", keyboard: .emailAddress, required: field.isRequired)
         } else if field.type == "phone" {
-            FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
-                InputField(text: binding, placeholder: "Phone number", keyboard: .phonePad)
-            }
+            errorWrappedInput(label: field.name.uppercased(), text: binding, placeholder: "Phone number", keyboard: .phonePad, required: field.isRequired)
         } else {
-            FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
-                InputField(text: binding, placeholder: "Enter \(field.name.lowercased())...")
-            }
+            errorWrappedInput(label: field.name.uppercased(), text: binding, placeholder: "Enter \(field.name.lowercased())...", required: field.isRequired)
         }
     }
 
@@ -774,9 +815,25 @@ struct POFormView: View {
                           lineItemCustomValues: lineItemCustomValues)
     }
 
+    /// Returns true when showErrors is active and the given value is empty
+    private func fieldHasError(_ value: String) -> Bool {
+        showErrors && value.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// Returns true when showErrors is active and the given picker/selection value is empty
+    private func pickerHasError(_ value: String) -> Bool {
+        showErrors && value.isEmpty
+    }
+
+    /// Returns true when showErrors is active and a custom field value is empty
+    private func customFieldHasError(sectionKey: String, fieldName: String) -> Bool {
+        showErrors && (customFieldValues["\(sectionKey)_\(fieldName)"] ?? "").trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
     private func validateAndSubmit() {
         let errors = validate()
         if !errors.isEmpty {
+            showErrors = true
             validationMessage = errors.map { "• \($0)" }.joined(separator: "\n")
             showValidationAlert = true
             return
@@ -1296,6 +1353,14 @@ struct InputField: View {
     }
 }
 
+// MARK: - String Extension
+
+extension String {
+    func capitalizingFirst() -> String {
+        prefix(1).uppercased() + dropFirst()
+    }
+}
+
 // MARK: - Dismiss Keyboard Helper
 
 extension View {
@@ -1588,6 +1653,7 @@ struct CountryCodePickerSheet: View {
 struct VendorSearchField: View {
     @Binding var vendorId: String
     let vendors: [Vendor]
+    var hasError: Bool = false
 
     @State private var searchText = ""
     @State private var isEditing = false
@@ -1622,7 +1688,7 @@ struct VendorSearchField: View {
             }
             .padding(.horizontal, 10).padding(.vertical, 9)
             .background(Color.white).cornerRadius(6)
-            .overlay(RoundedRectangle(cornerRadius: 6).stroke(isEditing ? Color.goldDark : Color.borderColor, lineWidth: isEditing ? 1.5 : 1))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(hasError && vendorId.isEmpty ? Color.red : isEditing ? Color.goldDark : Color.borderColor, lineWidth: hasError && vendorId.isEmpty ? 1 : isEditing ? 1.5 : 1))
             .contentShape(Rectangle())
             .onTapGesture {
                 if !isEditing && !vendorId.isEmpty {

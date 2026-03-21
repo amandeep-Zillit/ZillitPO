@@ -19,6 +19,7 @@
 		774B7FC104CA594323D21856 /* LoaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF38B0F1B39DE5E18FF0FEED /* LoaderView.swift */; };
 		9731929AF8A49FA6A53B05EF /* POStatsCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3249A0D4B64A7008A670D3D /* POStatsCards.swift */; };
 		9EB249AA0238A86382DF5710 /* POTemplatesListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6670BC6BB754B8093DA0923E /* POTemplatesListView.swift */; };
+		A1B2C3D4E5F60718293A4B5C /* DateFieldView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6071829000001 /* DateFieldView.swift */; };
 		BCAF479A1212FAE60BC9F304 /* PODraftsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88F5B290EDB19FFDBCA0166D /* PODraftsListView.swift */; };
 		BE7F74A11D13BD44C7E7F29C /* PODetailModalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E744912AD6F810D89618665 /* PODetailModalView.swift */; };
 		D626AE1BB7F5118FD2D5C1B8 /* StaticData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6659BE5956A7630BA255FB91 /* StaticData.swift */; };
@@ -28,7 +29,6 @@
 		EBC789D2BBF282BFC8E76483 /* VATHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7983D12F61324F5BCA140EEB /* VATHelpers.swift */; };
 		F20AAEE8114DE4A098A39E6D /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9B89AFD08FCED4D2043BC83 /* APIClient.swift */; };
 		FD6EE2EF5FAEF72678DC97CF /* QuickFiltersBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = D966C5823F87C20C53E76C1E /* QuickFiltersBar.swift */; };
-		A1B2C3D4E5F60718293A4B5C /* DateFieldView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6071829000001 /* DateFieldView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -45,6 +45,7 @@
 		7983D12F61324F5BCA140EEB /* VATHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VATHelpers.swift; sourceTree = "<group>"; };
 		88F5B290EDB19FFDBCA0166D /* PODraftsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PODraftsListView.swift; sourceTree = "<group>"; };
 		9D96523BE6EC49850CF6841E /* ZillitPO.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ZillitPO.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1B2C3D4E5F6071829000001 /* DateFieldView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateFieldView.swift; sourceTree = "<group>"; };
 		B532B37DABAB2B4686CF510A /* FormatUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormatUtils.swift; sourceTree = "<group>"; };
 		D3DF5F14E89F20F59FB509F7 /* RejectSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RejectSheetView.swift; sourceTree = "<group>"; };
 		D966C5823F87C20C53E76C1E /* QuickFiltersBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickFiltersBar.swift; sourceTree = "<group>"; };
@@ -55,7 +56,6 @@
 		F7349E3AA955C5C02C9E2FEB /* POFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = POFormView.swift; sourceTree = "<group>"; };
 		F8990D460449911F7931F1F0 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		F9B89AFD08FCED4D2043BC83 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
-		A1B2C3D4E5F6071829000001 /* DateFieldView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateFieldView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -343,7 +343,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 8L9XZ22RX8;
+				DEVELOPMENT_TEAM = NW826YVGWW;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ZillitPO/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
@@ -352,7 +352,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com3.zillit.coda.po;
+				PRODUCT_BUNDLE_IDENTIFIER = com4.zillit.coda.po;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -364,7 +364,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 8L9XZ22RX8;
+				DEVELOPMENT_TEAM = NW826YVGWW;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ZillitPO/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
@@ -373,7 +373,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com3.zillit.coda.po;
+				PRODUCT_BUNDLE_IDENTIFIER = com4.zillit.coda.po;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};

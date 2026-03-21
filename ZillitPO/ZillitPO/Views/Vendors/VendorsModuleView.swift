@@ -309,23 +309,43 @@ struct VendorFormView: View {
     @State private var city = ""; @State private var state = ""
     @State private var postal = ""; @State private var country = ""
     @State private var cancellables = Set<AnyCancellable>()
+    @State private var isSubmitting = false
+    @State private var showValidationAlert = false
+    @State private var validationMessage = ""
+    @State private var showErrors = false
+
+    private func validate() -> [String] {
+        var errors: [String] = []
+        if name.trimmingCharacters(in: .whitespaces).isEmpty { errors.append("Vendor name is required") }
+        if contact.trimmingCharacters(in: .whitespaces).isEmpty { errors.append("Contact person is required") }
+        if email.trimmingCharacters(in: .whitespaces).isEmpty { errors.append("Email is required") }
+        if phone.trimmingCharacters(in: .whitespaces).isEmpty { errors.append("Phone number is required") }
+        if addr1.trimmingCharacters(in: .whitespaces).isEmpty { errors.append("Address line 1 is required") }
+        if city.trimmingCharacters(in: .whitespaces).isEmpty { errors.append("City is required") }
+        if postal.trimmingCharacters(in: .whitespaces).isEmpty { errors.append("Postal code is required") }
+        if country.trimmingCharacters(in: .whitespaces).isEmpty { errors.append("Country is required") }
+        return errors
+    }
+
+    private func isFieldEmpty(_ value: String) -> Bool {
+        showErrors && value.trimmingCharacters(in: .whitespaces).isEmpty
+    }
 
     var body: some View {
         List {
             // Vendor Details
             Section(header: vendorSectionHeader(icon: "person.crop.square", title: "VENDOR DETAILS", trailing: "All fields required unless noted")) {
                 VStack(spacing: 14) {
-                    FieldGroup(label: "VENDOR / COMPANY NAME") {
-                        InputField(text: $name, placeholder: "e.g. Pinewood Studios Ltd")
-                    }
-                    FieldGroup(label: "CONTACT PERSON") {
-                        InputField(text: $contact, placeholder: "e.g. Margaret Thornton")
-                    }
-                    FieldGroup(label: "EMAIL") {
-                        InputField(text: $email, placeholder: "e.g. bookings@studio.co.uk", keyboard: .emailAddress)
-                    }
-                    FieldGroup(label: "PHONE") {
-                        PhoneField(phoneCode: $phoneCode, phone: $phone)
+                    vendorField(label: "VENDOR / COMPANY NAME", text: $name, placeholder: "e.g. Pinewood Studios Ltd", required: true)
+                    vendorField(label: "CONTACT PERSON", text: $contact, placeholder: "e.g. Margaret Thornton", required: true)
+                    vendorField(label: "EMAIL", text: $email, placeholder: "e.g. bookings@studio.co.uk", keyboard: .emailAddress, required: true)
+                    VStack(alignment: .leading, spacing: 4) {
+                        FieldGroup(label: "PHONE") {
+                            PhoneField(phoneCode: $phoneCode, phone: $phone)
+                        }
+                        if isFieldEmpty(phone) {
+                            Text("Phone number is required").font(.system(size: 10)).foregroundColor(.red)
+                        }
                     }
                     FieldGroup(label: "VAT NUMBER", optional: true) {
                         InputField(text: $vat, placeholder: "e.g. GB 123 4567 89")
@@ -340,42 +360,74 @@ struct VendorFormView: View {
             // Address
             Section(header: vendorSectionHeader(icon: "mappin.and.ellipse", title: "ADDRESS")) {
                 VStack(spacing: 14) {
-                    FieldGroup(label: "ADDRESS LINE 1") {
-                        InputField(text: $addr1, placeholder: "Street address")
-                    }
+                    vendorField(label: "ADDRESS LINE 1", text: $addr1, placeholder: "Street address", required: true)
                     FieldGroup(label: "ADDRESS LINE 2", optional: true) {
                         InputField(text: $addr2, placeholder: "Suite, unit, building...")
                     }
-                    FieldGroup(label: "CITY") {
-                        InputField(text: $city, placeholder: "e.g. London")
-                    }
+                    vendorField(label: "CITY", text: $city, placeholder: "e.g. London", required: true)
                     FieldGroup(label: "STATE / COUNTY", optional: true) {
                         InputField(text: $state, placeholder: "e.g. Middlesex")
                     }
-                    FieldGroup(label: "POSTAL / ZIP CODE") {
-                        InputField(text: $postal, placeholder: "e.g. SL0 0NH")
-                    }
-                    FieldGroup(label: "COUNTRY") {
-                        InputField(text: $country, placeholder: "United Kingdom")
-                    }
+                    vendorField(label: "POSTAL / ZIP CODE", text: $postal, placeholder: "e.g. SL0 0NH", required: true)
+                    vendorField(label: "COUNTRY", text: $country, placeholder: "United Kingdom", required: true)
                 }
             }
 
             // Actions
             Section {
-                VStack(spacing: 10) {
-                    Button(action: { createVendor() }) {
-                        HStack(spacing: 6) {
-                            Text("Save Vendor").font(.system(size: 14, weight: .bold))
+                Button(action: { createVendor() }) {
+                    HStack(spacing: 6) {
+                        if isSubmitting {
+                            ActivityIndicatorView()
+                        }
+                        Text(isSubmitting ? "Saving..." : "Save Vendor").font(.system(size: 14, weight: .bold))
+                        if !isSubmitting {
                             Image(systemName: "arrow.right").font(.system(size: 12, weight: .bold))
-                        }.foregroundColor(.black).frame(maxWidth: .infinity).padding(.vertical, 13)
-                        .background(name.isEmpty ? Color.gold.opacity(0.4) : Color.gold).cornerRadius(8)
-                    }.disabled(name.isEmpty)
+                        }
+                    }.foregroundColor(.black).frame(maxWidth: .infinity).padding(.vertical, 13)
+                    .background(name.isEmpty || isSubmitting ? Color.gold.opacity(0.4) : Color.gold).cornerRadius(8)
+                    .contentShape(RoundedRectangle(cornerRadius: 8))
                 }
+                .buttonStyle(BorderlessButtonStyle())
+                .disabled(name.isEmpty || isSubmitting)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
             }
         }
         .listStyle(GroupedListStyle())
         .dismissKeyboardOnTap()
+        .alert(isPresented: $showValidationAlert) {
+            Alert(title: Text("Missing Fields"), message: Text(validationMessage), dismissButton: .default(Text("OK")))
+        }
+    }
+
+    @ViewBuilder
+    private func vendorField(label: String, text: Binding<String>, placeholder: String, keyboard: UIKeyboardType = .default, required: Bool = false) -> some View {
+        let hasError = required && isFieldEmpty(text.wrappedValue)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 2) {
+                Text(label)
+                    .font(.system(size: 9, weight: .bold))
+                    .tracking(0.3)
+                    .foregroundColor(hasError ? .red : Color(red: 0.45, green: 0.47, blue: 0.5))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            TextField(placeholder, text: text)
+                .font(.system(size: 13))
+                .keyboardType(keyboard)
+                .autocapitalization(keyboard == .emailAddress ? .none : .sentences)
+                .disableAutocorrection(keyboard == .emailAddress || keyboard == .phonePad)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 9)
+                .background(Color.white)
+                .cornerRadius(6)
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(hasError ? Color.red : Color.borderColor, lineWidth: 1))
+            if hasError {
+                Text("\(label.capitalized.lowercased().replacingOccurrences(of: " / ", with: "/")) is required")
+                    .font(.system(size: 10)).foregroundColor(.red)
+            }
+        }
     }
 
     private func vendorSectionHeader(icon: String, title: String, trailing: String? = nil) -> some View {
@@ -390,14 +442,23 @@ struct VendorFormView: View {
     }
 
     private func createVendor() {
+        guard !isSubmitting else { return }
+        let errors = validate()
+        if !errors.isEmpty {
+            showErrors = true
+            validationMessage = errors.map { "• \($0)" }.joined(separator: "\n")
+            showValidationAlert = true
+            return
+        }
+        isSubmitting = true
         APIClient.shared.post("/api/v2/vendors", body: [
             "name": name, "contact_person": contact, "email": email,
             "phone": ["country_code": phoneCode, "number": phone],
             "address": ["line1": addr1, "line2": addr2, "city": city, "state": state, "postal_code": postal, "country": country],
             "vat_number": vat, "department_id": departmentId] as [String: Any])
             .receive(on: DispatchQueue.main)
-            .sink(receiveCompletion: { c in
-                if case .failure(let e) = c { print("❌ Create vendor failed: \(e)") }
+            .sink(receiveCompletion: { [self] c in
+                if case .failure(let e) = c { print("❌ Create vendor failed: \(e)"); isSubmitting = false }
             }, receiveValue: { [self] _ in
                 print("✅ Vendor created successfully")
                 appState.loadAllData()

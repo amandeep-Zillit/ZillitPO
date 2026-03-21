@@ -9,10 +9,15 @@ struct PODetailPage: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.presentationMode) var presentationMode
 
+    /// Live PO from appState (refreshed after edits), falling back to the original snapshot
+    private var livePO: PurchaseOrder {
+        appState.purchaseOrders.first(where: { $0.id == po.id }) ?? po
+    }
+
     var body: some View {
-        PODetailContentView(po: po, onClose: { presentationMode.wrappedValue.dismiss() })
+        PODetailContentView(po: livePO, onClose: { presentationMode.wrappedValue.dismiss() })
             .environmentObject(appState)
-            .navigationBarTitle(Text(po.poNumber), displayMode: .inline)
+            .navigationBarTitle(Text(livePO.poNumber), displayMode: .inline)
             .navigationBarBackButtonHidden(true)
             .navigationBarItems(leading:
                 Button(action: { presentationMode.wrappedValue.dismiss() }) {
@@ -564,8 +569,8 @@ struct POEditFormPage: View {
                 resumeDraft: nil,
                 prefilledVendorId: nil,
                 onBack: {
-                    // Pop back to the PO list (root) after update
-                    appState.popToRoot = true
+                    // Pop back to the detail page after update
+                    presentationMode.wrappedValue.dismiss()
                 }
             )
         }
