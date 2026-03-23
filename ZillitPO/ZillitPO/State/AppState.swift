@@ -228,11 +228,20 @@ class AppState: ObservableObject {
     }
 
     func rejectPO() {
-        guard let t = rejectTarget, !rejectReason.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        guard let t = rejectTarget, !rejectReason.trimmingCharacters(in: .whitespaces).isEmpty else {
+            print("❌ rejectPO guard failed: target=\(rejectTarget?.id ?? "nil"), reason='\(rejectReason)'")
+            return
+        }
+        print("📤 Rejecting PO \(t.id) with reason: \(rejectReason)")
         APIClient.shared.post("/api/v2/purchase-orders/\(t.id)/reject",
-            body: ["rejection_reason": rejectReason.trimmingCharacters(in: .whitespaces)])
+            body: ["reason": rejectReason.trimmingCharacters(in: .whitespaces)])
             .receive(on: DispatchQueue.main)
-            .sink(receiveCompletion: { _ in }, receiveValue: { [weak self] _ in
+            .sink(receiveCompletion: { completion in
+                if case .failure(let error) = completion {
+                    print("❌ Reject PO failed: \(error)")
+                }
+            }, receiveValue: { [weak self] _ in
+                print("✅ PO rejected successfully")
                 self?.loadPOs(); self?.rejectTarget = nil; self?.rejectReason = ""; self?.showRejectSheet = false; self?.selectedPO = nil
             })
             .store(in: &cancellables)
@@ -252,7 +261,7 @@ class AppState: ObservableObject {
 
     func submitPO(_ fd: POFormData, onComplete: (() -> Void)? = nil) {
         guard let u = currentUser else { print("❌ submitPO: no currentUser"); return }; formSubmitting = true
-        let dept = u.departmentId.isEmpty ? fd.departmentId : u.departmentId
+        let dept = fd.departmentId.isEmpty ? u.departmentId : fd.departmentId
         let cfg = ApprovalHelpers.resolveConfig(tierConfigRows, deptId: dept, amount: fd.netAmount)
         let auto = ApprovalHelpers.getAutoApprovals(cfg, userId: u.id, deptId: dept)
         let lineItemPayloads: [[String: Any]] = fd.lineItems.map {
@@ -291,15 +300,25 @@ class AppState: ObservableObject {
         if let eid = fd.existingDraftId { pub = APIClient.shared.patch("/api/v2/purchase-orders/\(eid)", body: p) }
         else { pub = APIClient.shared.post("/api/v2/purchase-orders", body: p) }
 
+        print("📤 submitPO: \(fd.existingDraftId != nil ? "PATCH /api/v2/purchase-orders/\(fd.existingDraftId!)" : "POST /api/v2/purchase-orders")")
         pub.receive(on: DispatchQueue.main)
-            .sink(receiveCompletion: { [weak self] _ in self?.formSubmitting = false },
-                  receiveValue: { [weak self] _ in self?.loadPOs(); self?.loadDrafts(); self?.showCreatePO = false; self?.resumeDraft = nil; self?.editingPO = nil; self?.activeTab = .my; onComplete?() })
+            .sink(receiveCompletion: { [weak self] completion in
+                self?.formSubmitting = false
+                if case .failure(let err) = completion {
+                    print("❌ submitPO failed: \(err)")
+                }
+            },
+                  receiveValue: { [weak self] data in
+                      let raw = String(data: data, encoding: .utf8) ?? "<binary>"
+                      print("✅ submitPO success: \(raw.prefix(300))")
+                      self?.loadPOs(); self?.loadDrafts(); self?.showCreatePO = false; self?.resumeDraft = nil; self?.editingPO = nil; self?.activeTab = .my; onComplete?()
+                  })
             .store(in: &cancellables)
     }
 
     func saveDraft(_ fd: POFormData, onComplete: (() -> Void)? = nil) {
         guard let u = currentUser else { print("❌ saveDraft: no currentUser"); return }
-        let dept = u.departmentId.isEmpty ? fd.departmentId : u.departmentId
+        let dept = fd.departmentId.isEmpty ? u.departmentId : fd.departmentId
 
         // Line items — full payload
         let lineItemPayloads: [[String: Any]] = fd.lineItems.map {
