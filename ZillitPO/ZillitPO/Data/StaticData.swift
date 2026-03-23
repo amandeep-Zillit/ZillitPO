@@ -19,6 +19,12 @@ struct NominalCodes {
         "department_transportation_department":"2900", "department_catering":"3000",
         "department_post_production":"3100", "department_music_department":"3200",
     ]
+
+    static let nominalToDept: [String: String] = {
+        var map: [String: String] = [:]
+        for (dept, code) in deptToNominal { map[code] = dept }
+        return map
+    }()
 }
 
 let expenditureTypes = ["Purchase", "Consumption", "Rent"]
