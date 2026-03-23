@@ -52,6 +52,24 @@ struct POFormView: View {
 
     var isEdit: Bool { editingPO != nil }
 
+    private func onDepartmentChanged(_ newVal: String) {
+        departmentId = newVal
+        if let code = NominalCodes.deptToNominal[newVal] {
+            nominalCode = code
+            for i in lineItems.indices { lineItems[i].account = code }
+        }
+        for i in lineItems.indices { lineItems[i].department = newVal }
+    }
+
+    private func onNominalCodeChanged(_ newVal: String) {
+        nominalCode = newVal
+        if let dept = NominalCodes.nominalToDept[newVal] {
+            departmentId = dept
+            for i in lineItems.indices { lineItems[i].department = dept }
+        }
+        for i in lineItems.indices { lineItems[i].account = newVal }
+    }
+
     private var hasValidLineItem: Bool {
         lineItems.contains { !$0.description.trimmingCharacters(in: .whitespaces).isEmpty && $0.quantity > 0 && $0.unitPrice > 0 }
     }
@@ -83,7 +101,7 @@ struct POFormView: View {
                 case "vat": if vatTreatment.isEmpty { errors.append("VAT Treatment is required") }
                 case "description": if desc.trimmingCharacters(in: .whitespaces).isEmpty { errors.append("Description is required") }
                 case "delivery_date": if !hasDelDate { errors.append("Delivery Date is required") }
-                case "effective_date": if !hasEffDate { errors.append("Effective Date is required") }
+                case "effective_date": break // Effective date removed from form, skip validation
                 case "notes": if notes.trimmingCharacters(in: .whitespaces).isEmpty { errors.append("Notes is required") }
                 case "account_code": if nominalCode.isEmpty { errors.append("Nominal Code is required") }
                 default: break
@@ -240,7 +258,9 @@ struct POFormView: View {
                     lineItemCustomValues: $lineItemCustomValues,
                     formFields: lineItemFields,
                     currency: currency,
-                    vatTreatment: vatTreatment
+                    vatTreatment: vatTreatment,
+                    defaultDepartment: departmentId,
+                    defaultAccount: nominalCode
                 ).environmentObject(appState),
                 isActive: $showLineItemsPage
             ) { EmptyView() }
@@ -319,12 +339,14 @@ struct POFormView: View {
         } else if field.label == "department" {
             errorWrappedPicker(label: field.name.uppercased(), value: departmentId, required: field.isRequired) {
                 PickerField(selection: $departmentId, placeholder: "Select department...",
-                    options: DepartmentsData.sorted.map { DropdownOption($0.identifier, $0.displayName) })
+                    options: DepartmentsData.sorted.map { DropdownOption($0.identifier, $0.displayName) },
+                    onChanged: onDepartmentChanged)
             }
         } else if field.label == "account_code" {
             errorWrappedPicker(label: field.name.uppercased(), value: nominalCode, required: field.isRequired) {
                 PickerField(selection: $nominalCode, placeholder: "Select nominal code...",
-                    options: NominalCodes.all.map { DropdownOption($0.code, "\($0.code) — \($0.label)") })
+                    options: NominalCodes.all.map { DropdownOption($0.code, "\($0.code) — \($0.label)") },
+                    onChanged: onNominalCodeChanged)
             }
         } else if field.label == "description" {
             errorWrappedInput(label: field.name.uppercased(), text: $desc, placeholder: "e.g. Studio hire — Stage G, 12 weeks", required: field.isRequired)
@@ -349,13 +371,7 @@ struct POFormView: View {
                 if hasErr { Text("\(field.name) is required").font(.system(size: 10)).foregroundColor(.red) }
             }
         } else if field.label == "effective_date" {
-            let hasErr = field.isRequired && showErrors && !hasEffDate
-            VStack(alignment: .leading, spacing: 4) {
-                FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
-                    dateFieldContent(hasDate: $hasEffDate, date: $effectiveDate)
-                }
-                if hasErr { Text("\(field.name) is required").font(.system(size: 10)).foregroundColor(.red) }
-            }
+            EmptyView()
         } else if field.label == "notes" {
             errorWrappedInput(label: field.name.uppercased(), text: $notes, placeholder: "Internal notes...", required: field.isRequired)
         } else if !poSystemLabels.contains(field.label ?? "") {
@@ -682,14 +698,15 @@ struct POFormView: View {
         VStack(spacing: 10) {
             HStack(spacing: 10) {
                 // Attach button (outlined)
-                HStack(spacing: 6) {
-                    Image(systemName: "paperclip").font(.system(size: 13))
-                    Text("Attach").font(.system(size: 13, weight: .semibold))
-                }.foregroundColor(.secondary).frame(maxWidth: .infinity).padding(.vertical, 12)
-                .background(Color.white).cornerRadius(8)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
-                .contentShape(Rectangle())
-                .onTapGesture { showAttachSheet = true }
+                Button(action: { showAttachSheet = true }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "paperclip").font(.system(size: 13))
+                        Text("Attach").font(.system(size: 13, weight: .semibold))
+                    }.foregroundColor(.secondary).frame(maxWidth: .infinity).padding(.vertical, 12)
+                    .background(Color.white).cornerRadius(8)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                }
+                .buttonStyle(BorderlessButtonStyle())
                 .actionSheet(isPresented: $showAttachSheet) {
                     ActionSheet(title: Text("Attach"), buttons: [
                         .default(Text("Quote")) { /* TODO: attach quote */ },
@@ -700,14 +717,15 @@ struct POFormView: View {
                 }
 
                 // Save button (gold, dropdown)
-                HStack(spacing: 6) {
-                    Image(systemName: "square.and.arrow.down").font(.system(size: 13))
-                    Text("Save").font(.system(size: 13, weight: .semibold))
-                    Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
-                }.foregroundColor(.black).frame(maxWidth: .infinity).padding(.vertical, 12)
-                .background(Color.gold).cornerRadius(8)
-                .contentShape(Rectangle())
-                .onTapGesture { showSaveSheet = true }
+                Button(action: { showSaveSheet = true }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "square.and.arrow.down").font(.system(size: 13))
+                        Text("Save").font(.system(size: 13, weight: .semibold))
+                        Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+                    }.foregroundColor(.black).frame(maxWidth: .infinity).padding(.vertical, 12)
+                    .background(Color.gold).cornerRadius(8)
+                }
+                .buttonStyle(BorderlessButtonStyle())
                 .actionSheet(isPresented: $showSaveSheet) {
                     if resumeDraft != nil {
                         return ActionSheet(title: Text("Save Options"), buttons: [
@@ -776,7 +794,7 @@ struct POFormView: View {
             vendorId = po.vendorId ?? ""; departmentId = po.departmentId ?? ""
             nominalCode = po.nominalCode ?? ""; desc = po.description ?? ""
             currency = po.currency; vatTreatment = po.vatTreatment; notes = po.notes ?? ""
-            lineItems = po.lineItems.isEmpty ? [LineItem()] : po.lineItems
+            lineItems = po.lineItems.isEmpty ? [LineItem(account: nominalCode, department: departmentId)] : po.lineItems
             if let ms = po.effectiveDate, ms > 0 { effectiveDate = Date(timeIntervalSince1970: Double(ms)/1000); hasEffDate = true }
             if let ms = po.deliveryDate, ms > 0 { deliveryDate = Date(timeIntervalSince1970: Double(ms)/1000); hasDelDate = true }
             if let da = po.deliveryAddress {
@@ -791,6 +809,11 @@ struct POFormView: View {
                     customFieldValues["\(secKey)_\(field.name)"] = field.value
                 }
             }
+        }
+        // Auto-fill department & account on initial line items for new POs
+        for i in lineItems.indices {
+            if lineItems[i].department.isEmpty { lineItems[i].department = departmentId }
+            if lineItems[i].account.isEmpty { lineItems[i].account = nominalCode }
         }
     }
 
@@ -832,12 +855,14 @@ struct POFormView: View {
 
     private func validateAndSubmit() {
         let errors = validate()
+        print("📋 validateAndSubmit: \(errors.isEmpty ? "✅ no errors" : "❌ errors: \(errors)")")
         if !errors.isEmpty {
             showErrors = true
             validationMessage = errors.map { "• \($0)" }.joined(separator: "\n")
             showValidationAlert = true
             return
         }
+        print("📋 isEdit=\(isEdit), existingDraftId=\(String(describing: (editingPO ?? resumeDraft)?.id))")
         submitPO()
     }
 
@@ -877,11 +902,13 @@ struct POFormView: View {
         VStack(spacing: 14) {
             FieldGroup(label: "DEPARTMENT") {
                 PickerField(selection: $departmentId, placeholder: "Select department...",
-                    options: DepartmentsData.sorted.map { DropdownOption($0.identifier, $0.displayName) })
+                    options: DepartmentsData.sorted.map { DropdownOption($0.identifier, $0.displayName) },
+                    onChanged: onDepartmentChanged)
             }
             FieldGroup(label: "NOMINAL CODE") {
                 PickerField(selection: $nominalCode, placeholder: "Select nominal code...",
-                    options: NominalCodes.all.map { DropdownOption($0.code, "\($0.code) — \($0.label)") })
+                    options: NominalCodes.all.map { DropdownOption($0.code, "\($0.code) — \($0.label)") },
+                    onChanged: onNominalCodeChanged)
             }
             FieldGroup(label: "DESCRIPTION", optional: true) { InputField(text: $desc, placeholder: "e.g. Studio hire — Stage G, 12 weeks") }
             HStack(spacing: 10) {
@@ -928,6 +955,8 @@ struct LineItemsPage: View {
     var formFields: [FormField]
     var currency: String = "GBP"
     var vatTreatment: String = "pending"
+    var defaultDepartment: String = ""
+    var defaultAccount: String = ""
 
     private var decimalFormatter: NumberFormatter {
         let f = NumberFormatter(); f.numberStyle = .decimal; f.minimumFractionDigits = 2; f.maximumFractionDigits = 2; return f
@@ -943,6 +972,36 @@ struct LineItemsPage: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Fixed header
+            VStack(spacing: 0) {
+                HStack {
+                    Button(action: {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            presentationMode.wrappedValue.dismiss()
+                        }
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left").font(.system(size: 14, weight: .semibold))
+                            Text("Done").font(.system(size: 16))
+                        }.foregroundColor(.goldDark)
+                    }
+                    Spacer()
+                    Text("Line Items").font(.system(size: 17, weight: .semibold))
+                    Spacer()
+                    // Balance the leading button for centered title
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left").font(.system(size: 14, weight: .semibold))
+                        Text("Done").font(.system(size: 16))
+                    }.opacity(0)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                Divider()
+            }
+            .background(Color.white)
+            .zIndex(1)
+
             ScrollView {
                 VStack(spacing: 12) {
                     ForEach(Array(lineItems.enumerated()), id: \.element.id) { idx, item in
@@ -950,7 +1009,7 @@ struct LineItemsPage: View {
                     }
 
                     // Add Line Item button
-                    Button(action: { lineItems.append(LineItem()) }) {
+                    Button(action: { lineItems.append(LineItem(account: defaultAccount, department: defaultDepartment)) }) {
                         HStack(spacing: 6) {
                             Image(systemName: "plus.circle.fill").font(.system(size: 14))
                             Text("Add Line Item").font(.system(size: 14, weight: .semibold))
@@ -1005,22 +1064,7 @@ struct LineItemsPage: View {
             .background(Color.bgBase)
         }
         .background(Color.bgBase.edgesIgnoringSafeArea(.all))
-        .navigationBarTitle(Text("Line Items"), displayMode: .inline)
-        .navigationBarBackButtonHidden(true)
-        .navigationBarItems(
-            leading: Button(action: {
-                // Dismiss keyboard first so TextFields commit their values
-                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    presentationMode.wrappedValue.dismiss()
-                }
-            }) {
-                HStack(spacing: 4) {
-                    Image(systemName: "chevron.left").font(.system(size: 14, weight: .semibold))
-                    Text("Back").font(.system(size: 16))
-                }.foregroundColor(.goldDark)
-            }
-        )
+        .navigationBarHidden(true)
     }
 
     @ViewBuilder
@@ -1092,8 +1136,10 @@ struct LineItemsPage: View {
             }
         } else if field.label == "account_code" {
             FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
-                PickerField(selection: liBindAccount(itemId), placeholder: "Select account...",
-                    options: NominalCodes.all.map { DropdownOption($0.code, "\($0.code) — \($0.label)") })
+                TextField("Enter account code...", text: liBindAccount(itemId))
+                    .font(.system(size: 13)).padding(10)
+                    .background(Color.white).cornerRadius(6)
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
             }
         } else if field.label == "department" {
             FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
@@ -1138,8 +1184,10 @@ struct LineItemsPage: View {
             }
         }
         FieldGroup(label: "ACCOUNT CODE", optional: true) {
-            PickerField(selection: liBindAccount(item.id), placeholder: "Select account...",
-                options: NominalCodes.all.map { DropdownOption($0.code, "\($0.code) — \($0.label)") })
+            TextField("Enter account code...", text: liBindAccount(item.id))
+                .font(.system(size: 13)).padding(10)
+                .background(Color.white).cornerRadius(6)
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
         }
         FieldGroup(label: "DEPARTMENT", optional: true) {
             PickerField(selection: liBindDept(item.id), placeholder: "Select department...",
@@ -1184,25 +1232,37 @@ struct LineItemsPage: View {
                 }
             })
     }
+    @State private var priceText: [String: String] = [:]
+
     private func liBindPrice(_ id: String) -> Binding<String> {
         Binding<String>(
             get: {
+                if let text = priceText[id] { return text }
                 let p = lineItems.first { $0.id == id }?.unitPrice ?? 0
-                return String(format: "%.2f", p)
+                return p == 0 ? "" : String(format: "%.2f", p)
             },
             set: { v in
+                priceText[id] = v
                 if let i = lineItems.firstIndex(where: { $0.id == id }) {
-                    lineItems[i].unitPrice = Double(v) ?? lineItems[i].unitPrice
+                    lineItems[i].unitPrice = Double(v) ?? 0
                 }
             })
     }
+
     private func liBindAccount(_ id: String) -> Binding<String> {
         Binding<String>(get: { lineItems.first { $0.id == id }?.account ?? "" },
                         set: { v in if let i = lineItems.firstIndex(where: { $0.id == id }) { lineItems[i].account = v } })
     }
     private func liBindDept(_ id: String) -> Binding<String> {
         Binding<String>(get: { lineItems.first { $0.id == id }?.department ?? "" },
-                        set: { v in if let i = lineItems.firstIndex(where: { $0.id == id }) { lineItems[i].department = v } })
+                        set: { v in
+                            if let i = lineItems.firstIndex(where: { $0.id == id }) {
+                                lineItems[i].department = v
+                                if let code = NominalCodes.deptToNominal[v] {
+                                    lineItems[i].account = code
+                                }
+                            }
+                        })
     }
     private func liBindExpType(_ id: String) -> Binding<String> {
         Binding<String>(get: { lineItems.first { $0.id == id }?.expenditureType ?? "" },
@@ -1381,7 +1441,9 @@ struct PickerField: View {
     @Binding var selection: String
     var placeholder: String
     var options: [DropdownOption]
+    var onChanged: ((String) -> Void)? = nil
     @State private var showSheet = false
+    @State private var pendingSelection: String? = nil
 
     private var selectedLabel: String {
         options.first { $0.id == selection }?.label ?? ""
@@ -1406,16 +1468,23 @@ struct PickerField: View {
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
         }
         .buttonStyle(BorderlessButtonStyle())
-        .sheet(isPresented: $showSheet) {
-            PickerSheetView(selection: $selection, options: options, isPresented: $showSheet)
+        .sheet(isPresented: $showSheet, onDismiss: {
+            if let val = pendingSelection {
+                selection = val
+                onChanged?(val)
+                pendingSelection = nil
+            }
+        }) {
+            PickerSheetView(currentSelection: self.selection, options: self.options, isPresented: self.$showSheet, pendingSelection: self.$pendingSelection)
         }
     }
 }
 
 struct PickerSheetView: View {
-    @Binding var selection: String
+    let currentSelection: String
     let options: [DropdownOption]
     @Binding var isPresented: Bool
+    @Binding var pendingSelection: String?
     @State private var searchText = ""
 
     private var filteredOptions: [DropdownOption] {
@@ -1438,11 +1507,14 @@ struct PickerSheetView: View {
                 }
                 List {
                     ForEach(filteredOptions) { option in
-                        Button(action: { selection = option.id; isPresented = false }) {
+                        Button(action: {
+                            pendingSelection = option.id
+                            isPresented = false
+                        }) {
                             HStack {
                                 Text(option.label).font(.system(size: 14)).foregroundColor(.primary)
                                 Spacer()
-                                if option.id == selection {
+                                if option.id == currentSelection {
                                     Image(systemName: "checkmark").font(.system(size: 12, weight: .semibold)).foregroundColor(.goldDark)
                                 }
                             }.padding(.vertical, 2)
