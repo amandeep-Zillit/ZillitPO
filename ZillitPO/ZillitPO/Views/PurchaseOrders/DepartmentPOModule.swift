@@ -78,7 +78,6 @@ struct DepartmentPOModule: View {
             .hidden()
         }
         .navigationBarTitle(Text("Purchase Orders"), displayMode: .inline)
-        .sheet(isPresented: $appState.showRejectSheet) { RejectSheetView().environmentObject(appState) }
         .alert(isPresented: .init(get: { activeDeleteAlert != nil }, set: { if !$0 { activeDeleteAlert = nil } })) {
             switch activeDeleteAlert {
             case .po(let po):
@@ -438,6 +437,24 @@ struct EditTemplateFormView: View {
         }
     }
 
+    private func onDepartmentChanged(_ newVal: String) {
+        departmentId = newVal
+        if let code = NominalCodes.deptToNominal[newVal] {
+            nominalCode = code
+            for i in lineItems.indices { lineItems[i].account = code }
+        }
+        for i in lineItems.indices { lineItems[i].department = newVal }
+    }
+
+    private func onNominalCodeChanged(_ newVal: String) {
+        nominalCode = newVal
+        if let dept = NominalCodes.nominalToDept[newVal] {
+            departmentId = dept
+            for i in lineItems.indices { lineItems[i].department = dept }
+        }
+        for i in lineItems.indices { lineItems[i].account = newVal }
+    }
+
     private var hasValidLineItem: Bool {
         lineItems.contains { !$0.description.trimmingCharacters(in: .whitespaces).isEmpty && $0.quantity > 0 && $0.unitPrice > 0 }
     }
@@ -468,7 +485,7 @@ struct EditTemplateFormView: View {
                 case "vat": if vatTreatment.isEmpty { errors.append("VAT Treatment is required") }
                 case "description": if desc.trimmingCharacters(in: .whitespaces).isEmpty { errors.append("Description is required") }
                 case "delivery_date": if !hasDelDate { errors.append("Delivery Date is required") }
-                case "effective_date": if !hasEffDate { errors.append("Effective Date is required") }
+                case "effective_date": break // Effective date removed from form, skip validation
                 case "notes": if notes.trimmingCharacters(in: .whitespaces).isEmpty { errors.append("Notes is required") }
                 case "account_code": if nominalCode.isEmpty { errors.append("Nominal Code is required") }
                 default: break
@@ -674,6 +691,14 @@ struct EditTemplateFormView: View {
                                 .background(Color.white).cornerRadius(8)
                                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                             }.buttonStyle(BorderlessButtonStyle())
+                            .actionSheet(isPresented: $showAttachSheet) {
+                                ActionSheet(title: Text("Attach"), buttons: [
+                                    .default(Text("Quote")) { /* TODO: attach quote */ },
+                                    .default(Text("Email")) { /* TODO: attach email */ },
+                                    .default(Text("Attachment")) { /* TODO: attach file */ },
+                                    .cancel()
+                                ])
+                            }
 
                             // Save button (dropdown)
                             Button(action: { showSaveSheet = true }) {
@@ -686,6 +711,14 @@ struct EditTemplateFormView: View {
                                 .frame(maxWidth: .infinity).padding(.vertical, 12)
                                 .background(Color.gold).cornerRadius(8)
                             }.buttonStyle(BorderlessButtonStyle())
+                            .actionSheet(isPresented: $showSaveSheet) {
+                                ActionSheet(title: Text("Save Options"), buttons: [
+                                    .default(Text("Save")) { updateTemplate() },
+                                    .default(Text("Save As")) { saveAsTemplateName = templateName; showSaveAsNameSheet = true },
+                                    .default(Text("Save as Draft")) { saveAsDraft() },
+                                    .cancel()
+                                ])
+                            }
                         }
 
                         // Row 2: Create & Submit PO
@@ -707,14 +740,6 @@ struct EditTemplateFormView: View {
             .listStyle(GroupedListStyle())
             .dismissKeyboardOnTap()
             .onAppear { loadTemplateData() }
-            .actionSheet(isPresented: $showAttachSheet) {
-                ActionSheet(title: Text("Attach"), buttons: [
-                    .default(Text("Quote")) { /* TODO: attach quote */ },
-                    .default(Text("Email")) { /* TODO: attach email */ },
-                    .default(Text("Attachment")) { /* TODO: attach file */ },
-                    .cancel()
-                ])
-            }
             .sheet(isPresented: $showSaveAsNameSheet) {
                 TemplateNameSheet(templateName: $saveAsTemplateName, isPresented: $showSaveAsNameSheet) {
                     saveAsNewTemplate()
@@ -727,19 +752,13 @@ struct EditTemplateFormView: View {
                     lineItemCustomValues: $lineItemCustomValues,
                     formFields: tplLineItemFields,
                     currency: currency,
-                    vatTreatment: vatTreatment
+                    vatTreatment: vatTreatment,
+                    defaultDepartment: departmentId,
+                    defaultAccount: nominalCode
                 ).environmentObject(appState),
                 isActive: $showLineItemsPage
             ) { EmptyView() }
             .hidden()
-            .actionSheet(isPresented: $showSaveSheet) {
-                ActionSheet(title: Text("Save Options"), buttons: [
-                    .default(Text("Save")) { updateTemplate() },
-                    .default(Text("Save As")) { saveAsTemplateName = templateName; showSaveAsNameSheet = true },
-                    .default(Text("Save as Draft")) { saveAsDraft() },
-                    .cancel()
-                ])
-            }
         }
     }
 
@@ -826,12 +845,14 @@ struct EditTemplateFormView: View {
         } else if field.label == "department" {
             tplErrorWrappedPicker(label: field.name.uppercased(), value: departmentId, required: field.isRequired) {
                 PickerField(selection: $departmentId, placeholder: "Select department...",
-                    options: DepartmentsData.sorted.map { DropdownOption($0.identifier, $0.displayName) })
+                    options: DepartmentsData.sorted.map { DropdownOption($0.identifier, $0.displayName) },
+                    onChanged: onDepartmentChanged)
             }
         } else if field.label == "account_code" {
             tplErrorWrappedPicker(label: field.name.uppercased(), value: nominalCode, required: field.isRequired) {
                 PickerField(selection: $nominalCode, placeholder: "Select nominal code...",
-                    options: NominalCodes.all.map { DropdownOption($0.code, "\($0.code) — \($0.label)") })
+                    options: NominalCodes.all.map { DropdownOption($0.code, "\($0.code) — \($0.label)") },
+                    onChanged: onNominalCodeChanged)
             }
         } else if field.label == "description" {
             tplErrorWrappedInput(label: field.name.uppercased(), text: $desc, placeholder: "e.g. Studio hire — Stage G, 12 weeks", required: field.isRequired)
@@ -854,13 +875,7 @@ struct EditTemplateFormView: View {
                 if hasErr { Text("\(field.name) is required").font(.system(size: 10)).foregroundColor(.red) }
             }
         } else if field.label == "effective_date" {
-            let hasErr = field.isRequired && showErrors && !hasEffDate
-            VStack(alignment: .leading, spacing: 4) {
-                FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
-                    tplDateFieldContent(hasDate: $hasEffDate, date: $effectiveDate)
-                }
-                if hasErr { Text("\(field.name) is required").font(.system(size: 10)).foregroundColor(.red) }
-            }
+            EmptyView()
         } else if field.label == "notes" {
             tplErrorWrappedInput(label: field.name.uppercased(), text: $notes, placeholder: "Internal notes...", required: field.isRequired)
         } else if !tplPOSystemLabels.contains(field.label ?? "") {
@@ -1025,11 +1040,13 @@ struct EditTemplateFormView: View {
             }
             FieldGroup(label: "DEPARTMENT") {
                 PickerField(selection: $departmentId, placeholder: "Select department...",
-                    options: DepartmentsData.sorted.map { DropdownOption($0.identifier, $0.displayName) })
+                    options: DepartmentsData.sorted.map { DropdownOption($0.identifier, $0.displayName) },
+                    onChanged: onDepartmentChanged)
             }
             FieldGroup(label: "NOMINAL CODE") {
                 PickerField(selection: $nominalCode, placeholder: "Select nominal code...",
-                    options: NominalCodes.all.map { DropdownOption($0.code, "\($0.code) — \($0.label)") })
+                    options: NominalCodes.all.map { DropdownOption($0.code, "\($0.code) — \($0.label)") },
+                    onChanged: onNominalCodeChanged)
             }
             FieldGroup(label: "DESCRIPTION", optional: true) { InputField(text: $desc, placeholder: "e.g. Studio hire — Stage G, 12 weeks") }
             HStack(spacing: 10) {
@@ -1043,7 +1060,6 @@ struct EditTemplateFormView: View {
                 }
             }
             FieldGroup(label: "DELIVERY DATE", optional: true) { tplDateFieldContent(hasDate: $hasDelDate, date: $deliveryDate) }
-            FieldGroup(label: "EFFECTIVE DATE", optional: true) { tplDateFieldContent(hasDate: $hasEffDate, date: $effectiveDate) }
             FieldGroup(label: "NOTES", optional: true) { InputField(text: $notes, placeholder: "Internal notes...") }
         }
     }
@@ -1077,11 +1093,16 @@ struct EditTemplateFormView: View {
     // MARK: - Load Template Data
 
     private func loadTemplateData() {
+        // Set user defaults first
+        if let u = appState.currentUser {
+            departmentId = u.departmentIdentifier
+            nominalCode = NominalCodes.deptToNominal[u.departmentIdentifier] ?? ""
+        }
         guard let tpl = template else { return }
         templateName = tpl.templateName ?? ""
         vendorId = tpl.vendorId ?? ""
-        departmentId = tpl.departmentId ?? ""
-        nominalCode = tpl.nominalCode ?? ""
+        if let d = tpl.departmentId, !d.isEmpty { departmentId = d }
+        if let n = tpl.nominalCode, !n.isEmpty { nominalCode = n }
         desc = tpl.description ?? ""
         currency = tpl.currency ?? "GBP"
         vatTreatment = tpl.vatTreatment ?? "pending"
@@ -1110,6 +1131,11 @@ struct EditTemplateFormView: View {
                          department: $0.department ?? "", expenditureType: $0.expenditure_type ?? "Purchase")
             }
             if !items.isEmpty { lineItems = items }
+        }
+        // Auto-fill department & account on line items
+        for i in lineItems.indices {
+            if lineItems[i].department.isEmpty { lineItems[i].department = departmentId }
+            if lineItems[i].account.isEmpty { lineItems[i].account = nominalCode }
         }
     }
 
@@ -1234,6 +1260,24 @@ struct CreateTemplateFormView: View {
         appState.formTemplate?.template.sorted { $0.order < $1.order }
     }
 
+    private func onDepartmentChanged(_ newVal: String) {
+        departmentId = newVal
+        if let code = NominalCodes.deptToNominal[newVal] {
+            nominalCode = code
+            for i in lineItems.indices { lineItems[i].account = code }
+        }
+        for i in lineItems.indices { lineItems[i].department = newVal }
+    }
+
+    private func onNominalCodeChanged(_ newVal: String) {
+        nominalCode = newVal
+        if let dept = NominalCodes.nominalToDept[newVal] {
+            departmentId = dept
+            for i in lineItems.indices { lineItems[i].department = dept }
+        }
+        for i in lineItems.indices { lineItems[i].account = newVal }
+    }
+
     private var ctLineItemFields: [FormField] {
         if let sections = sortedSections,
            let liSection = sections.first(where: { $0.key == "line_items" }) {
@@ -1326,6 +1370,14 @@ struct CreateTemplateFormView: View {
                             .background(Color.white).cornerRadius(8)
                             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                         }.buttonStyle(BorderlessButtonStyle())
+                        .actionSheet(isPresented: $showAttachSheet) {
+                            ActionSheet(title: Text("Attach"), buttons: [
+                                .default(Text("Quote")) { /* TODO: attach quote */ },
+                                .default(Text("Email")) { /* TODO: attach email */ },
+                                .default(Text("Attachment")) { /* TODO: attach file */ },
+                                .cancel()
+                            ])
+                        }
 
                         // Save Template button — opens name sheet if name is empty
                         Button(action: {
@@ -1348,14 +1400,6 @@ struct CreateTemplateFormView: View {
             }
             .listStyle(GroupedListStyle())
             .dismissKeyboardOnTap()
-            .actionSheet(isPresented: $showAttachSheet) {
-                ActionSheet(title: Text("Attach"), buttons: [
-                    .default(Text("Quote")) { /* TODO: attach quote */ },
-                    .default(Text("Email")) { /* TODO: attach email */ },
-                    .default(Text("Attachment")) { /* TODO: attach file */ },
-                    .cancel()
-                ])
-            }
             .overlay(
                 Group {
                     if showTemplateNameSheet {
@@ -1410,11 +1454,24 @@ struct CreateTemplateFormView: View {
                     lineItemCustomValues: $lineItemCustomValues,
                     formFields: ctLineItemFields,
                     currency: currency,
-                    vatTreatment: vatTreatment
+                    vatTreatment: vatTreatment,
+                    defaultDepartment: departmentId,
+                    defaultAccount: nominalCode
                 ).environmentObject(appState),
                 isActive: $showLineItemsPage
             ) { EmptyView() }
             .hidden()
+        }
+        .onAppear {
+            // Auto-select department & account from current user
+            if departmentId.isEmpty, let u = appState.currentUser {
+                departmentId = u.departmentIdentifier
+                nominalCode = NominalCodes.deptToNominal[u.departmentIdentifier] ?? ""
+                for i in lineItems.indices {
+                    if lineItems[i].department.isEmpty { lineItems[i].department = departmentId }
+                    if lineItems[i].account.isEmpty { lineItems[i].account = nominalCode }
+                }
+            }
         }
     }
 
@@ -1491,12 +1548,14 @@ struct CreateTemplateFormView: View {
         } else if field.label == "department" {
             FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
                 PickerField(selection: $departmentId, placeholder: "Select department...",
-                    options: DepartmentsData.sorted.map { DropdownOption($0.identifier, $0.displayName) })
+                    options: DepartmentsData.sorted.map { DropdownOption($0.identifier, $0.displayName) },
+                    onChanged: onDepartmentChanged)
             }
         } else if field.label == "account_code" {
             FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
                 PickerField(selection: $nominalCode, placeholder: "Select nominal code...",
-                    options: NominalCodes.all.map { DropdownOption($0.code, "\($0.code) — \($0.label)") })
+                    options: NominalCodes.all.map { DropdownOption($0.code, "\($0.code) — \($0.label)") },
+                    onChanged: onNominalCodeChanged)
             }
         } else if field.label == "description" {
             FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
@@ -1517,9 +1576,7 @@ struct CreateTemplateFormView: View {
                 ctDateFieldContent(hasDate: $hasDelDate, date: $deliveryDate)
             }
         } else if field.label == "effective_date" {
-            FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
-                ctDateFieldContent(hasDate: $hasEffDate, date: $effectiveDate)
-            }
+            EmptyView()
         } else if field.label == "notes" {
             FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
                 InputField(text: $notes, placeholder: "Internal notes...")
@@ -1609,8 +1666,10 @@ struct CreateTemplateFormView: View {
                 }
             } else if field.selectionType == "account_code" {
                 FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
-                    PickerField(selection: binding, placeholder: "Select account...",
-                        options: NominalCodes.all.map { DropdownOption($0.code, "\($0.code) — \($0.label)") })
+                    TextField("Enter account code...", text: binding)
+                        .font(.system(size: 13)).padding(10)
+                        .background(Color.white).cornerRadius(6)
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
                 }
             } else if field.selectionType == "exp_type" {
                 FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
@@ -1676,11 +1735,13 @@ struct CreateTemplateFormView: View {
             FieldGroup(label: "VENDOR") { VendorSearchField(vendorId: $vendorId, vendors: appState.vendors) }
             FieldGroup(label: "DEPARTMENT") {
                 PickerField(selection: $departmentId, placeholder: "Select department...",
-                    options: DepartmentsData.sorted.map { DropdownOption($0.identifier, $0.displayName) })
+                    options: DepartmentsData.sorted.map { DropdownOption($0.identifier, $0.displayName) },
+                    onChanged: onDepartmentChanged)
             }
             FieldGroup(label: "NOMINAL CODE") {
                 PickerField(selection: $nominalCode, placeholder: "Select nominal code...",
-                    options: NominalCodes.all.map { DropdownOption($0.code, "\($0.code) — \($0.label)") })
+                    options: NominalCodes.all.map { DropdownOption($0.code, "\($0.code) — \($0.label)") },
+                    onChanged: onNominalCodeChanged)
             }
             FieldGroup(label: "DESCRIPTION", optional: true) { InputField(text: $desc, placeholder: "e.g. Studio hire — Stage G, 12 weeks") }
             HStack(spacing: 10) {
