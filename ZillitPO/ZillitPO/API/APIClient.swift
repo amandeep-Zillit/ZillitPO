@@ -295,7 +295,7 @@ extension PurchaseOrderRaw {
         }
         var po = PurchaseOrder()
         po.id = id; po.projectId = project_id ?? ""; po.userId = user_id ?? ""
-        po.poNumber = po_number ?? ""; po.vendorId = vendor_id; po.departmentId = department_id
+        po.poNumber = po_number ?? ""; po.vendorId = vendor_id; po.departmentId = d?.identifier ?? department_id
         po.nominalCode = nominal_code; po.description = description; po.currency = currency ?? "GBP"
         po.effectiveDate = effective_date.map { Int64($0) }; po.notes = notes
         po.netAmount = Double(net_amount ?? 0); po.status = status ?? "DRAFT"
