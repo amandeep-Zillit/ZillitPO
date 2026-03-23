@@ -56,7 +56,7 @@ class AppState: ObservableObject {
         let vendorsPub = APIClient.shared.get("/api/v2/vendors?per_page=200")
             .map { tryDecode([Vendor].self, from: $0) ?? [] }
             .replaceError(with: [])
-        let tiersPub = APIClient.shared.get("/api/v2/approval-tiers?module=purchase_orders")
+        let tiersPub = APIClient.shared.get("/api/v2/account-hub/approval-tiers?module=purchase_orders")
             .map { data -> [ApprovalTierConfig] in
                 if let result = tryDecode([ApprovalTierConfig].self, from: data) { return result }
                 // Debug: log raw response on decode failure
