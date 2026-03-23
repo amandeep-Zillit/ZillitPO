@@ -42,6 +42,7 @@ struct PODetailContentView: View {
     @State private var isLoadingPDF = false
     @State private var pdfError: String?
     @State private var pdfCancellable: AnyCancellable?
+    @State private var showDeleteAlert = false
 
     private var vat: VATResult { VATHelpers.calcVat(po.netAmount, treatment: po.vatTreatment) }
     private var vis: ApprovalVisibility {
@@ -80,7 +81,12 @@ struct PODetailContentView: View {
                         Divider().padding(.vertical, 4)
                         DetailRow(label: "VAT", value: VATHelpers.vatLabel(po.vatTreatment))
                         Divider().padding(.vertical, 4)
-                        DetailRow(label: "Created By", value: UsersData.byId[po.userId]?.fullName ?? po.userId)
+                        DetailRow(label: "Created By", value: {
+                            let user = UsersData.byId[po.userId]
+                            let name = user?.fullName ?? po.userId
+                            let desig = user?.displayDesignation ?? ""
+                            return desig.isEmpty ? name : "\(name) (\(desig))"
+                        }())
                         Divider().padding(.vertical, 4)
                         HStack {
                             Text("Status").font(.system(size: 12)).foregroundColor(.secondary).frame(width: 110, alignment: .leading)
@@ -106,16 +112,6 @@ struct PODetailContentView: View {
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
                     }
 
-                    // Rejection reason
-                    if po.poStatus == .rejected, let reason = po.rejectionReason, !reason.isEmpty {
-                        HStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 12)).foregroundColor(.red)
-                            Text(reason).font(.system(size: 12)).foregroundColor(.red)
-                        }
-                        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.red.opacity(0.05)).cornerRadius(8)
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.red.opacity(0.2), lineWidth: 1))
-                    }
 
                     // Line Items
                     if !po.lineItems.isEmpty {
@@ -140,6 +136,72 @@ struct PODetailContentView: View {
                                 Text(FormatUtils.formatCurrency(vat.gross, code: po.currency)).font(.system(size: 16, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
                             }
                             .padding(.horizontal, 14).padding(.vertical, 10)
+                        }
+                        .background(Color.white)
+                        .cornerRadius(10)
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                    }
+
+                    // Approvals (show each approver with "Approved" status)
+                    if !po.approvals.isEmpty {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(Array(po.approvals.enumerated()), id: \.offset) { _, approval in
+                                let user = UsersData.byId[approval.userId]
+                                let name = user?.fullName ?? approval.userId
+                                let designation = user?.displayDesignation ?? ""
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(name).font(.system(size: 13))
+                                        if !designation.isEmpty {
+                                            Text(designation).font(.system(size: 11)).foregroundColor(.secondary)
+                                        }
+                                    }
+                                    Spacer()
+                                    Text("Approved")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundColor(.green)
+                                        .padding(.horizontal, 8).padding(.vertical, 3)
+                                        .background(Color.green.opacity(0.1)).cornerRadius(4)
+                                }
+                                .padding(.horizontal, 14).padding(.vertical, 8)
+                                if approval.tierNumber != po.approvals.last?.tierNumber || approval.userId != po.approvals.last?.userId {
+                                    Divider().padding(.horizontal, 14)
+                                }
+                            }
+                        }
+                        .background(Color.white)
+                        .cornerRadius(10)
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                    }
+
+                    // Rejected By
+                    if let rejectedById = po.rejectedBy, !rejectedById.isEmpty, po.poStatus == .rejected {
+                        VStack(alignment: .leading, spacing: 0) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(UsersData.byId[rejectedById]?.fullName ?? rejectedById).font(.system(size: 13))
+                                    if let desig = UsersData.byId[rejectedById]?.displayDesignation, !desig.isEmpty {
+                                        Text(desig).font(.system(size: 11)).foregroundColor(.secondary)
+                                    }
+                                }
+                                Spacer()
+                                Text("Rejected")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundColor(.red)
+                                    .padding(.horizontal, 8).padding(.vertical, 3)
+                                    .background(Color.red.opacity(0.1)).cornerRadius(4)
+                            }
+                            .padding(14)
+
+                            if let reason = po.rejectionReason, !reason.isEmpty {
+                                Divider().padding(.horizontal, 14)
+                                HStack(spacing: 8) {
+                                    Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 12)).foregroundColor(.red)
+                                    Text("Reason: \(reason)").font(.system(size: 12)).foregroundColor(.red)
+                                }
+                                .padding(.horizontal, 14).padding(.vertical, 10)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
                         }
                         .background(Color.white)
                         .cornerRadius(10)
@@ -181,11 +243,19 @@ struct PODetailContentView: View {
                                         .padding(.horizontal, 16).padding(.vertical, 8).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.goldDark, lineWidth: 1))
                                         .contentShape(Rectangle())
                                 }.buttonStyle(BorderlessButtonStyle())
-                                Button(action: { appState.deleteTarget = po }) {
+                                Button(action: { showDeleteAlert = true }) {
                                     HStack { Image(systemName: "trash"); Text("Delete") }.font(.system(size: 13, weight: .semibold)).foregroundColor(.red)
                                         .padding(.horizontal, 16).padding(.vertical, 8).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.red, lineWidth: 1))
                                         .contentShape(Rectangle())
                                 }.buttonStyle(BorderlessButtonStyle())
+                                .alert(isPresented: $showDeleteAlert) {
+                                    Alert(title: Text("Delete PO?"), message: Text("This cannot be undone."),
+                                          primaryButton: .destructive(Text("Delete")) {
+                                              appState.deletePO(po)
+                                              onClose()
+                                          },
+                                          secondaryButton: .cancel())
+                                }
                             }
                             Spacer()
                             if vis.canApprove {
@@ -221,6 +291,9 @@ struct PODetailContentView: View {
                 isActive: $navigateToEdit
             ) { EmptyView() }
             .hidden()
+        }
+        .sheet(isPresented: $appState.showRejectSheet) {
+            RejectSheetView().environmentObject(appState)
         }
     }
 
@@ -304,8 +377,10 @@ struct PODetailContentView: View {
                                 .font(.system(size: 10, weight: .bold)).foregroundColor(.white)
                         }
                         VStack(alignment: .leading, spacing: 1) {
-                            Text("Raised by").font(.system(size: 9)).foregroundColor(.secondary)
-                            Text(UsersData.byId[po.userId]?.fullName ?? po.userId)
+                            Text("Created by").font(.system(size: 9)).foregroundColor(.secondary)
+                            let creatorName = UsersData.byId[po.userId]?.fullName ?? po.userId
+                            let creatorDesig = UsersData.byId[po.userId]?.displayDesignation ?? ""
+                            Text(creatorDesig.isEmpty ? creatorName : "\(creatorName) (\(creatorDesig))")
                                 .font(.system(size: 12, weight: .medium))
                         }
                         Spacer()
