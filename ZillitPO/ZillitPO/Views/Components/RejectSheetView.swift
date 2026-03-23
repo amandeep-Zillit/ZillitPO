@@ -32,7 +32,7 @@ struct RejectSheetView: View {
                     appState.rejectTarget = nil; appState.rejectReason = ""
                     presentationMode.wrappedValue.dismiss()
                 },
-                trailing: Button("Reject") {
+                trailing: Button(isSubmitting ? "Rejecting..." : "Reject") {
                     if reasonEmpty {
                         showError = true
                         return
@@ -40,9 +40,9 @@ struct RejectSheetView: View {
                     guard !isSubmitting else { return }
                     isSubmitting = true
                     appState.rejectPO()
-                    presentationMode.wrappedValue.dismiss()
                 }
                 .foregroundColor(.red)
+                .disabled(isSubmitting)
             )
         }
     }
