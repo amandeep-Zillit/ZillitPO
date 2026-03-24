@@ -1,0 +1,490 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1CC8620810444BC263EC846B /* FormatUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = B532B37DABAB2B4686CF510A /* FormatUtils.swift */; };
+		267B44B9A4AC738624CFCB6F /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2736C28D805D99F6CADAAD00 /* SidebarView.swift */; };
+		2825F9B83DFDE6D04E8008E1 /* POTableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E45CB1E49E570A54BAB7552A /* POTableView.swift */; };
+		2C316BD666D7D372ABED8EAD /* ApprovalHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28E79E80D085384B606D1C43 /* ApprovalHelpers.swift */; };
+		33E901B2490204392C08ED1A /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09763CA00F19737D01701F26 /* Models.swift */; };
+		450E92B3106541B4FB2B4882 /* RejectSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3DF5F14E89F20F59FB509F7 /* RejectSheetView.swift */; };
+		51CB77D53C2B7D875F30A63B /* ZillitPOApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B57D8C30DC7258CD8598F6A /* ZillitPOApp.swift */; };
+		5491E241E6C3B39473B9FCB9 /* DepartmentPOModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4971A25360236769BF3C7A98 /* DepartmentPOModule.swift */; };
+		670B7CB8CFD3440F3E658CB9 /* VendorsModuleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6812F1C01215B74AA4C1BEAC /* VendorsModuleView.swift */; };
+		774B7FC104CA594323D21856 /* LoaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF38B0F1B39DE5E18FF0FEED /* LoaderView.swift */; };
+		9731929AF8A49FA6A53B05EF /* POStatsCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3249A0D4B64A7008A670D3D /* POStatsCards.swift */; };
+		9EB249AA0238A86382DF5710 /* POTemplatesListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6670BC6BB754B8093DA0923E /* POTemplatesListView.swift */; };
+		A1B2C3D4E5F6071829000012 /* PORequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6071829000002 /* PORequest.swift */; };
+		A1B2C3D4E5F6071829000013 /* POCodableTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6071829000003 /* POCodableTask.swift */; };
+		A1B2C3D4E5F6071829000014 /* POViewModel+apis.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6071829000004 /* POViewModel+apis.swift */; };
+		A1B2C3D4E5F6071829000015 /* POViewModel+enums.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6071829000005 /* POViewModel+enums.swift */; };
+		A1B2C3D4E5F6071829000016 /* POViewModel+funcs.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6071829000006 /* POViewModel+funcs.swift */; };
+		A1B2C3D4E5F6071829000017 /* CompatActionSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6071829000007 /* CompatActionSheet.swift */; };
+		A1B2C3D4E5F60718293A4B5C /* DateFieldView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6071829000001 /* DateFieldView.swift */; };
+		BCAF479A1212FAE60BC9F304 /* PODraftsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88F5B290EDB19FFDBCA0166D /* PODraftsListView.swift */; };
+		BE7F74A11D13BD44C7E7F29C /* PODetailModalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E744912AD6F810D89618665 /* PODetailModalView.swift */; };
+		D626AE1BB7F5118FD2D5C1B8 /* StaticData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6659BE5956A7630BA255FB91 /* StaticData.swift */; };
+		DC3CCEDE3C9F39D081ACA40C /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEADD6F899B8A91D292338E7 /* ContentView.swift */; };
+		DCECED579E8098B508C60877 /* POViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8990D460449911F7931F1F0 /* POViewModel.swift */; };
+		DEA78B934C5ED94E55AC539E /* POFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7349E3AA955C5C02C9E2FEB /* POFormView.swift */; };
+		EBC789D2BBF282BFC8E76483 /* VATHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7983D12F61324F5BCA140EEB /* VATHelpers.swift */; };
+		F20AAEE8114DE4A098A39E6D /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9B89AFD08FCED4D2043BC83 /* APIClient.swift */; };
+		FD6EE2EF5FAEF72678DC97CF /* QuickFiltersBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = D966C5823F87C20C53E76C1E /* QuickFiltersBar.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		09763CA00F19737D01701F26 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		2736C28D805D99F6CADAAD00 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
+		28E79E80D085384B606D1C43 /* ApprovalHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApprovalHelpers.swift; sourceTree = "<group>"; };
+		3E744912AD6F810D89618665 /* PODetailModalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PODetailModalView.swift; sourceTree = "<group>"; };
+		4971A25360236769BF3C7A98 /* DepartmentPOModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DepartmentPOModule.swift; sourceTree = "<group>"; };
+		4B57D8C30DC7258CD8598F6A /* ZillitPOApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZillitPOApp.swift; sourceTree = "<group>"; };
+		6659BE5956A7630BA255FB91 /* StaticData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StaticData.swift; sourceTree = "<group>"; };
+		666B5C9AB688C2DFC076CEC5 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		6670BC6BB754B8093DA0923E /* POTemplatesListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = POTemplatesListView.swift; sourceTree = "<group>"; };
+		6812F1C01215B74AA4C1BEAC /* VendorsModuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VendorsModuleView.swift; sourceTree = "<group>"; };
+		7983D12F61324F5BCA140EEB /* VATHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VATHelpers.swift; sourceTree = "<group>"; };
+		88F5B290EDB19FFDBCA0166D /* PODraftsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PODraftsListView.swift; sourceTree = "<group>"; };
+		9D96523BE6EC49850CF6841E /* ZillitPO.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ZillitPO.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1B2C3D4E5F6071829000001 /* DateFieldView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateFieldView.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6071829000002 /* PORequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PORequest.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6071829000003 /* POCodableTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = POCodableTask.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6071829000004 /* POViewModel+apis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "POViewModel+apis.swift"; sourceTree = "<group>"; };
+		A1B2C3D4E5F6071829000005 /* POViewModel+enums.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "POViewModel+enums.swift"; sourceTree = "<group>"; };
+		A1B2C3D4E5F6071829000006 /* POViewModel+funcs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "POViewModel+funcs.swift"; sourceTree = "<group>"; };
+		A1B2C3D4E5F6071829000007 /* CompatActionSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompatActionSheet.swift; sourceTree = "<group>"; };
+		B532B37DABAB2B4686CF510A /* FormatUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormatUtils.swift; sourceTree = "<group>"; };
+		D3DF5F14E89F20F59FB509F7 /* RejectSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RejectSheetView.swift; sourceTree = "<group>"; };
+		D966C5823F87C20C53E76C1E /* QuickFiltersBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickFiltersBar.swift; sourceTree = "<group>"; };
+		DEADD6F899B8A91D292338E7 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		E3249A0D4B64A7008A670D3D /* POStatsCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = POStatsCards.swift; sourceTree = "<group>"; };
+		E45CB1E49E570A54BAB7552A /* POTableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = POTableView.swift; sourceTree = "<group>"; };
+		EF38B0F1B39DE5E18FF0FEED /* LoaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoaderView.swift; sourceTree = "<group>"; };
+		F7349E3AA955C5C02C9E2FEB /* POFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = POFormView.swift; sourceTree = "<group>"; };
+		F8990D460449911F7931F1F0 /* POViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = POViewModel.swift; sourceTree = "<group>"; };
+		F9B89AFD08FCED4D2043BC83 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		15BB6C80BF097DC0472616D4 /* Data */ = {
+			isa = PBXGroup;
+			children = (
+				6659BE5956A7630BA255FB91 /* StaticData.swift */,
+			);
+			path = Data;
+			sourceTree = "<group>";
+		};
+		53C135B79BB0488524F26701 /* PurchaseOrders */ = {
+			isa = PBXGroup;
+			children = (
+				4971A25360236769BF3C7A98 /* DepartmentPOModule.swift */,
+				3E744912AD6F810D89618665 /* PODetailModalView.swift */,
+				88F5B290EDB19FFDBCA0166D /* PODraftsListView.swift */,
+				F7349E3AA955C5C02C9E2FEB /* POFormView.swift */,
+				E45CB1E49E570A54BAB7552A /* POTableView.swift */,
+				6670BC6BB754B8093DA0923E /* POTemplatesListView.swift */,
+			);
+			path = PurchaseOrders;
+			sourceTree = "<group>";
+		};
+		5B7325777A9F177DCBFF6E83 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F6071829000007 /* CompatActionSheet.swift */,
+				A1B2C3D4E5F6071829000001 /* DateFieldView.swift */,
+				EF38B0F1B39DE5E18FF0FEED /* LoaderView.swift */,
+				E3249A0D4B64A7008A670D3D /* POStatsCards.swift */,
+				D966C5823F87C20C53E76C1E /* QuickFiltersBar.swift */,
+				D3DF5F14E89F20F59FB509F7 /* RejectSheetView.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		8C3DD87D32739A94B2B46C93 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				9D96523BE6EC49850CF6841E /* ZillitPO.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		8F0DAD9F8101D5EBB12B7A95 /* ZillitPO */ = {
+			isa = PBXGroup;
+			children = (
+				666B5C9AB688C2DFC076CEC5 /* Info.plist */,
+				9D2A1226FA54DB01BF09C03D /* App */,
+				15BB6C80BF097DC0472616D4 /* Data */,
+				E0252A0EDA05B376E50BDD33 /* Models */,
+				A1B2C3D4E5F6071829000020 /* Network */,
+				B6BECE480CCF5BABA892EB47 /* Utils */,
+				A1B2C3D4E5F6071829000021 /* ViewModel */,
+				C11EB9C40D267F1FF4A91262 /* Views */,
+			);
+			path = ZillitPO;
+			sourceTree = "<group>";
+		};
+		9D2A1226FA54DB01BF09C03D /* App */ = {
+			isa = PBXGroup;
+			children = (
+				4B57D8C30DC7258CD8598F6A /* ZillitPOApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F6071829000020 /* Network */ = {
+			isa = PBXGroup;
+			children = (
+				F9B89AFD08FCED4D2043BC83 /* APIClient.swift */,
+				A1B2C3D4E5F6071829000003 /* POCodableTask.swift */,
+				A1B2C3D4E5F6071829000002 /* PORequest.swift */,
+			);
+			path = Network;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F6071829000021 /* ViewModel */ = {
+			isa = PBXGroup;
+			children = (
+				F8990D460449911F7931F1F0 /* POViewModel.swift */,
+				A1B2C3D4E5F6071829000004 /* POViewModel+apis.swift */,
+				A1B2C3D4E5F6071829000005 /* POViewModel+enums.swift */,
+				A1B2C3D4E5F6071829000006 /* POViewModel+funcs.swift */,
+			);
+			path = ViewModel;
+			sourceTree = "<group>";
+		};
+		B6BECE480CCF5BABA892EB47 /* Utils */ = {
+			isa = PBXGroup;
+			children = (
+				28E79E80D085384B606D1C43 /* ApprovalHelpers.swift */,
+				B532B37DABAB2B4686CF510A /* FormatUtils.swift */,
+				7983D12F61324F5BCA140EEB /* VATHelpers.swift */,
+			);
+			path = Utils;
+			sourceTree = "<group>";
+		};
+		C11EB9C40D267F1FF4A91262 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				5B7325777A9F177DCBFF6E83 /* Components */,
+				C9DAE5FAEC94B5815B2F94B7 /* Main */,
+				53C135B79BB0488524F26701 /* PurchaseOrders */,
+				FFA644E33260D58A44987975 /* Vendors */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		C9DAE5FAEC94B5815B2F94B7 /* Main */ = {
+			isa = PBXGroup;
+			children = (
+				DEADD6F899B8A91D292338E7 /* ContentView.swift */,
+				2736C28D805D99F6CADAAD00 /* SidebarView.swift */,
+			);
+			path = Main;
+			sourceTree = "<group>";
+		};
+		E0252A0EDA05B376E50BDD33 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				09763CA00F19737D01701F26 /* Models.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		EA316021BF0213BFB11AECF6 = {
+			isa = PBXGroup;
+			children = (
+				8F0DAD9F8101D5EBB12B7A95 /* ZillitPO */,
+				8C3DD87D32739A94B2B46C93 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		FFA644E33260D58A44987975 /* Vendors */ = {
+			isa = PBXGroup;
+			children = (
+				6812F1C01215B74AA4C1BEAC /* VendorsModuleView.swift */,
+			);
+			path = Vendors;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		C2945557C78F041EEF6220E9 /* ZillitPO */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 67DCF49463E987332A6FBBBA /* Build configuration list for PBXNativeTarget "ZillitPO" */;
+			buildPhases = (
+				7D9A9F77DD77DB8F3CC2A971 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ZillitPO;
+			packageProductDependencies = (
+			);
+			productName = ZillitPO;
+			productReference = 9D96523BE6EC49850CF6841E /* ZillitPO.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		4D0EB0539FC9850D20328C33 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 2600;
+			};
+			buildConfigurationList = 850016FF538AF5A3F2D8CC23 /* Build configuration list for PBXProject "ZillitPO" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = EA316021BF0213BFB11AECF6;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 8C3DD87D32739A94B2B46C93 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				C2945557C78F041EEF6220E9 /* ZillitPO */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		7D9A9F77DD77DB8F3CC2A971 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F20AAEE8114DE4A098A39E6D /* APIClient.swift in Sources */,
+				DCECED579E8098B508C60877 /* POViewModel.swift in Sources */,
+				A1B2C3D4E5F6071829000014 /* POViewModel+apis.swift in Sources */,
+				A1B2C3D4E5F6071829000015 /* POViewModel+enums.swift in Sources */,
+				A1B2C3D4E5F6071829000016 /* POViewModel+funcs.swift in Sources */,
+				A1B2C3D4E5F6071829000017 /* CompatActionSheet.swift in Sources */,
+				2C316BD666D7D372ABED8EAD /* ApprovalHelpers.swift in Sources */,
+				DC3CCEDE3C9F39D081ACA40C /* ContentView.swift in Sources */,
+				A1B2C3D4E5F60718293A4B5C /* DateFieldView.swift in Sources */,
+				5491E241E6C3B39473B9FCB9 /* DepartmentPOModule.swift in Sources */,
+				1CC8620810444BC263EC846B /* FormatUtils.swift in Sources */,
+				774B7FC104CA594323D21856 /* LoaderView.swift in Sources */,
+				33E901B2490204392C08ED1A /* Models.swift in Sources */,
+				A1B2C3D4E5F6071829000013 /* POCodableTask.swift in Sources */,
+				BE7F74A11D13BD44C7E7F29C /* PODetailModalView.swift in Sources */,
+				BCAF479A1212FAE60BC9F304 /* PODraftsListView.swift in Sources */,
+				DEA78B934C5ED94E55AC539E /* POFormView.swift in Sources */,
+				A1B2C3D4E5F6071829000012 /* PORequest.swift in Sources */,
+				9731929AF8A49FA6A53B05EF /* POStatsCards.swift in Sources */,
+				2825F9B83DFDE6D04E8008E1 /* POTableView.swift in Sources */,
+				9EB249AA0238A86382DF5710 /* POTemplatesListView.swift in Sources */,
+				FD6EE2EF5FAEF72678DC97CF /* QuickFiltersBar.swift in Sources */,
+				450E92B3106541B4FB2B4882 /* RejectSheetView.swift in Sources */,
+				267B44B9A4AC738624CFCB6F /* SidebarView.swift in Sources */,
+				D626AE1BB7F5118FD2D5C1B8 /* StaticData.swift in Sources */,
+				EBC789D2BBF282BFC8E76483 /* VATHelpers.swift in Sources */,
+				670B7CB8CFD3440F3E658CB9 /* VendorsModuleView.swift in Sources */,
+				51CB77D53C2B7D875F30A63B /* ZillitPOApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		18D5B0220CE0578484EC3036 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = NW826YVGWW;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		1C7083CF3C074A9034F3EF6D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ZillitPO/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com4.zillit.coda.po;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		C919EE56596F978F8D659418 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ZillitPO/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com4.zillit.coda.po;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		D0490E26C1A6A933CFC83E53 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = NW826YVGWW;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		67DCF49463E987332A6FBBBA /* Build configuration list for PBXNativeTarget "ZillitPO" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C919EE56596F978F8D659418 /* Debug */,
+				1C7083CF3C074A9034F3EF6D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		850016FF538AF5A3F2D8CC23 /* Build configuration list for PBXProject "ZillitPO" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				18D5B0220CE0578484EC3036 /* Debug */,
+				D0490E26C1A6A933CFC83E53 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 4D0EB0539FC9850D20328C33 /* Project object */;
+}
