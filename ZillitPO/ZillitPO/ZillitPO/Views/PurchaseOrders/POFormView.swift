@@ -78,7 +78,7 @@ struct POFormView: View {
                 case "vendor": if vendorId.isEmpty { errors.append("Vendor is required") }
                 case "department": if departmentId.isEmpty { errors.append("Department is required") }
                 case "currency": if currency.isEmpty { errors.append("Currency is required") }
-                case "vat": if vatTreatment.isEmpty { errors.append("VAT Treatment is required") }
+                case "vat": break // VAT is now per line item
                 case "description": if desc.trimmingCharacters(in: .whitespaces).isEmpty { errors.append("Description is required") }
                 case "delivery_date": if !hasDelDate { errors.append("Delivery Date is required") }
                 case "effective_date": break // hidden from users
@@ -144,7 +144,7 @@ struct POFormView: View {
 
         // Line item field validation
         let lineFields = getVisibleFields("line_items")
-        let liSysLabels: Set<String> = ["line_description", "line_quantity", "line_unit_price", "account_code", "department", "exp_type"]
+        let liSysLabels: Set<String> = ["line_description", "line_quantity", "line_unit_price", "account_code", "department", "exp_type", "vat", "tax_type", "tax_rate"]
         for (idx, li) in lineItems.enumerated() {
             guard !li.description.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
             for field in lineFields {
@@ -160,6 +160,10 @@ struct POFormView: View {
                         if li.unitPrice < 0 { errors.append("Line \(idx + 1): Unit Price is required") }
                     case "exp_type":
                         if li.expenditureType.trimmingCharacters(in: .whitespaces).isEmpty { errors.append("Line \(idx + 1): Expenditure Type is required") }
+                    case "vat", "tax_type":
+                        let vatVal = lineItemCustomValues[li.id]?["vat"] ?? ""
+                        if vatVal.isEmpty { errors.append("Line \(idx + 1): VAT Treatment is required") }
+                    case "tax_rate": break // auto-derived from VAT treatment
                     default: break
                     }
                 } else {
@@ -238,7 +242,6 @@ struct POFormView: View {
                     lineItemCustomValues: $lineItemCustomValues,
                     formFields: lineItemFields,
                     currency: currency,
-                    vatTreatment: vatTreatment,
                     defaultDepartment: departmentId,
                     defaultAccount: nominalCode
                 ).environmentObject(appState),
@@ -336,10 +339,8 @@ struct POFormView: View {
                               DropdownOption("EUR", "EUR — Euro")])
             }
         } else if field.label == "vat" {
-            errorWrappedPicker(label: field.name.uppercased(), value: vatTreatment, required: field.isRequired) {
-                PickerField(selection: $vatTreatment, placeholder: "Select VAT...",
-                    options: VATHelpers.options.map { DropdownOption($0.value, $0.label) })
-            }
+            // VAT is now per line item — skip in PO details
+            EmptyView()
         } else if field.label == "delivery_date" {
             let hasErr = field.isRequired && showErrors && !hasDelDate
             VStack(alignment: .leading, spacing: 4) {
@@ -645,30 +646,41 @@ struct POFormView: View {
     // MARK: - Summary & Actions
     // ═══════════════════════════════════════════════════════════════════════
 
+    /// Aggregate VAT across all line items based on per-item vatTreatment
+    private var lineItemVATSummary: (totalVat: Double, grossTotal: Double, hasVat: Bool) {
+        var totalVat = 0.0
+        var grossTotal = 0.0
+        for item in lineItems {
+            let itemNet = item.quantity * item.unitPrice
+            let treatment = lineItemCustomValues[item.id]?["vat"] ?? "pending"
+            let result = VATHelpers.calcVat(itemNet, treatment: treatment)
+            totalVat += result.vatAmount
+            grossTotal += result.gross
+        }
+        let hasVat = lineItems.contains { (lineItemCustomValues[$0.id]?["vat"] ?? "pending") != "pending" }
+        return (totalVat, grossTotal, hasVat)
+    }
+
     private var summaryContent: some View {
-        let vat = VATHelpers.calcVat(netTotal, treatment: vatTreatment)
+        let vatSummary = lineItemVATSummary
         return VStack(spacing: 8) {
             HStack {
                 Text("Net Amount").font(.system(size: 14)).foregroundColor(.secondary)
                 Spacer()
                 Text(FormatUtils.formatCurrency(netTotal, code: currency)).font(.system(size: 15, design: .monospaced))
             }
-            if vatTreatment != "pending" {
+            if vatSummary.hasVat {
                 HStack {
-                    Text("VAT (\(VATHelpers.vatLabel(vatTreatment)))").font(.system(size: 14)).foregroundColor(.secondary)
-                    if vat.reverseCharged {
-                        Text("RC").font(.system(size: 8, weight: .bold)).foregroundColor(.orange)
-                            .padding(.horizontal, 4).padding(.vertical, 1).background(Color.orange.opacity(0.1)).cornerRadius(3)
-                    }
+                    Text("VAT").font(.system(size: 14)).foregroundColor(.secondary)
                     Spacer()
-                    Text(FormatUtils.formatCurrency(vat.vatAmount, code: currency)).font(.system(size: 14, design: .monospaced)).foregroundColor(.secondary)
+                    Text(FormatUtils.formatCurrency(vatSummary.totalVat, code: currency)).font(.system(size: 14, design: .monospaced)).foregroundColor(.secondary)
                 }
             }
             Divider()
             HStack {
                 Text("Gross Total").font(.system(size: 16, weight: .bold))
                 Spacer()
-                Text(FormatUtils.formatCurrency(vat.gross, code: currency)).font(.system(size: 20, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
+                Text(FormatUtils.formatCurrency(vatSummary.grossTotal, code: currency)).font(.system(size: 20, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
             }
         }
     }
@@ -828,7 +840,7 @@ struct POFormView: View {
             // Auto-set nominal code from department if not set
             if nominalCode.isEmpty { nominalCode = NominalCodes.deptToNominal[departmentId] ?? "" }
             desc = po.description ?? ""
-            currency = po.currency; vatTreatment = po.vatTreatment; notes = po.notes ?? ""
+            currency = po.currency; notes = po.notes ?? ""
             var items = po.lineItems.isEmpty ? [LineItem(account: nominalCode, department: departmentId)] : po.lineItems
             // Resolve line item department IDs to identifiers and auto-set account codes
             for i in items.indices {
@@ -841,6 +853,24 @@ struct POFormView: View {
                 }
             }
             lineItems = items
+            // Populate per-line-item custom fields and VAT
+            for item in items {
+                if lineItemCustomValues[item.id] == nil { lineItemCustomValues[item.id] = [:] }
+                // Load custom fields from line item
+                for cf in item.customFields {
+                    lineItemCustomValues[item.id]?[cf.name] = cf.value
+                }
+                // Set VAT: prefer line item's own vatTreatment, then PO-level, then "pending"
+                let vatValue: String
+                if item.vatTreatment != "pending" {
+                    vatValue = item.vatTreatment
+                } else if po.vatTreatment != "pending" {
+                    vatValue = po.vatTreatment
+                } else {
+                    vatValue = "pending"
+                }
+                lineItemCustomValues[item.id]?["vat"] = vatValue
+            }
             if let ms = po.effectiveDate, ms > 0 { effectiveDate = Date(timeIntervalSince1970: Double(ms)/1000); hasEffDate = true }
             if let ms = po.deliveryDate, ms > 0 { deliveryDate = Date(timeIntervalSince1970: Double(ms)/1000); hasDelDate = true }
             if let da = po.deliveryAddress {
@@ -863,13 +893,25 @@ struct POFormView: View {
     // ═══════════════════════════════════════════════════════════════════════
 
     private func buildForm() -> POFormData {
-        for i in lineItems.indices { lineItems[i].total = lineItems[i].quantity * lineItems[i].unitPrice }
+        // Debug: log lineItemCustomValues before building
+        print("🔧 buildForm: lineItemCustomValues keys=\(lineItemCustomValues.keys.map { String($0.prefix(8)) })")
+        for (id, vals) in lineItemCustomValues {
+            print("  🔧 LI \(id.prefix(8)): \(vals)")
+        }
+        for i in lineItems.indices {
+            lineItems[i].total = lineItems[i].quantity * lineItems[i].unitPrice
+            let vatFromCustom = lineItemCustomValues[lineItems[i].id]?["vat"]
+            lineItems[i].vatTreatment = vatFromCustom ?? lineItems[i].vatTreatment
+            print("  🔧 LI[\(i)] id=\(lineItems[i].id.prefix(8)) vatFromCustom=\(vatFromCustom ?? "nil") final=\(lineItems[i].vatTreatment)")
+        }
         let da = DeliveryAddress(name: daName, email: daEmail, phoneCode: daPhoneCode, phone: daPhone,
                                   line1: daLine1, line2: daLine2, city: daCity,
                                   state: daState, postalCode: daPostal, country: daCountry)
         let hasDA = ![daName, daEmail, daPhone, daLine1, daCity].allSatisfy { $0.isEmpty }
+        // Derive PO-level vatTreatment from line items (use first non-pending, or "pending")
+        let derivedVat = lineItems.compactMap { lineItemCustomValues[$0.id]?["vat"] ?? ($0.vatTreatment != "pending" ? $0.vatTreatment : nil) }.first(where: { $0 != "pending" }) ?? "pending"
         return POFormData(vendorId: vendorId, departmentId: departmentId, nominalCode: nominalCode,
-                          description: desc, currency: currency, vatTreatment: vatTreatment,
+                          description: desc, currency: currency, vatTreatment: derivedVat,
                           effectiveDate: hasEffDate ? effectiveDate : nil,
                           deliveryDate: hasDelDate ? deliveryDate : nil,
                           notes: notes, lineItems: lineItems,
@@ -948,15 +990,9 @@ struct POFormView: View {
                     options: NominalCodes.all.map { DropdownOption($0.code, "\($0.code) — \($0.label)") })
             }
             FieldGroup(label: "DESCRIPTION", optional: true) { InputField(text: $desc, placeholder: "e.g. Studio hire — Stage G, 12 weeks") }
-            HStack(spacing: 10) {
-                FieldGroup(label: "CURRENCY") {
-                    PickerField(selection: $currency, placeholder: "Select currency...",
-                        options: [DropdownOption("GBP", "GBP — British Pound"), DropdownOption("USD", "USD — US Dollar"), DropdownOption("EUR", "EUR — Euro")])
-                }
-                FieldGroup(label: "VAT TREATMENT") {
-                    PickerField(selection: $vatTreatment, placeholder: "Select VAT...",
-                        options: VATHelpers.options.map { DropdownOption($0.value, $0.label) })
-                }
+            FieldGroup(label: "CURRENCY") {
+                PickerField(selection: $currency, placeholder: "Select currency...",
+                    options: [DropdownOption("GBP", "GBP — British Pound"), DropdownOption("USD", "USD — US Dollar"), DropdownOption("EUR", "EUR — Euro")])
             }
             FieldGroup(label: "DELIVERY DATE") { dateFieldContent(hasDate: $hasDelDate, date: $deliveryDate) }
         }
@@ -991,7 +1027,6 @@ struct LineItemsPage: View {
     @Binding var lineItemCustomValues: [String: [String: String]]
     var formFields: [FormField]
     var currency: String = "GBP"
-    var vatTreatment: String = "pending"
     var defaultDepartment: String = ""
     var defaultAccount: String = ""
 
@@ -1006,8 +1041,19 @@ struct LineItemsPage: View {
         lineItems.reduce(0) { $0 + ($1.quantity * $1.unitPrice) }
     }
 
-    private var vat: VATResult {
-        VATHelpers.calcVat(netTotal, treatment: vatTreatment)
+    /// Aggregate VAT across all line items based on per-item vatTreatment
+    private var vatSummary: (totalVat: Double, grossTotal: Double, hasVat: Bool) {
+        var totalVat = 0.0
+        var grossTotal = 0.0
+        for item in lineItems {
+            let itemNet = item.quantity * item.unitPrice
+            let treatment = lineItemCustomValues[item.id]?["vat"] ?? "pending"
+            let result = VATHelpers.calcVat(itemNet, treatment: treatment)
+            totalVat += result.vatAmount
+            grossTotal += result.gross
+        }
+        let hasVat = lineItems.contains { (lineItemCustomValues[$0.id]?["vat"] ?? "pending") != "pending" }
+        return (totalVat, grossTotal, hasVat)
     }
 
     var body: some View {
@@ -1044,24 +1090,17 @@ struct LineItemsPage: View {
                     Text("Net Total").font(.system(size: 13)).foregroundColor(.secondary)
                     Text(FormatUtils.formatCurrency(netTotal, code: currency)).font(.system(size: 15, weight: .semibold, design: .monospaced))
                 }
-                if vatTreatment != "pending" {
+                if vatSummary.hasVat {
                     HStack {
-                        HStack(spacing: 4) {
-                            Text("VAT (\(VATHelpers.vatLabel(vatTreatment)))").font(.system(size: 12)).foregroundColor(.secondary)
-                            if vat.reverseCharged {
-                                Text("RC").font(.system(size: 8, weight: .bold)).foregroundColor(.orange)
-                                    .padding(.horizontal, 4).padding(.vertical, 1)
-                                    .background(Color.orange.opacity(0.1)).cornerRadius(3)
-                            }
-                        }
+                        Text("VAT").font(.system(size: 12)).foregroundColor(.secondary)
                         Spacer()
-                        Text(FormatUtils.formatCurrency(vat.vatAmount, code: currency)).font(.system(size: 13, design: .monospaced)).foregroundColor(.secondary)
+                        Text(FormatUtils.formatCurrency(vatSummary.totalVat, code: currency)).font(.system(size: 13, design: .monospaced)).foregroundColor(.secondary)
                     }
                     Divider()
                     HStack {
                         Text("Gross Total").font(.system(size: 14, weight: .bold))
                         Spacer()
-                        Text(FormatUtils.formatCurrency(vat.gross, code: currency)).font(.system(size: 20, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
+                        Text(FormatUtils.formatCurrency(vatSummary.grossTotal, code: currency)).font(.system(size: 20, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
                     }
                 } else {
                     HStack {
@@ -1137,7 +1176,7 @@ struct LineItemsPage: View {
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 
-    private let liSystemLabels: Set<String> = ["line_description", "line_quantity", "line_unit_price", "account_code", "department", "exp_type"]
+    private let liSystemLabels: Set<String> = ["line_description", "line_quantity", "line_unit_price", "account_code", "department", "exp_type", "vat", "vat_treatment", "line_vat", "tax_type", "tax_rate"]
 
     @ViewBuilder
     private func liFieldView(_ field: FormField, itemId: String, item: LineItem) -> some View {
@@ -1173,6 +1212,15 @@ struct LineItemsPage: View {
                 PickerField(selection: liBindExpType(itemId), placeholder: "Select type...",
                     options: expenditureTypes.map { DropdownOption($0, $0) })
             }
+        } else if field.label == "vat" || field.label == "vat_treatment" || field.label == "tax_type"
+                    || field.selectionType == "vat" || field.selectionType == "tax_type" {
+            FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
+                PickerField(selection: liBindVat(itemId), placeholder: "Select VAT...",
+                    options: VATHelpers.options.map { DropdownOption($0.value, $0.label) })
+            }
+        } else if field.label == "tax_rate" {
+            // Tax rate is auto-derived from VAT treatment — hide or show read-only
+            EmptyView()
         } else if !liSystemLabels.contains(field.label ?? "") {
             // Custom field — render if label is not a known system label
             liCustomFieldView(itemId: itemId, field: field)
@@ -1181,11 +1229,37 @@ struct LineItemsPage: View {
 
     // Amount row — always shown at the bottom of every line item card
     private func liAmountRow(_ item: LineItem) -> some View {
-        HStack {
-            Text("Amount").font(.system(size: 13, weight: .semibold)).foregroundColor(.secondary)
-            Spacer()
-            Text(FormatUtils.formatCurrency(item.quantity * item.unitPrice, code: currency))
-                .font(.system(size: 15, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
+        let itemNet = item.quantity * item.unitPrice
+        let treatment = lineItemCustomValues[item.id]?["vat"] ?? "pending"
+        let vatResult = VATHelpers.calcVat(itemNet, treatment: treatment)
+        return VStack(spacing: 4) {
+            HStack {
+                Text("Net").font(.system(size: 12)).foregroundColor(.secondary)
+                Spacer()
+                Text(FormatUtils.formatCurrency(itemNet, code: currency))
+                    .font(.system(size: 13, design: .monospaced)).foregroundColor(.primary)
+            }
+            if treatment != "pending" {
+                HStack {
+                    HStack(spacing: 4) {
+                        Text("VAT (\(VATHelpers.vatLabel(treatment)))").font(.system(size: 11)).foregroundColor(.secondary)
+                        if vatResult.reverseCharged {
+                            Text("RC").font(.system(size: 8, weight: .bold)).foregroundColor(.orange)
+                                .padding(.horizontal, 3).padding(.vertical, 1)
+                                .background(Color.orange.opacity(0.1)).cornerRadius(3)
+                        }
+                    }
+                    Spacer()
+                    Text(FormatUtils.formatCurrency(vatResult.vatAmount, code: currency))
+                        .font(.system(size: 11, design: .monospaced)).foregroundColor(.secondary)
+                }
+            }
+            HStack {
+                Text("Total").font(.system(size: 13, weight: .semibold)).foregroundColor(.secondary)
+                Spacer()
+                Text(FormatUtils.formatCurrency(vatResult.gross, code: currency))
+                    .font(.system(size: 15, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
+            }
         }
         .padding(.top, 4)
     }
@@ -1229,7 +1303,12 @@ struct LineItemsPage: View {
             }
         )
         FieldGroup(label: field.name.uppercased(), optional: !field.isRequired) {
-            InputField(text: binding, placeholder: "Enter \(field.name.lowercased())...")
+            if field.selectionType == "vat" || field.selectionType == "tax_type" {
+                PickerField(selection: binding, placeholder: "Select VAT...",
+                    options: VATHelpers.options.map { DropdownOption($0.value, $0.label) })
+            } else {
+                InputField(text: binding, placeholder: "Enter \(field.name.lowercased())...")
+            }
         }
     }
 
@@ -1282,6 +1361,15 @@ struct LineItemsPage: View {
     private func liBindExpType(_ id: String) -> Binding<String> {
         Binding<String>(get: { lineItems.first { $0.id == id }?.expenditureType ?? "" },
                         set: { v in if let i = lineItems.firstIndex(where: { $0.id == id }) { lineItems[i].expenditureType = v } })
+    }
+    private func liBindVat(_ id: String) -> Binding<String> {
+        Binding<String>(
+            get: { self.lineItemCustomValues[id]?["vat"] ?? "pending" },
+            set: { val in
+                if self.lineItemCustomValues[id] == nil { self.lineItemCustomValues[id] = [:] }
+                self.lineItemCustomValues[id]?["vat"] = val
+            }
+        )
     }
 }
 

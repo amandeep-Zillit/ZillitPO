@@ -117,12 +117,10 @@ extension POViewModel {
                     let pos = raw.filter { ($0.status ?? "") != "DRAFT" }.map { $0.toPO(vendors: v, departments: d) }
                     self?.purchaseOrders = pos
                     print("✅ Loaded \(pos.count) POs")
-                    // Debug: log pending POs tier resolution
-                    let pendingPOs = pos.filter { $0.poStatus == .pending }
-                    for p in pendingPOs.prefix(3) {
-                        let cfgA = ApprovalHelpers.resolveConfig(self?.tierConfigRows, deptId: p.departmentId, amount: p.totalAmount)
-                        let cfgB = ApprovalHelpers.resolveConfig(self?.tierConfigRows, deptId: p.departmentId)
-                        print("  🔍 PO \(p.poNumber) dept=\(p.departmentId ?? "nil") amt=\(p.totalAmount) tiersA=\(ApprovalHelpers.getTotalTiers(cfgA)) tiersB=\(ApprovalHelpers.getTotalTiers(cfgB)) approvals=\(p.approvals.count)")
+                    // Debug: log PO VAT details
+                    for p in pos.prefix(5) {
+                        let liVats = p.lineItems.map { "\($0.id.prefix(6))=\($0.vatTreatment)" }
+                        print("  📥 PO \(p.poNumber) poVat=\(p.vatTreatment) amt=\(p.totalAmount) liVats=\(liVats)")
                     }
                 case .failure(let error):
                     print("❌ Fetch POs failed: \(error)")
@@ -224,12 +222,13 @@ extension POViewModel {
         let cfg = ApprovalHelpers.resolveConfig(tierConfigRows, deptId: dept, amount: fd.netAmount)
         let auto = ApprovalHelpers.getAutoApprovals(cfg, userId: u.id, deptId: dept)
         let lineItemPayloads: [[String: Any]] = fd.lineItems.map {
-            var item: [String: Any] = ["id":$0.id,"description":$0.description,"quantity":$0.quantity,"unit_price":$0.unitPrice,"total":$0.total,"account":$0.account,"department":self.resolveDeptId($0.department),"expenditure_type":$0.expenditureType]
+            var item: [String: Any] = ["id":$0.id,"description":$0.description,"quantity":$0.quantity,"unit_price":$0.unitPrice,"total":$0.total,"account":$0.account,"department":self.resolveDeptId($0.department),"expenditure_type":$0.expenditureType,"vat_treatment":$0.vatTreatment]
+            // Include VAT in custom_fields so the API persists it
+            var cfArr: [[String: String]] = [["name": "vat", "value": $0.vatTreatment]]
             if let customVals = fd.lineItemCustomValues[$0.id] {
-                var cfArr: [[String: String]] = []
-                for (k, v) in customVals where !v.isEmpty { cfArr.append(["name": k, "value": v]) }
-                if !cfArr.isEmpty { item["custom_fields"] = cfArr }
+                for (k, v) in customVals where !v.isEmpty && k != "vat" { cfArr.append(["name": k, "value": v]) }
             }
+            item["custom_fields"] = cfArr
             return item
         }
         var p: [String: Any] = ["vendor_id": fd.vendorId, "department_id": dept, "nominal_code": fd.nominalCode,
@@ -267,6 +266,12 @@ extension POViewModel {
             }
         }
 
+        // Debug: log VAT values being sent
+        print("📤 Submit PO: vat_treatment=\(fd.vatTreatment) existingId=\(fd.existingDraftId ?? "new")")
+        for li in fd.lineItems {
+            print("  📤 LI \(li.id.prefix(8)): vat=\(li.vatTreatment) desc=\(li.description) total=\(li.total)")
+        }
+
         if let eid = fd.existingDraftId {
             POCodableTask.updatePO(eid, p, completion).urlDataTask?.resume()
         } else {
@@ -283,13 +288,14 @@ extension POViewModel {
                 "id": $0.id, "description": $0.description,
                 "quantity": $0.quantity, "unit_price": $0.unitPrice, "total": $0.total,
                 "account": $0.account, "department": self.resolveDeptId($0.department),
-                "expenditure_type": $0.expenditureType
+                "expenditure_type": $0.expenditureType, "vat_treatment": $0.vatTreatment
             ]
+            // Include VAT in custom_fields so the API persists it
+            var cfArr: [[String: String]] = [["name": "vat", "value": $0.vatTreatment]]
             if let customVals = fd.lineItemCustomValues[$0.id] {
-                var cfArr: [[String: String]] = []
-                for (k, v) in customVals where !v.isEmpty { cfArr.append(["name": k, "value": v]) }
-                if !cfArr.isEmpty { item["custom_fields"] = cfArr }
+                for (k, v) in customVals where !v.isEmpty && k != "vat" { cfArr.append(["name": k, "value": v]) }
             }
+            item["custom_fields"] = cfArr
             return item
         }
 

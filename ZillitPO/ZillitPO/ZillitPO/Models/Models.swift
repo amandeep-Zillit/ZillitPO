@@ -9,6 +9,13 @@ func flexibleIntDecode<K: CodingKey>(_ container: KeyedDecodingContainer<K>, _ k
     return nil
 }
 
+func flexibleDoubleDecode<K: CodingKey>(_ container: KeyedDecodingContainer<K>, _ key: K) -> Double? {
+    if let v = try? container.decode(Double.self, forKey: key) { return v }
+    if let v = try? container.decode(Int.self, forKey: key) { return Double(v) }
+    if let v = try? container.decode(String.self, forKey: key) { return Double(v) }
+    return nil
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Models — 1:1 with DB Migrations (001–010)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -267,9 +274,18 @@ struct PurchaseOrder: Identifiable, Equatable {
     var department: String = ""
     var lineItems: [LineItem] = []
 
-    static func == (lhs: PurchaseOrder, rhs: PurchaseOrder) -> Bool { lhs.id == rhs.id }
+    static func == (lhs: PurchaseOrder, rhs: PurchaseOrder) -> Bool {
+        lhs.id == rhs.id && lhs.updatedAt == rhs.updatedAt && lhs.status == rhs.status
+        && lhs.netAmount == rhs.netAmount && lhs.vatTreatment == rhs.vatTreatment
+        && lhs.lineItems.count == rhs.lineItems.count
+    }
     var poStatus: POStatus { POStatus.fromAPI(status) }
-    var totalAmount: Double { netAmount }
+    var totalAmount: Double {
+        if netAmount > 0 { return netAmount }
+        // Fallback: compute from line items if net_amount is 0 or missing
+        let computed = lineItems.filter { $0.splitParentId == nil }.reduce(0.0) { $0 + ($1.quantity * $1.unitPrice) }
+        return computed > 0 ? computed : netAmount
+    }
 }
 
 struct DeliveryAddress: Codable, Equatable {
@@ -327,6 +343,7 @@ struct LineItem: Identifiable, Codable, Equatable {
     var account: String = ""
     var department: String = ""
     var expenditureType: String = "Purchase"
+    var vatTreatment: String = "pending"
     var rentalStart: Int64?; var rentalEnd: Int64?
     var splitParentId: String?
     var customFields: [CustomFieldValue] = []
@@ -336,7 +353,7 @@ struct LineItem: Identifiable, Codable, Equatable {
         case id, description, quantity, total, account, department
         case projectId = "project_id"; case userId = "user_id"; case poId = "po_id"
         case lineNumber = "line_number"; case unitPrice = "unit_price"
-        case expenditureType = "expenditure_type"
+        case expenditureType = "expenditure_type"; case vatTreatment = "vat_treatment"
         case rentalStart = "rental_start"; case rentalEnd = "rental_end"
         case splitParentId = "split_parent_id"; case customFields = "custom_fields"
         case createdAt = "created_at"; case updatedAt = "updated_at"
@@ -344,10 +361,11 @@ struct LineItem: Identifiable, Codable, Equatable {
 
     init(id: String = UUID().uuidString, description: String = "", quantity: Double = 1,
          unitPrice: Double = 0, total: Double = 0, account: String = "",
-         department: String = "", expenditureType: String = "Purchase") {
+         department: String = "", expenditureType: String = "Purchase", vatTreatment: String = "pending") {
         self.id = id; self.description = description; self.quantity = quantity
         self.unitPrice = unitPrice; self.total = total; self.account = account
         self.department = department; self.expenditureType = expenditureType
+        self.vatTreatment = vatTreatment
     }
 }
 
@@ -358,7 +376,7 @@ struct POTemplate: Identifiable, Codable {
     var templateNumber: String?; var templateName: String?
     var vendorId: String?; var departmentId: String?; var nominalCode: String?
     var description: String?; var currency: String?; var notes: String?
-    var netAmount: Int?; var vatTreatment: String?
+    var netAmount: Double?; var vatTreatment: String?
     var deliveryAddress: FlexibleDeliveryAddress?; var deliveryDate: Int?
     var customFields: FlexibleCustomFields?; var effectiveDate: Int?
     var createdAt: Int?; var updatedAt: Int?
@@ -393,7 +411,7 @@ struct POTemplate: Identifiable, Codable {
         customFields = try? c.decode(FlexibleCustomFields.self, forKey: .customFields)
         lineItems = try? c.decode(FlexibleLineItems.self, forKey: .lineItems)
         // Flexible Int fields
-        netAmount = flexibleIntDecode(c, .netAmount)
+        netAmount = flexibleDoubleDecode(c, .netAmount)
         deliveryDate = flexibleIntDecode(c, .deliveryDate)
         effectiveDate = flexibleIntDecode(c, .effectiveDate)
         createdAt = flexibleIntDecode(c, .createdAt)

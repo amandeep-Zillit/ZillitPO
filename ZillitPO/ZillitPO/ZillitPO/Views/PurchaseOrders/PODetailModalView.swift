@@ -42,7 +42,27 @@ struct PODetailContentView: View {
     @State private var pdfError: String?
     @State private var pdfTask: URLSessionDataTask?
 
-    private var vat: VATResult { VATHelpers.calcVat(po.netAmount, treatment: po.vatTreatment) }
+    /// Aggregate VAT across line items
+    private var vatSummary: (totalVat: Double, grossTotal: Double, label: String) {
+        if po.lineItems.isEmpty {
+            let result = VATHelpers.calcVat(po.netAmount, treatment: po.vatTreatment)
+            return (result.vatAmount, result.gross, VATHelpers.vatLabel(po.vatTreatment))
+        }
+        var totalVat = 0.0; var grossTotal = 0.0
+        var treatments = Set<String>()
+        for li in po.lineItems {
+            let result = VATHelpers.calcVat(li.quantity * li.unitPrice, treatment: li.vatTreatment)
+            totalVat += result.vatAmount; grossTotal += result.gross
+            treatments.insert(li.vatTreatment)
+        }
+        let label: String
+        if totalVat > 0 {
+            label = "20% Standard Rate"
+        } else {
+            label = "Pending"
+        }
+        return (totalVat, grossTotal, label)
+    }
     private var vis: ApprovalVisibility {
         let c = ApprovalHelpers.resolveConfig(appState.tierConfigRows, deptId: po.departmentId, amount: po.totalAmount)
             ?? ApprovalHelpers.resolveConfig(appState.tierConfigRows, deptId: po.departmentId)
@@ -71,11 +91,15 @@ struct PODetailContentView: View {
                         Divider().padding(.vertical, 4)
                         DetailRow(label: "Department", value: po.department.isEmpty ? "—" : po.department)
                         Divider().padding(.vertical, 4)
-                        DetailRow(label: "Amount (Gross)", value: FormatUtils.formatCurrency(vat.gross, code: po.currency))
+                        DetailRow(label: "Net Amount", value: FormatUtils.formatCurrency(po.totalAmount, code: po.currency))
+                        Divider().padding(.vertical, 4)
+                        DetailRow(label: "VAT", value: vatSummary.totalVat > 0
+                            ? "\(vatSummary.label) — \(FormatUtils.formatCurrency(vatSummary.totalVat, code: po.currency))"
+                            : vatSummary.label)
+                        Divider().padding(.vertical, 4)
+                        DetailRow(label: "Gross Total", value: FormatUtils.formatCurrency(vatSummary.grossTotal, code: po.currency))
                         Divider().padding(.vertical, 4)
                         DetailRow(label: "Currency", value: po.currency)
-                        Divider().padding(.vertical, 4)
-                        DetailRow(label: "VAT", value: VATHelpers.vatLabel(po.vatTreatment))
                         Divider().padding(.vertical, 4)
                         DetailRow(label: "Created By", value: UsersData.byId[po.userId]?.fullName ?? po.userId)
                         if let creator = UsersData.byId[po.userId], !creator.displayDesignation.isEmpty {
@@ -125,11 +149,17 @@ struct PODetailContentView: View {
                                 .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 8)
 
                             ForEach(po.lineItems, id: \.id) { li in
-                                HStack {
-                                    Text(li.description).font(.system(size: 12)).lineLimit(1)
-                                    Spacer()
-                                    Text("×\(Int(li.quantity))").font(.system(size: 11)).foregroundColor(.secondary)
-                                    Text(FormatUtils.formatCurrency(li.total, code: po.currency)).font(.system(size: 12, weight: .medium, design: .monospaced))
+                                VStack(spacing: 2) {
+                                    HStack {
+                                        Text(li.description).font(.system(size: 12)).lineLimit(1)
+                                        Spacer()
+                                        Text("×\(Int(li.quantity))").font(.system(size: 11)).foregroundColor(.secondary)
+                                        Text(FormatUtils.formatCurrency(li.quantity * li.unitPrice, code: po.currency)).font(.system(size: 12, weight: .medium, design: .monospaced))
+                                    }
+                                    HStack {
+                                        Spacer()
+                                        Text(VATHelpers.vatLabel(li.vatTreatment)).font(.system(size: 10)).foregroundColor(.secondary)
+                                    }
                                 }
                                 .padding(.horizontal, 14).padding(.vertical, 6)
                                 Divider().padding(.horizontal, 14)
@@ -138,14 +168,18 @@ struct PODetailContentView: View {
                             HStack {
                                 Spacer()
                                 Text("VAT: ").font(.system(size: 13)).foregroundColor(.secondary)
-                                Text(FormatUtils.formatCurrency(vat.vatAmount, code: po.currency)).font(.system(size: 13, design: .monospaced)).foregroundColor(.secondary)
+                                if vatSummary.totalVat > 0 {
+                                    Text(FormatUtils.formatCurrency(vatSummary.totalVat, code: po.currency)).font(.system(size: 13, design: .monospaced)).foregroundColor(.secondary)
+                                } else {
+                                    Text(vatSummary.label).font(.system(size: 13)).foregroundColor(.secondary)
+                                }
                             }
                             .padding(.horizontal, 14).padding(.top, 8)
 
                             HStack {
                                 Spacer()
                                 Text("Gross: ").font(.system(size: 14, weight: .semibold))
-                                Text(FormatUtils.formatCurrency(vat.gross, code: po.currency)).font(.system(size: 16, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
+                                Text(FormatUtils.formatCurrency(vatSummary.grossTotal, code: po.currency)).font(.system(size: 16, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
                             }
                             .padding(.horizontal, 14).padding(.vertical, 6)
                         }

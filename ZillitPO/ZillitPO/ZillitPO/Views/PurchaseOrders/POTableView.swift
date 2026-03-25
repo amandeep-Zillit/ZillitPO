@@ -59,7 +59,10 @@ struct PORow: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 4) {
-                Text(FormatUtils.formatCurrency(VATHelpers.calcVat(po.totalAmount, treatment: po.vatTreatment).gross, code: po.currency))
+                Text(FormatUtils.formatCurrency(po.lineItems.isEmpty
+                    ? VATHelpers.calcVat(po.totalAmount, treatment: po.vatTreatment).gross
+                    : po.lineItems.reduce(0.0) { $0 + VATHelpers.calcVat($1.quantity * $1.unitPrice, treatment: $1.vatTreatment).gross },
+                    code: po.currency))
                     .font(.system(size: 13, design: .monospaced))
                 statusBadge
             }

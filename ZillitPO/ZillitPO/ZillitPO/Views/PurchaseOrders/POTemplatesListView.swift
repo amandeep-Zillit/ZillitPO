@@ -20,7 +20,7 @@ struct POTemplatesListView: View {
                                 Text(tpl.templateNumber ?? "—").font(.system(size: 11, design: .monospaced)).foregroundColor(.goldDark)
                             }
                             Spacer()
-                            Text(FormatUtils.formatCurrency(Double(tpl.netAmount ?? 0), code: tpl.currency ?? "GBP")).font(.system(size: 13, design: .monospaced))
+                            Text(FormatUtils.formatCurrency(tpl.netAmount ?? 0, code: tpl.currency ?? "GBP")).font(.system(size: 13, design: .monospaced))
                             Image(systemName: "chevron.right").font(.system(size: 10, weight: .medium)).foregroundColor(.gray.opacity(0.5)).padding(.leading, 6)
                         }
                         .contentShape(Rectangle())

@@ -55,7 +55,14 @@ extension POViewModel {
 
     var pendingCount: Int { filteredPOs.filter { $0.poStatus == .pending }.count }
     var approvedCount: Int { filteredPOs.filter { $0.poStatus == .approved || $0.poStatus == .acctEntered }.count }
-    var totalValue: Double { filteredPOs.reduce(0) { $0 + VATHelpers.calcVat($1.totalAmount, treatment: $1.vatTreatment).gross } }
+    var totalValue: Double {
+        filteredPOs.reduce(0.0) { total, po in
+            if po.lineItems.isEmpty {
+                return total + VATHelpers.calcVat(po.totalAmount, treatment: po.vatTreatment).gross
+            }
+            return total + po.lineItems.reduce(0.0) { $0 + VATHelpers.calcVat($1.quantity * $1.unitPrice, treatment: $1.vatTreatment).gross }
+        }
+    }
 
     // MARK: - Template Body Builder
 
@@ -74,13 +81,13 @@ extension POViewModel {
                 "id": li.id, "description": li.description,
                 "quantity": li.quantity, "unit_price": li.unitPrice, "total": li.total,
                 "account": li.account, "department": deptId,
-                "expenditure_type": li.expenditureType
+                "expenditure_type": li.expenditureType, "vat_treatment": li.vatTreatment
             ]
+            var cfArr: [[String: String]] = [["name": "vat", "value": li.vatTreatment]]
             if let customVals = fd.lineItemCustomValues[li.id] {
-                var cfArr: [[String: String]] = []
-                for (k, v) in customVals where !v.isEmpty { cfArr.append(["name": k, "value": v]) }
-                if !cfArr.isEmpty { item["custom_fields"] = cfArr }
+                for (k, v) in customVals where !v.isEmpty && k != "vat" { cfArr.append(["name": k, "value": v]) }
             }
+            item["custom_fields"] = cfArr
             return item
         }
 

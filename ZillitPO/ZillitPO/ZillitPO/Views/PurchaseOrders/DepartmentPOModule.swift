@@ -719,8 +719,7 @@ struct EditTemplateFormView: View {
                     lineItems: $lineItems,
                     lineItemCustomValues: $lineItemCustomValues,
                     formFields: tplLineItemFields,
-                    currency: currency,
-                    vatTreatment: vatTreatment
+                    currency: currency
                 ).environmentObject(appState),
                 isActive: $showLineItemsPage
             ) { EmptyView() }
@@ -1437,8 +1436,7 @@ struct CreateTemplateFormView: View {
                     lineItems: $lineItems,
                     lineItemCustomValues: $lineItemCustomValues,
                     formFields: ctLineItemFields,
-                    currency: currency,
-                    vatTreatment: vatTreatment
+                    currency: currency
                 ).environmentObject(appState),
                 isActive: $showLineItemsPage
             ) { EmptyView() }

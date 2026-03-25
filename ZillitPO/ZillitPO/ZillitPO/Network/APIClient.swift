@@ -150,14 +150,14 @@ struct PurchaseOrderRaw: Codable {
     var project_id: String?; var po_number: String?; var vendor_id: String?
     var department_id: String?; var nominal_code: String?; var description: String?
     var currency: String?; var effective_date: Int?; var notes: String?
-    var line_items: FlexibleLineItems?; var net_amount: Int?
+    var line_items: FlexibleLineItems?; var net_amount: Double?
     var status: String?; var assigned_to: String?; var raised_by: String?; var user_id: String?
     var approvals: FlexibleApprovals?; var vat_treatment: String?
     var delivery_address: FlexibleDeliveryAddress?; var delivery_date: Int?
     var rejection_reason: String?; var rejected_by: String?; var rejected_at: Int?
     var reassignment_reason: String?; var reassigned_by: String?; var reassigned_at: Int?
     var closure_reason: String?; var closed_by: String?; var closed_at: Int?
-    var vat_amount: Int?; var gross_total: Int?
+    var vat_amount: Double?; var gross_total: Double?
     var custom_fields: FlexibleCustomFields?
     var created_at: Int?; var updated_at: Int?
 
@@ -196,30 +196,31 @@ struct PurchaseOrderRaw: Codable {
         approvals = try? c.decode(FlexibleApprovals.self, forKey: .approvals)
         delivery_address = try? c.decode(FlexibleDeliveryAddress.self, forKey: .delivery_address)
         custom_fields = try? c.decode(FlexibleCustomFields.self, forKey: .custom_fields)
-        // Flexible Int fields (handle string/double/int from API)
+        // Flexible fields (handle string/double/int from API)
         effective_date = flexibleIntDecode(c, .effective_date)
-        net_amount = flexibleIntDecode(c, .net_amount)
+        net_amount = flexibleDoubleDecode(c, .net_amount)
         delivery_date = flexibleIntDecode(c, .delivery_date)
         rejected_at = flexibleIntDecode(c, .rejected_at)
         reassigned_at = flexibleIntDecode(c, .reassigned_at)
         closed_at = flexibleIntDecode(c, .closed_at)
-        vat_amount = flexibleIntDecode(c, .vat_amount)
-        gross_total = flexibleIntDecode(c, .gross_total)
+        vat_amount = flexibleDoubleDecode(c, .vat_amount)
+        gross_total = flexibleDoubleDecode(c, .gross_total)
         created_at = flexibleIntDecode(c, .created_at)
         updated_at = flexibleIntDecode(c, .updated_at)
     }
 }
 
 struct LineItemRaw: Codable {
-    var id: String?; var description: String?; var quantity: Int?
-    var unit_price: Int?; var total: Int?
+    var id: String?; var description: String?; var quantity: Double?
+    var unit_price: Double?; var total: Double?
     var account: String?; var department: String?; var expenditure_type: String?
+    var vat_treatment: String?
     var rental_start: Int?; var rental_end: Int?
     var split_parent_id: String?; var custom_fields: [CustomFieldValue]?
 
     enum CodingKeys: String, CodingKey {
         case id, description, quantity, unit_price, total, account, department
-        case expenditure_type, rental_start, rental_end, split_parent_id, custom_fields
+        case expenditure_type, vat_treatment, rental_start, rental_end, split_parent_id, custom_fields
     }
 
     init(from decoder: Decoder) throws {
@@ -229,12 +230,13 @@ struct LineItemRaw: Codable {
         account = try? c.decode(String.self, forKey: .account)
         department = try? c.decode(String.self, forKey: .department)
         expenditure_type = try? c.decode(String.self, forKey: .expenditure_type)
+        vat_treatment = try? c.decode(String.self, forKey: .vat_treatment)
         split_parent_id = try? c.decode(String.self, forKey: .split_parent_id)
         custom_fields = try? c.decode([CustomFieldValue].self, forKey: .custom_fields)
-        // Flexible Int fields
-        quantity = flexibleIntDecode(c, .quantity)
-        unit_price = flexibleIntDecode(c, .unit_price)
-        total = flexibleIntDecode(c, .total)
+        // Flexible fields
+        quantity = flexibleDoubleDecode(c, .quantity)
+        unit_price = flexibleDoubleDecode(c, .unit_price)
+        total = flexibleDoubleDecode(c, .total)
         rental_start = flexibleIntDecode(c, .rental_start)
         rental_end = flexibleIntDecode(c, .rental_end)
     }
@@ -359,11 +361,19 @@ extension PurchaseOrderRaw {
     func toPO(vendors: [Vendor], departments: [Department]) -> PurchaseOrder {
         let v = vendors.first { $0.id == (vendor_id ?? "") }
         let d = departments.first { $0.id == (department_id ?? "") || $0.identifier == (department_id ?? "") }
-        let items = (line_items?.items ?? []).map {
-            LineItem(id: $0.id ?? UUID().uuidString, description: $0.description ?? "",
-                     quantity: Double($0.quantity ?? 1), unitPrice: Double($0.unit_price ?? 0),
-                     total: Double($0.total ?? 0), account: $0.account ?? "",
-                     department: $0.department ?? "", expenditureType: $0.expenditure_type ?? "Purchase")
+        let poLevelVat = vat_treatment ?? "pending"
+        let items = (line_items?.items ?? []).map { raw -> LineItem in
+            // Read VAT from: 1) line item vat_treatment field, 2) custom_fields "vat", 3) PO-level
+            let cfVat = raw.custom_fields?.first(where: { $0.name == "vat" })?.value
+            let liVat = raw.vat_treatment ?? cfVat ?? poLevelVat
+            var li = LineItem(id: raw.id ?? UUID().uuidString, description: raw.description ?? "",
+                     quantity: raw.quantity ?? 1, unitPrice: raw.unit_price ?? 0,
+                     total: raw.total ?? 0, account: raw.account ?? "",
+                     department: raw.department ?? "", expenditureType: raw.expenditure_type ?? "Purchase",
+                     vatTreatment: liVat)
+            // Preserve other custom fields (exclude "vat" since it's now on the model)
+            li.customFields = (raw.custom_fields ?? []).filter { $0.name != "vat" }
+            return li
         }
         let apps = (approvals?.items ?? []).map {
             Approval(userId: $0.user_id ?? "", tierNumber: $0.tier_number ?? 0, approvedAt: Int64($0.approved_at ?? 0))
@@ -373,7 +383,10 @@ extension PurchaseOrderRaw {
         po.poNumber = po_number ?? ""; po.vendorId = vendor_id; po.departmentId = department_id
         po.nominalCode = nominal_code; po.description = description; po.currency = currency ?? "GBP"
         po.effectiveDate = effective_date.map { Int64($0) }; po.notes = notes
-        po.netAmount = Double(net_amount ?? 0); po.status = status ?? "DRAFT"
+        let rawNetAmount = net_amount ?? 0
+        let computedNet = items.filter { $0.splitParentId == nil }.reduce(0.0) { $0 + ($1.quantity * $1.unitPrice) }
+        po.netAmount = rawNetAmount > 0 ? rawNetAmount : computedNet
+        po.status = status ?? "DRAFT"
         po.assignedTo = assigned_to; po.raisedBy = raised_by
         po.rejectedBy = rejected_by; po.rejectedAt = rejected_at.map { Int64($0) }
         po.rejectionReason = rejection_reason; po.reassignmentReason = reassignment_reason
@@ -381,8 +394,8 @@ extension PurchaseOrderRaw {
         po.vatTreatment = vat_treatment ?? "pending"; po.deliveryAddress = delivery_address?.address
         po.deliveryDate = delivery_date.map { Int64($0) }; po.closedBy = closed_by
         po.closedAt = closed_at.map { Int64($0) }; po.closureReason = closure_reason
-        po.customFields = custom_fields?.items ?? []; po.vatAmount = vat_amount.map { Double($0) }
-        po.grossTotal = gross_total.map { Double($0) }; po.approvals = apps
+        po.customFields = custom_fields?.items ?? []; po.vatAmount = vat_amount
+        po.grossTotal = gross_total; po.approvals = apps
         po.createdAt = Int64(created_at ?? 0); po.updatedAt = Int64(updated_at ?? 0)
         po.vendor = v?.name ?? ""; po.department = d?.displayName ?? ""; po.lineItems = items
         po.vendorAddress = [v?.address.line1, v?.address.city, v?.address.postalCode]
