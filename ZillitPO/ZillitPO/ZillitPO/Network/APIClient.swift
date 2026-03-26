@@ -348,6 +348,99 @@ enum FlexibleCustomFields: Codable {
     }
 }
 
+// MARK: - Invoice Raw API type
+
+struct InvoiceRaw: Codable {
+    var id: String
+    var project_id: String?; var invoice_number: String?; var vendor_id: String?
+    var department_id: String?; var nominal_code: String?; var description: String?
+    var currency: String?; var invoice_date: Int?; var due_date: Int?; var notes: String?
+    var line_items: FlexibleLineItems?; var net_amount: Double?
+    var status: String?; var user_id: String?
+    var approvals: FlexibleApprovals?; var vat_treatment: String?
+    var vat_amount: Double?; var gross_total: Double?
+    var po_id: String?; var po_number: String?
+    var custom_fields: FlexibleCustomFields?
+    var rejection_reason: String?; var rejected_by: String?; var rejected_at: Int?
+    var created_at: Int?; var updated_at: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case id, project_id, invoice_number, vendor_id, department_id, nominal_code, description
+        case currency, invoice_date, due_date, notes, line_items, net_amount, status, user_id
+        case approvals, vat_treatment, vat_amount, gross_total, po_id, po_number
+        case custom_fields, rejection_reason, rejected_by, rejected_at, created_at, updated_at
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        project_id = try? c.decode(String.self, forKey: .project_id)
+        invoice_number = try? c.decode(String.self, forKey: .invoice_number)
+        vendor_id = try? c.decode(String.self, forKey: .vendor_id)
+        department_id = try? c.decode(String.self, forKey: .department_id)
+        nominal_code = try? c.decode(String.self, forKey: .nominal_code)
+        description = try? c.decode(String.self, forKey: .description)
+        currency = try? c.decode(String.self, forKey: .currency)
+        notes = try? c.decode(String.self, forKey: .notes)
+        status = try? c.decode(String.self, forKey: .status)
+        user_id = try? c.decode(String.self, forKey: .user_id)
+        vat_treatment = try? c.decode(String.self, forKey: .vat_treatment)
+        po_id = try? c.decode(String.self, forKey: .po_id)
+        po_number = try? c.decode(String.self, forKey: .po_number)
+        rejection_reason = try? c.decode(String.self, forKey: .rejection_reason)
+        rejected_by = try? c.decode(String.self, forKey: .rejected_by)
+        line_items = try? c.decode(FlexibleLineItems.self, forKey: .line_items)
+        approvals = try? c.decode(FlexibleApprovals.self, forKey: .approvals)
+        custom_fields = try? c.decode(FlexibleCustomFields.self, forKey: .custom_fields)
+        // Flexible fields
+        invoice_date = flexibleIntDecode(c, .invoice_date)
+        due_date = flexibleIntDecode(c, .due_date)
+        net_amount = flexibleDoubleDecode(c, .net_amount)
+        vat_amount = flexibleDoubleDecode(c, .vat_amount)
+        gross_total = flexibleDoubleDecode(c, .gross_total)
+        rejected_at = flexibleIntDecode(c, .rejected_at)
+        created_at = flexibleIntDecode(c, .created_at)
+        updated_at = flexibleIntDecode(c, .updated_at)
+    }
+}
+
+extension InvoiceRaw {
+    func toInvoice(vendors: [Vendor], departments: [Department]) -> Invoice {
+        let v = vendors.first { $0.id == (vendor_id ?? "") }
+        let d = departments.first { $0.id == (department_id ?? "") || $0.identifier == (department_id ?? "") }
+        let items = (line_items?.items ?? []).map { raw -> LineItem in
+            let cfVat = raw.custom_fields?.first(where: { $0.name == "vat" })?.value
+            let liVat = raw.vat_treatment ?? cfVat ?? (vat_treatment ?? "pending")
+            var li = LineItem(id: raw.id ?? UUID().uuidString, description: raw.description ?? "",
+                     quantity: raw.quantity ?? 1, unitPrice: raw.unit_price ?? 0,
+                     total: raw.total ?? 0, account: raw.account ?? "",
+                     department: raw.department ?? "", expenditureType: raw.expenditure_type ?? "Purchase",
+                     vatTreatment: liVat)
+            li.customFields = (raw.custom_fields ?? []).filter { $0.name != "vat" }
+            return li
+        }
+        let apps = (approvals?.items ?? []).map {
+            Approval(userId: $0.user_id ?? "", tierNumber: $0.tier_number ?? 0, approvedAt: Int64($0.approved_at ?? 0))
+        }
+        var inv = Invoice()
+        inv.id = id; inv.projectId = project_id ?? ""; inv.userId = user_id ?? ""
+        inv.invoiceNumber = invoice_number ?? ""; inv.vendorId = vendor_id; inv.departmentId = department_id
+        inv.nominalCode = nominal_code; inv.description = description; inv.currency = currency ?? "GBP"
+        inv.invoiceDate = invoice_date.map { Int64($0) }; inv.dueDate = due_date.map { Int64($0) }
+        inv.notes = notes; inv.netAmount = net_amount ?? 0; inv.status = status ?? "DRAFT"
+        inv.vatTreatment = vat_treatment ?? "pending"; inv.poId = po_id; inv.poNumber = po_number
+        inv.vatAmount = vat_amount; inv.grossTotal = gross_total
+        inv.customFields = custom_fields?.items ?? []; inv.approvals = apps
+        inv.rejectedBy = rejected_by; inv.rejectedAt = rejected_at.map { Int64($0) }
+        inv.rejectionReason = rejection_reason
+        inv.createdAt = Int64(created_at ?? 0); inv.updatedAt = Int64(updated_at ?? 0)
+        inv.vendor = v?.name ?? ""; inv.department = d?.displayName ?? ""; inv.lineItems = items
+        inv.vendorAddress = [v?.address.line1, v?.address.city, v?.address.postalCode]
+            .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
+        return inv
+    }
+}
+
 // MARK: - Decode helper
 
 func tryDecode<T: Decodable>(_ type: T.Type, from data: Data) -> T? {

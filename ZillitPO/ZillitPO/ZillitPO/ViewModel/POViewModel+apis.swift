@@ -162,6 +162,26 @@ extension POViewModel {
         }.urlDataTask?.resume()
     }
 
+    // MARK: - Invoices
+
+    func loadInvoices() {
+        let path = "/api/v2/invoices?per_page=200"
+        POCodableTask.fetchInvoices(path) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let response):
+                    let raw = response?.data ?? []
+                    let v = self?.vendors ?? []; let d = DepartmentsData.all
+                    let invoices = raw.map { $0.toInvoice(vendors: v, departments: d) }
+                    self?.invoices = invoices
+                    print("✅ Loaded \(invoices.count) invoices")
+                case .failure(let error):
+                    print("❌ Fetch invoices failed: \(error)")
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
     // MARK: - Actions
 
     func approvePO(_ po: PurchaseOrder) {

@@ -144,7 +144,7 @@ struct DepartmentPOModule: View {
 
     private var tabBar: some View {
         HStack(spacing: 0) {
-            ForEach([DeptTab.all, .my, .department, .vendors], id: \.self) { tabButton($0) }
+            ForEach([DeptTab.all, .my, .department], id: \.self) { tabButton($0) }
         }.overlay(Rectangle().fill(Color.borderColor).frame(height: 1), alignment: .bottom)
     }
 
@@ -166,21 +166,13 @@ struct DepartmentPOModule: View {
 
     @ViewBuilder
     private var pinnedContent: some View {
-        if appState.activeTab == .vendors {
-            VendorsPinnedHeader()
-        } else {
-            QuickFiltersBar(onDraftsTemplatesTap: { navigateToDraftsTemplates = true })
-        }
+        QuickFiltersBar(onDraftsTemplatesTap: { navigateToDraftsTemplates = true })
     }
 
     @ViewBuilder
     private var scrollableContent: some View {
-        if appState.activeTab == .vendors {
-            VendorsScrollableList()
-        } else {
-            if appState.isLoading && appState.purchaseOrders.isEmpty { LoaderView() }
-            else { POStatsCards(); POTableView() }
-        }
+        if appState.isLoading && appState.purchaseOrders.isEmpty { LoaderView() }
+        else { POStatsCards(); POTableView() }
     }
 }
 

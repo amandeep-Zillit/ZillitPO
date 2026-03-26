@@ -18,6 +18,7 @@ class POViewModel: ObservableObject {
     @Published var templates: [POTemplate] = []
     @Published var drafts: [PurchaseOrder] = []
     @Published var tierConfigRows: [ApprovalTierConfig] = []
+    @Published var invoices: [Invoice] = []
     @Published var formTemplate: FormTemplateResponse?
 
     @Published var isLoading = false

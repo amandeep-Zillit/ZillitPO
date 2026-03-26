@@ -32,6 +32,9 @@ enum PORequest {
 
     // MARK: - Form Template
     case fetchFormTemplate
+
+    // MARK: - Invoices
+    case fetchInvoices(String)
 }
 
 extension PORequest: POURLRequestProtocol {
@@ -109,6 +112,10 @@ extension PORequest: POURLRequestProtocol {
         case .fetchFormTemplate:
             let endPoint = "/api/v2/purchase-orders/form-templates?module=purchase_orders"
             return APIClient.shared.buildRequest(.get, endPoint)
+
+        // MARK: Invoices
+        case .fetchInvoices(let path):
+            return APIClient.shared.buildRequest(.get, path)
         }
     }
 }

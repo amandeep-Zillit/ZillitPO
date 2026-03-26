@@ -580,6 +580,65 @@ struct FormField: Codable, Identifiable {
     }
 }
 
+// MARK: - Invoices
+
+struct Invoice: Identifiable, Equatable {
+    var id: String = UUID().uuidString
+    var projectId: String = ""
+    var userId: String = ""
+    var invoiceNumber: String = ""
+    var vendorId: String?
+    var departmentId: String?
+    var nominalCode: String?
+    var description: String?
+    var currency: String = "GBP"
+    var invoiceDate: Int64?
+    var dueDate: Int64?
+    var notes: String?
+    var netAmount: Double = 0
+    var vatAmount: Double?
+    var grossTotal: Double?
+    var status: String = "DRAFT"
+    var vatTreatment: String = "pending"
+    var poId: String?
+    var poNumber: String?
+    var lineItems: [LineItem] = []
+    var customFields: [CustomFieldSection] = []
+    var approvals: [Approval] = []
+    var rejectedBy: String?
+    var rejectedAt: Int64?
+    var rejectionReason: String?
+    var createdAt: Int64 = 0
+    var updatedAt: Int64 = 0
+
+    // Display fields (resolved, not in DB)
+    var vendor: String = ""
+    var vendorAddress: String = ""
+    var department: String = ""
+
+    static func == (lhs: Invoice, rhs: Invoice) -> Bool { lhs.id == rhs.id }
+    var invoiceStatus: InvoiceStatus { InvoiceStatus.fromAPI(status) }
+    var totalAmount: Double { netAmount }
+}
+
+enum InvoiceStatus: String, CaseIterable {
+    case draft = "DRAFT", pending = "PENDING", approved = "APPROVED"
+    case acctEntered = "ACCT_ENTERED", posted = "POSTED"
+    case rejected = "REJECTED", closed = "CLOSED"
+
+    var displayName: String {
+        switch self {
+        case .draft: return "Draft"; case .pending: return "Pending"
+        case .approved: return "Approved"; case .acctEntered: return "Acct Entered"
+        case .posted: return "Posted"; case .rejected: return "Rejected"
+        case .closed: return "Closed"
+        }
+    }
+    static func fromAPI(_ raw: String) -> InvoiceStatus {
+        InvoiceStatus(rawValue: raw.uppercased()) ?? .pending
+    }
+}
+
 // MARK: - Non-DB models
 
 typealias LegacyTierConfig = [String: [LegacyTierEntry]]

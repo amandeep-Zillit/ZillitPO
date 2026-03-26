@@ -47,7 +47,7 @@ struct ContentView: View {
                             .contentShape(Rectangle())
                         }.buttonStyle(BorderlessButtonStyle())
 
-                        NavigationLink(destination: DepartmentPOModule().onAppear { appState.loadAllData() }, isActive: $showPurchaseOrders) {
+                        NavigationLink(destination: POHubPage().onAppear { appState.loadAllData() }, isActive: $showPurchaseOrders) {
                             HStack(spacing: 12) {
                                 Image(systemName: "cart.fill").font(.system(size: 20)).foregroundColor(.white)
                                     .frame(width: 36, height: 36).background(Color.gold).cornerRadius(8)
@@ -72,6 +72,79 @@ struct ContentView: View {
         .navigationViewStyle(StackNavigationViewStyle())
         .accentColor(Color.gold)
         .sheet(isPresented: $showUserPicker) { SidebarView().environmentObject(appState) }
+    }
+}
+
+// MARK: - PO Hub Page (3 tiles: All POs, Vendors, Invoices)
+
+struct POHubPage: View {
+    @EnvironmentObject var appState: POViewModel
+    @State private var navigateToAllPOs = false
+    @State private var navigateToVendors = false
+    @State private var navigateToInvoices = false
+
+    var body: some View {
+        ZStack {
+            Color.bgBase.edgesIgnoringSafeArea(.all)
+
+            VStack(spacing: 10) {
+                // All Purchase Orders tile
+                NavigationLink(destination: DepartmentPOModule(), isActive: $navigateToAllPOs) { EmptyView() }.hidden()
+                Button(action: { navigateToAllPOs = true }) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "cart.fill").font(.system(size: 20)).foregroundColor(.white)
+                            .frame(width: 36, height: 36).background(Color.gold).cornerRadius(8)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("All Purchase Orders").font(.system(size: 15, weight: .semibold))
+                            Text("View, create and manage POs").font(.system(size: 12)).foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(.goldDark)
+                    }.padding(14).background(Color.white).cornerRadius(12)
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.gold.opacity(0.3), lineWidth: 1))
+                    .contentShape(Rectangle())
+                }.buttonStyle(BorderlessButtonStyle())
+
+                // Vendors tile
+                NavigationLink(destination: VendorsModuleView().environmentObject(appState), isActive: $navigateToVendors) { EmptyView() }.hidden()
+                Button(action: { navigateToVendors = true }) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "person.2.fill").font(.system(size: 20)).foregroundColor(.white)
+                            .frame(width: 36, height: 36).background(Color(red: 0.35, green: 0.72, blue: 0.36)).cornerRadius(8)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Vendors").font(.system(size: 15, weight: .semibold))
+                            Text("Manage vendor contacts").font(.system(size: 12)).foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(Color(red: 0.35, green: 0.72, blue: 0.36))
+                    }.padding(14).background(Color.white).cornerRadius(12)
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.35, green: 0.72, blue: 0.36).opacity(0.3), lineWidth: 1))
+                    .contentShape(Rectangle())
+                }.buttonStyle(BorderlessButtonStyle())
+
+                // Invoices tile
+                NavigationLink(destination: InvoicesModuleView().onAppear { appState.loadInvoices() }.environmentObject(appState), isActive: $navigateToInvoices) { EmptyView() }.hidden()
+                Button(action: { navigateToInvoices = true }) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "doc.text.fill").font(.system(size: 20)).foregroundColor(.white)
+                            .frame(width: 36, height: 36).background(Color(red: 0.2, green: 0.6, blue: 0.86)).cornerRadius(8)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Invoices").font(.system(size: 15, weight: .semibold))
+                            Text("View and manage invoices").font(.system(size: 12)).foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(Color(red: 0.2, green: 0.6, blue: 0.86))
+                    }.padding(14).background(Color.white).cornerRadius(12)
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.2, green: 0.6, blue: 0.86).opacity(0.3), lineWidth: 1))
+                    .contentShape(Rectangle())
+                }.buttonStyle(BorderlessButtonStyle())
+
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+        }
+        .navigationBarTitle(Text("Purchase Orders"), displayMode: .inline)
     }
 }
 

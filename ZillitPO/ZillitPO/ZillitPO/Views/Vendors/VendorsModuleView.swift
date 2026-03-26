@@ -27,29 +27,17 @@ struct VendorsPinnedHeader: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Vendors").font(.system(size: 16, weight: .semibold))
-                Spacer()
-                Button(action: { state.navigateToCreate = true }) {
-                    HStack(spacing: 4) { Image(systemName: "plus"); Text("New Vendor") }
-                        .font(.system(size: 11, weight: .semibold)).foregroundColor(.black)
-                        .padding(.horizontal, 12).padding(.vertical, 6).background(Color.gold).cornerRadius(6)
-                }
-            }
-
             // Filters
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(VendorFilter.allCases, id: \.self) { filter in
-                        Button(action: { state.activeFilter = filter }) {
-                            Text(filter.rawValue).font(.system(size: 12, weight: state.activeFilter == filter ? .semibold : .regular)).fixedSize()
-                                .foregroundColor(state.activeFilter == filter ? .black : .secondary)
-                                .padding(.horizontal, 12).padding(.vertical, 5)
-                                .background(state.activeFilter == filter ? Color.gold : Color.white).cornerRadius(6)
-                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(state.activeFilter == filter ? Color.gold : Color.borderColor, lineWidth: 1))
-                                .contentShape(Rectangle())
-                        }.buttonStyle(BorderlessButtonStyle())
-                    }
+            HStack(spacing: 6) {
+                ForEach(VendorFilter.allCases, id: \.self) { filter in
+                    Button(action: { state.activeFilter = filter }) {
+                        Text(filter.rawValue).font(.system(size: 12, weight: state.activeFilter == filter ? .semibold : .regular))
+                            .foregroundColor(state.activeFilter == filter ? .black : .secondary)
+                            .padding(.horizontal, 10).padding(.vertical, 5)
+                            .background(state.activeFilter == filter ? Color.gold : Color.white).cornerRadius(6)
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(state.activeFilter == filter ? Color.gold : Color.borderColor, lineWidth: 1))
+                            .contentShape(Rectangle())
+                    }.buttonStyle(BorderlessButtonStyle())
                 }
             }
 
@@ -151,11 +139,40 @@ struct VendorsScrollableList: View {
 // MARK: - Legacy VendorsModuleView (kept for backward compatibility)
 
 struct VendorsModuleView: View {
+    @EnvironmentObject var appState: POViewModel
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VendorsPinnedHeader()
-            VendorsScrollableList()
+        ZStack(alignment: .bottomTrailing) {
+            Color.bgBase.edgesIgnoringSafeArea(.all)
+
+            VStack(spacing: 0) {
+                VendorsPinnedHeader()
+                    .padding(.horizontal, 16).padding(.top, 10)
+                    .background(Color.bgBase)
+
+                ScrollView {
+                    VendorsScrollableList()
+                        .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 80)
+                }
+            }
+
+            // Floating New Vendor button
+            Button(action: { vendorListState.navigateToCreate = true }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus").font(.system(size: 14, weight: .bold))
+                    Text("New Vendor").font(.system(size: 14, weight: .bold))
+                }
+                .foregroundColor(.black)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 14)
+                .background(Color.gold)
+                .cornerRadius(28)
+                .shadow(color: Color.gold.opacity(0.4), radius: 8, x: 0, y: 4)
+            }
+            .padding(.trailing, 20)
+            .padding(.bottom, 24)
         }
+        .navigationBarTitle(Text("Vendors"), displayMode: .inline)
     }
 }
 
