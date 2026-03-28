@@ -19,6 +19,7 @@ class POViewModel: ObservableObject {
     @Published var drafts: [PurchaseOrder] = []
     @Published var tierConfigRows: [ApprovalTierConfig] = []
     @Published var invoices: [Invoice] = []
+    @Published var invoiceTierConfigRows: [ApprovalTierConfig] = []
     @Published var formTemplate: FormTemplateResponse?
 
     @Published var isLoading = false
@@ -41,6 +42,19 @@ class POViewModel: ObservableObject {
     @Published var editingTemplate: POTemplate?
     @Published var prefilledVendorId: String?
     @Published var popToRoot = false
+
+    // Invoice-specific state
+    @Published var selectedInvoice: Invoice?
+    @Published var showRejectInvoiceSheet = false
+    @Published var rejectInvoiceTarget: Invoice?
+    @Published var rejectInvoiceReason = ""
+    @Published var isInvoiceApprover = false
+
+    // Payment Run state
+    @Published var paymentRuns: [PaymentRun] = []
+    @Published var showRejectPaymentRunSheet = false
+    @Published var rejectPaymentRunTarget: PaymentRun?
+    @Published var rejectPaymentRunReason = ""
 
     init() { currentUser = UsersData.byId[userId]; configureAPI() }
 

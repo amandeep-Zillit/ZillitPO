@@ -353,22 +353,31 @@ enum FlexibleCustomFields: Codable {
 struct InvoiceRaw: Codable {
     var id: String
     var project_id: String?; var invoice_number: String?; var vendor_id: String?
-    var department_id: String?; var nominal_code: String?; var description: String?
-    var currency: String?; var invoice_date: Int?; var due_date: Int?; var notes: String?
-    var line_items: FlexibleLineItems?; var net_amount: Double?
-    var status: String?; var user_id: String?
-    var approvals: FlexibleApprovals?; var vat_treatment: String?
-    var vat_amount: Double?; var gross_total: Double?
-    var po_id: String?; var po_number: String?
-    var custom_fields: FlexibleCustomFields?
+    var department_id: String?; var description: String?
+    var currency: String?; var gross_amount: Double?
+    var status: String?; var approval_status: String?; var user_id: String?
+    var pay_method: String?; var cost_centre: String?; var assigned_to: String?
+    var supplier_name: String?; var reference: String?
+    var hold_reason: String?; var hold_note: String?; var is_overdue: Bool?
+    var approvals: FlexibleApprovals?
+    var approved_by: String?; var approved_at: Int?
+    var po_id: String?; var po_number: String?; var po_ids: [String]?
+    var line_items: FlexibleLineItems?
     var rejection_reason: String?; var rejected_by: String?; var rejected_at: Int?
+    var tags: [String]?
+    var invoice_date: Int?; var due_date: Int?; var effective_date: Int?
     var created_at: Int?; var updated_at: Int?
 
     enum CodingKeys: String, CodingKey {
-        case id, project_id, invoice_number, vendor_id, department_id, nominal_code, description
-        case currency, invoice_date, due_date, notes, line_items, net_amount, status, user_id
-        case approvals, vat_treatment, vat_amount, gross_total, po_id, po_number
-        case custom_fields, rejection_reason, rejected_by, rejected_at, created_at, updated_at
+        case id, project_id, invoice_number, vendor_id, department_id, description
+        case currency, gross_amount, status, approval_status, user_id
+        case pay_method, cost_centre, assigned_to, supplier_name, reference
+        case hold_reason, hold_note, is_overdue
+        case approvals, approved_by, approved_at
+        case po_id, po_number, po_ids, line_items
+        case rejection_reason, rejected_by, rejected_at
+        case tags, invoice_date, due_date, effective_date
+        case created_at, updated_at
     }
 
     init(from decoder: Decoder) throws {
@@ -378,26 +387,34 @@ struct InvoiceRaw: Codable {
         invoice_number = try? c.decode(String.self, forKey: .invoice_number)
         vendor_id = try? c.decode(String.self, forKey: .vendor_id)
         department_id = try? c.decode(String.self, forKey: .department_id)
-        nominal_code = try? c.decode(String.self, forKey: .nominal_code)
         description = try? c.decode(String.self, forKey: .description)
         currency = try? c.decode(String.self, forKey: .currency)
-        notes = try? c.decode(String.self, forKey: .notes)
         status = try? c.decode(String.self, forKey: .status)
+        approval_status = try? c.decode(String.self, forKey: .approval_status)
         user_id = try? c.decode(String.self, forKey: .user_id)
-        vat_treatment = try? c.decode(String.self, forKey: .vat_treatment)
+        pay_method = try? c.decode(String.self, forKey: .pay_method)
+        cost_centre = try? c.decode(String.self, forKey: .cost_centre)
+        assigned_to = try? c.decode(String.self, forKey: .assigned_to)
+        supplier_name = try? c.decode(String.self, forKey: .supplier_name)
+        reference = try? c.decode(String.self, forKey: .reference)
+        hold_reason = try? c.decode(String.self, forKey: .hold_reason)
+        hold_note = try? c.decode(String.self, forKey: .hold_note)
+        is_overdue = try? c.decode(Bool.self, forKey: .is_overdue)
+        approved_by = try? c.decode(String.self, forKey: .approved_by)
         po_id = try? c.decode(String.self, forKey: .po_id)
         po_number = try? c.decode(String.self, forKey: .po_number)
+        po_ids = try? c.decode([String].self, forKey: .po_ids)
         rejection_reason = try? c.decode(String.self, forKey: .rejection_reason)
         rejected_by = try? c.decode(String.self, forKey: .rejected_by)
-        line_items = try? c.decode(FlexibleLineItems.self, forKey: .line_items)
+        tags = try? c.decode([String].self, forKey: .tags)
         approvals = try? c.decode(FlexibleApprovals.self, forKey: .approvals)
-        custom_fields = try? c.decode(FlexibleCustomFields.self, forKey: .custom_fields)
-        // Flexible fields
+        line_items = try? c.decode(FlexibleLineItems.self, forKey: .line_items)
+        // Flexible fields (API returns timestamps as strings or ints)
+        gross_amount = flexibleDoubleDecode(c, .gross_amount)
         invoice_date = flexibleIntDecode(c, .invoice_date)
         due_date = flexibleIntDecode(c, .due_date)
-        net_amount = flexibleDoubleDecode(c, .net_amount)
-        vat_amount = flexibleDoubleDecode(c, .vat_amount)
-        gross_total = flexibleDoubleDecode(c, .gross_total)
+        effective_date = flexibleIntDecode(c, .effective_date)
+        approved_at = flexibleIntDecode(c, .approved_at)
         rejected_at = flexibleIntDecode(c, .rejected_at)
         created_at = flexibleIntDecode(c, .created_at)
         updated_at = flexibleIntDecode(c, .updated_at)
@@ -406,17 +423,14 @@ struct InvoiceRaw: Codable {
 
 extension InvoiceRaw {
     func toInvoice(vendors: [Vendor], departments: [Department]) -> Invoice {
-        let v = vendors.first { $0.id == (vendor_id ?? "") }
         let d = departments.first { $0.id == (department_id ?? "") || $0.identifier == (department_id ?? "") }
         let items = (line_items?.items ?? []).map { raw -> LineItem in
-            let cfVat = raw.custom_fields?.first(where: { $0.name == "vat" })?.value
-            let liVat = raw.vat_treatment ?? cfVat ?? (vat_treatment ?? "pending")
             var li = LineItem(id: raw.id ?? UUID().uuidString, description: raw.description ?? "",
                      quantity: raw.quantity ?? 1, unitPrice: raw.unit_price ?? 0,
                      total: raw.total ?? 0, account: raw.account ?? "",
                      department: raw.department ?? "", expenditureType: raw.expenditure_type ?? "Purchase",
-                     vatTreatment: liVat)
-            li.customFields = (raw.custom_fields ?? []).filter { $0.name != "vat" }
+                     vatTreatment: raw.vat_treatment ?? "pending")
+            li.customFields = raw.custom_fields ?? []
             return li
         }
         let apps = (approvals?.items ?? []).map {
@@ -425,18 +439,22 @@ extension InvoiceRaw {
         var inv = Invoice()
         inv.id = id; inv.projectId = project_id ?? ""; inv.userId = user_id ?? ""
         inv.invoiceNumber = invoice_number ?? ""; inv.vendorId = vendor_id; inv.departmentId = department_id
-        inv.nominalCode = nominal_code; inv.description = description; inv.currency = currency ?? "GBP"
-        inv.invoiceDate = invoice_date.map { Int64($0) }; inv.dueDate = due_date.map { Int64($0) }
-        inv.notes = notes; inv.netAmount = net_amount ?? 0; inv.status = status ?? "DRAFT"
-        inv.vatTreatment = vat_treatment ?? "pending"; inv.poId = po_id; inv.poNumber = po_number
-        inv.vatAmount = vat_amount; inv.grossTotal = gross_total
-        inv.customFields = custom_fields?.items ?? []; inv.approvals = apps
+        inv.description = description; inv.currency = currency ?? "GBP"
+        inv.grossAmount = gross_amount ?? 0
+        inv.status = status ?? "draft"; inv.approvalStatus = approval_status ?? "pending"
+        inv.payMethod = pay_method; inv.costCentre = cost_centre; inv.assignedTo = assigned_to
+        inv.supplierName = supplier_name ?? ""; inv.reference = reference
+        inv.holdReason = hold_reason; inv.holdNote = hold_note; inv.isOverdue = is_overdue ?? false
+        inv.poId = po_id; inv.poNumber = po_number; inv.poIds = po_ids ?? []
+        inv.approvals = apps; inv.approvedBy = approved_by
+        inv.approvedAt = approved_at.map { Int64($0) }
         inv.rejectedBy = rejected_by; inv.rejectedAt = rejected_at.map { Int64($0) }
-        inv.rejectionReason = rejection_reason
+        inv.rejectionReason = rejection_reason; inv.tags = tags ?? []
+        inv.invoiceDate = invoice_date.map { Int64($0) }
+        inv.dueDate = due_date.map { Int64($0) }
+        inv.effectiveDate = effective_date.map { Int64($0) }
         inv.createdAt = Int64(created_at ?? 0); inv.updatedAt = Int64(updated_at ?? 0)
-        inv.vendor = v?.name ?? ""; inv.department = d?.displayName ?? ""; inv.lineItems = items
-        inv.vendorAddress = [v?.address.line1, v?.address.city, v?.address.postalCode]
-            .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
+        inv.department = d?.displayName ?? ""; inv.lineItems = items
         return inv
     }
 }
@@ -494,5 +512,143 @@ extension PurchaseOrderRaw {
         po.vendorAddress = [v?.address.line1, v?.address.city, v?.address.postalCode]
             .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
         return po
+    }
+}
+
+// MARK: - Payment Run Raw API type
+
+struct PaymentRunInvoiceRaw: Codable {
+    var id: String?
+    var invoice_number: String?
+    var supplier_name: String?
+    var description: String?
+    var due_date: Int64?
+    var gross_amount: Double?
+    var currency: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, invoice_number, supplier_name, description, due_date, gross_amount, currency
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try? c.decode(String.self, forKey: .id)
+        invoice_number = try? c.decode(String.self, forKey: .invoice_number)
+        supplier_name = try? c.decode(String.self, forKey: .supplier_name)
+        description = try? c.decode(String.self, forKey: .description)
+        gross_amount = flexibleDoubleDecode(c, .gross_amount)
+        currency = try? c.decode(String.self, forKey: .currency)
+        if let v = try? c.decode(Int64.self, forKey: .due_date) { due_date = v }
+        else if let s = try? c.decode(String.self, forKey: .due_date) { due_date = Int64(s) }
+        else if let d = try? c.decode(Double.self, forKey: .due_date) { due_date = Int64(d) }
+        else { due_date = nil }
+    }
+}
+
+struct PaymentRunApprovalRaw: Codable {
+    var user_id: String?
+    var approved_at: Int64?
+    var tier_number: Int?
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        user_id = try? c.decode(String.self, forKey: .user_id)
+        tier_number = try? c.decode(Int.self, forKey: .tier_number)
+        if let v = try? c.decode(Int64.self, forKey: .approved_at) { approved_at = v }
+        else if let s = try? c.decode(String.self, forKey: .approved_at) { approved_at = Int64(s) }
+        else if let d = try? c.decode(Double.self, forKey: .approved_at) { approved_at = Int64(d) }
+        else { approved_at = nil }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case user_id, approved_at, tier_number
+    }
+}
+
+struct PaymentRunRaw: Codable {
+    var id: String
+    var project_id: String?
+    var name: String?
+    var number: String?
+    var pay_method: String?
+    var approval: [PaymentRunApprovalRaw]?
+    var status: String?
+    var total_amount: Double?
+    var created_by: String?
+    var created_at: Int64?
+    var updated_at: Int64?
+    var rejected_by: String?
+    var rejected_at: Int64?
+    var rejection_reason: String?
+    var invoice_count: Int?
+    var computed_total: Double?
+    var invoices: [PaymentRunInvoiceRaw]?
+
+    enum CodingKeys: String, CodingKey {
+        case id, project_id, name, number, pay_method, approval, status, invoices
+        case total_amount, created_by, created_at, updated_at
+        case rejected_by, rejected_at, rejection_reason
+        case invoice_count, computed_total
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = (try? c.decode(String.self, forKey: .id)) ?? ""
+        project_id = try? c.decode(String.self, forKey: .project_id)
+        name = try? c.decode(String.self, forKey: .name)
+        number = try? c.decode(String.self, forKey: .number)
+        pay_method = try? c.decode(String.self, forKey: .pay_method)
+        approval = try? c.decode([PaymentRunApprovalRaw].self, forKey: .approval)
+        status = try? c.decode(String.self, forKey: .status)
+        created_by = try? c.decode(String.self, forKey: .created_by)
+        rejected_by = try? c.decode(String.self, forKey: .rejected_by)
+        rejection_reason = try? c.decode(String.self, forKey: .rejection_reason)
+        invoice_count = try? c.decode(Int.self, forKey: .invoice_count)
+        invoices = try? c.decode([PaymentRunInvoiceRaw].self, forKey: .invoices)
+        total_amount = flexibleDoubleDecode(c, .total_amount)
+        computed_total = flexibleDoubleDecode(c, .computed_total)
+        if let v = try? c.decode(Int64.self, forKey: .created_at) { created_at = v }
+        else if let s = try? c.decode(String.self, forKey: .created_at) { created_at = Int64(s) ?? 0 }
+        else { created_at = 0 }
+        if let v = try? c.decode(Int64.self, forKey: .updated_at) { updated_at = v }
+        else if let s = try? c.decode(String.self, forKey: .updated_at) { updated_at = Int64(s) ?? 0 }
+        else { updated_at = 0 }
+        if let v = try? c.decode(Int64.self, forKey: .rejected_at) { rejected_at = v }
+        else if let s = try? c.decode(String.self, forKey: .rejected_at) { rejected_at = Int64(s) }
+        else { rejected_at = nil }
+    }
+
+    func toPaymentRun() -> PaymentRun {
+        var pr = PaymentRun()
+        pr.id = id
+        pr.projectId = project_id ?? ""
+        pr.name = name ?? ""
+        pr.number = number ?? ""
+        pr.payMethod = pay_method ?? ""
+        pr.approval = (approval ?? []).map {
+            PaymentRunApproval(userId: $0.user_id ?? "", approvedAt: $0.approved_at ?? 0, tierNumber: $0.tier_number ?? 0)
+        }
+        pr.status = status ?? "pending"
+        pr.totalAmount = total_amount ?? 0
+        pr.createdBy = created_by ?? ""
+        pr.createdAt = created_at ?? 0
+        pr.updatedAt = updated_at ?? 0
+        pr.rejectedBy = rejected_by
+        pr.rejectedAt = rejected_at
+        pr.rejectionReason = rejection_reason
+        pr.invoiceCount = invoice_count ?? 0
+        pr.computedTotal = computed_total ?? 0
+        pr.invoices = (invoices ?? []).map {
+            PaymentRunInvoice(
+                id: $0.id ?? UUID().uuidString,
+                invoiceNumber: $0.invoice_number ?? "",
+                supplierName: $0.supplier_name ?? "",
+                description: $0.description ?? "",
+                dueDate: $0.due_date,
+                amount: $0.gross_amount ?? 0,
+                currency: $0.currency ?? "GBP"
+            )
+        }
+        return pr
     }
 }

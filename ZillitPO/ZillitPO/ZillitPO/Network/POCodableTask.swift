@@ -35,6 +35,17 @@ enum POCodableTask {
 
     // MARK: - Invoices (typed responses)
     case fetchInvoices(String, (Result<APIResponse<[InvoiceRaw]>?, Error>) -> Void)
+    case createInvoice([String: Any], (Result<Data?, Error>) -> Void)
+    case approveInvoice(String, [String: Any], (Result<Data?, Error>) -> Void)
+    case rejectInvoice(String, [String: Any], (Result<Data?, Error>) -> Void)
+
+    // MARK: - Invoice Approval Tiers (typed response)
+    case fetchInvoiceApprovalTiers((Result<APIResponse<[ApprovalTierConfig]>?, Error>) -> Void)
+
+    // MARK: - Payment Runs (typed responses)
+    case fetchPaymentRuns((Result<APIResponse<[PaymentRunRaw]>?, Error>) -> Void)
+    case approvePaymentRun(String, [String: Any], (Result<Data?, Error>) -> Void)
+    case rejectPaymentRun(String, [String: Any], (Result<Data?, Error>) -> Void)
 }
 
 extension POCodableTask: PODataTaskProtocol {
@@ -118,6 +129,36 @@ extension POCodableTask: PODataTaskProtocol {
         case .fetchInvoices(let path, let completion):
             guard let urlRequest = PORequest.fetchInvoices(path).urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+
+        case .createInvoice(let body, let completion):
+            guard let urlRequest = PORequest.createInvoice(body).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
+
+        case .approveInvoice(let id, let body, let completion):
+            guard let urlRequest = PORequest.approveInvoice(id, body).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
+
+        case .rejectInvoice(let id, let body, let completion):
+            guard let urlRequest = PORequest.rejectInvoice(id, body).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
+
+        // MARK: Invoice Approval Tiers
+        case .fetchInvoiceApprovalTiers(let completion):
+            guard let urlRequest = PORequest.fetchInvoiceApprovalTiers.urlRequest else { return nil }
+            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+
+        // MARK: Payment Runs
+        case .fetchPaymentRuns(let completion):
+            guard let urlRequest = PORequest.fetchPaymentRuns.urlRequest else { return nil }
+            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+
+        case .approvePaymentRun(let id, let body, let completion):
+            guard let urlRequest = PORequest.approvePaymentRun(id, body).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
+
+        case .rejectPaymentRun(let id, let body, let completion):
+            guard let urlRequest = PORequest.rejectPaymentRun(id, body).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
         }
     }
 }

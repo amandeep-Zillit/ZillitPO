@@ -2,6 +2,42 @@ import Foundation
 
 struct ProjectData { static let projectId = "68877f89a6569e29caee0a65" }
 
+// MARK: - Static Payment Runs (fallback while /api/v2/payment-runs has a server-side bug)
+
+struct PaymentRunsData {
+    static let all: [PaymentRun] = {
+        var pr2 = PaymentRun()
+        pr2.id = "ca32ffa1-64b5-4b47-9dd6-ad4d35240190"
+        pr2.projectId = ProjectData.projectId
+        pr2.name = "BACs Run"; pr2.number = "PR-002"; pr2.payMethod = "bacs"
+        pr2.approval = []; pr2.status = "pending"
+        pr2.totalAmount = 1320; pr2.createdBy = "mock-sa"
+        pr2.createdAt = 1774508635515; pr2.updatedAt = 1774508635515
+        pr2.invoiceCount = 3; pr2.computedTotal = 1320
+        pr2.invoices = [
+            PaymentRunInvoice(id: "pri-1", invoiceNumber: "wrq42342", supplierName: "Arri Rental UK",
+                              description: "Invoice — CLOUNINE HOSPITAL-LUDHIANA", dueDate: 1741737600000, amount: 750, currency: "GBP"),
+            PaymentRunInvoice(id: "pri-2", invoiceNumber: "234242", supplierName: "Costume House London",
+                              description: "Invoice — CLOUNINE HOSPITAL-LUDHIANA", dueDate: 1741737600000, amount: 320, currency: "GBP"),
+            PaymentRunInvoice(id: "pri-3", invoiceNumber: "342354332", supplierName: "Rose Bruford Lighting",
+                              description: "Invoice — CLOUNINE HOSPITAL-LUDHIANA", dueDate: 1741132800000, amount: 250, currency: "GBP"),
+        ]
+
+        var pr1 = PaymentRun()
+        pr1.id = "773bf2c1-a650-45b1-8cc4-76f8f4b8304a"
+        pr1.projectId = ProjectData.projectId
+        pr1.name = "BACs Run"; pr1.number = "PR-001"; pr1.payMethod = "bacs"
+        pr1.approval = [
+            PaymentRunApproval(userId: "mock-u-pst", approvedAt: 1774437364390, tierNumber: 1),
+            PaymentRunApproval(userId: "mock-jw",    approvedAt: 1774437405828, tierNumber: 2)
+        ]
+        pr1.status = "approved"; pr1.totalAmount = 315; pr1.createdBy = "mock-sa"
+        pr1.createdAt = 1774437260411; pr1.updatedAt = 1774437405828
+        pr1.invoiceCount = 0; pr1.computedTotal = 0
+        return [pr2, pr1]
+    }()
+}
+
 struct NominalCodes {
     static let all: [(code: String, label: String)] = [
         ("2100","Production — General"), ("2200","Art Department — Materials"),

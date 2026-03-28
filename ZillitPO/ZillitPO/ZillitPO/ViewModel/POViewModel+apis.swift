@@ -65,10 +65,36 @@ extension POViewModel {
         }
         if let task = templatesTask.urlDataTask { task.resume() } else { group.leave() }
 
-        // After all three complete, load POs, drafts, and form template
+        // Fetch invoice tier configs
+        group.enter()
+        let invoiceTiersTask = POCodableTask.fetchInvoiceApprovalTiers { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let response):
+                    self?.invoiceTierConfigRows = response?.data ?? []
+                    print("✅ Loaded \(self?.invoiceTierConfigRows.count ?? 0) invoice tier configs")
+                    for row in self?.invoiceTierConfigRows ?? [] {
+                        print("  📌 Invoice tier: module=\(row.module) scope=\(row.scope) deptId=\(row.departmentId ?? "nil") tiers=\(row.tiers.count)")
+                        for tier in row.tiers {
+                            let userIds = tier.rules.flatMap { $0.userIds }
+                            print("    🔹 Tier order=\(tier.order) users=\(userIds)")
+                        }
+                    }
+                case .failure(let error):
+                    print("❌ Fetch invoice tier configs failed: \(error)")
+                }
+                group.leave()
+            }
+        }
+        if let task = invoiceTiersTask.urlDataTask { task.resume() } else { group.leave() }
+
+        // After all complete, load POs, drafts, invoices, payment runs, and form template
         group.notify(queue: .main) { [weak self] in
+            self?.updateInvoiceApproverStatus()
             self?.loadPOs()
             self?.loadDrafts()
+            self?.loadInvoices()
+            self?.loadPaymentRuns()
             self?.loadFormTemplate()
         }
     }
@@ -174,6 +200,7 @@ extension POViewModel {
                     let v = self?.vendors ?? []; let d = DepartmentsData.all
                     let invoices = raw.map { $0.toInvoice(vendors: v, departments: d) }
                     self?.invoices = invoices
+                    self?.updateInvoiceApproverStatus()
                     print("✅ Loaded \(invoices.count) invoices")
                 case .failure(let error):
                     print("❌ Fetch invoices failed: \(error)")
@@ -433,6 +460,220 @@ extension POViewModel {
                     self?.loadAllData()
                 case .failure(let error):
                     print("❌ Delete vendor failed: \(error)")
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    // MARK: - Invoice Actions
+
+    /// Effective tier configs for invoices: use invoice-specific if available, otherwise fall back to PO tiers
+    var effectiveInvoiceTierConfigs: [ApprovalTierConfig] {
+        if !invoiceTierConfigRows.isEmpty { return invoiceTierConfigRows }
+        return tierConfigRows
+    }
+
+    func approveInvoice(_ inv: Invoice) {
+        guard let u = currentUser,
+              let cfg = ApprovalHelpers.resolveConfig(effectiveInvoiceTierConfigs, deptId: inv.departmentId, amount: inv.totalAmount)
+        else { return }
+        let vis = invoiceApprovalVisibility(for: inv)
+        guard vis.canApprove, let next = vis.nextTier else { return }
+        let body: [String: Any] = ["tier_number": next, "total_tiers": ApprovalHelpers.getTotalTiers(cfg)]
+        POCodableTask.approveInvoice(inv.id, body) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    self?.loadInvoices(); self?.selectedInvoice = nil
+                case .failure(let error):
+                    print("❌ Approve invoice failed: \(error)")
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    func rejectInvoice() {
+        guard let t = rejectInvoiceTarget, !rejectInvoiceReason.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        let body: [String: Any] = ["rejection_reason": rejectInvoiceReason.trimmingCharacters(in: .whitespaces)]
+        POCodableTask.rejectInvoice(t.id, body) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    self?.loadInvoices(); self?.rejectInvoiceTarget = nil
+                    self?.rejectInvoiceReason = ""; self?.showRejectInvoiceSheet = false
+                    self?.selectedInvoice = nil
+                case .failure(let error):
+                    print("❌ Reject invoice failed: \(error)")
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    func submitInvoice(_ body: [String: Any], completion: @escaping (Bool, String?) -> Void) {
+        POCodableTask.createInvoice(body) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    print("✅ Invoice submitted")
+                    self?.loadInvoices()
+                    completion(true, nil)
+                case .failure(let error):
+                    print("❌ Submit invoice failed: \(error)")
+                    completion(false, error.localizedDescription)
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    func invoiceApprovalVisibility(for inv: Invoice) -> ApprovalVisibility {
+        let isCreator = inv.userId == userId
+        let isAssigned = inv.assignedTo == userId
+        let isPendingApproval = inv.invoiceStatus == .approval
+
+        // Try tier-based approval first
+        let tiers = effectiveInvoiceTierConfigs
+        let cfg = ApprovalHelpers.resolveConfig(tiers, deptId: inv.departmentId, amount: inv.totalAmount)
+            ?? ApprovalHelpers.resolveConfig(tiers, deptId: inv.departmentId)
+
+        if let cfg = cfg {
+            let mappedStatus: String = {
+                switch inv.status.lowercased() {
+                case "approval": return "PENDING"
+                case "approved": return "APPROVED"
+                case "rejected": return "REJECTED"
+                default: return inv.status.uppercased()
+                }
+            }()
+            var fakePO = PurchaseOrder()
+            fakePO.id = inv.id; fakePO.userId = inv.userId; fakePO.status = mappedStatus
+            fakePO.departmentId = inv.departmentId; fakePO.approvals = inv.approvals
+            fakePO.netAmount = inv.grossAmount
+            let tierVis = ApprovalHelpers.getVisibility(po: fakePO, config: cfg, userId: userId)
+            // If tier config says user can approve (and they're not the creator), use that
+            if tierVis.canApprove && !isCreator { return tierVis }
+            // If tier config gives visibility info, return it but also check assigned_to
+            if tierVis.totalTiers > 0 {
+                let canApprove = isAssigned && isPendingApproval && !isCreator
+                return ApprovalVisibility(visible: tierVis.visible || isAssigned,
+                                          canApprove: canApprove || tierVis.canApprove,
+                                          nextTier: tierVis.nextTier,
+                                          totalTiers: tierVis.totalTiers,
+                                          approvedCount: tierVis.approvedCount,
+                                          isCreator: isCreator)
+            }
+        }
+
+        // Fallback: assigned_to based approval (no tier config)
+        let canApprove = isAssigned && isPendingApproval && !isCreator
+        let visible = isCreator || isAssigned || (currentUser?.isAccountant == true)
+        return ApprovalVisibility(visible: visible, canApprove: canApprove, nextTier: canApprove ? 1 : nil,
+                                  totalTiers: canApprove ? 1 : 0, approvedCount: inv.approvals.count,
+                                  isCreator: isCreator)
+    }
+
+    func updateInvoiceApproverStatus() {
+        let assigned = invoices.contains(where: { $0.assignedTo == userId })
+        let isAcct = currentUser?.isAccountant == true
+        // Any user in an invoice tier (dept or global) sees the Approval tab
+        // Payment run canApprove is separately restricted to global-scope or accountants
+        let invoiceInfo = ApprovalHelpers.getApproverDeptIds(invoiceTierConfigRows, userId: userId)
+        let inInvoiceTiers = invoiceInfo.isApproverInAllScope || !invoiceInfo.approverDeptIds.isEmpty
+        let poInfo = ApprovalHelpers.getApproverDeptIds(tierConfigRows, userId: userId)
+        let inPOTiers = poInfo.isApproverInAllScope || !poInfo.approverDeptIds.isEmpty
+        isInvoiceApprover = assigned || isAcct || inInvoiceTiers || inPOTiers
+    }
+
+    var isCurrentUserInvoiceApprover: Bool { isInvoiceApprover }
+
+    // MARK: - Payment Runs
+
+    func loadPaymentRuns() {
+        POCodableTask.fetchPaymentRuns { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let response):
+                    var runs = (response?.data ?? []).map { $0.toPaymentRun() }
+                    // API doesn't embed invoice details — merge from static data where available
+                    for i in runs.indices where runs[i].invoices.isEmpty {
+                        if let staticRun = PaymentRunsData.all.first(where: { $0.id == runs[i].id }) {
+                            runs[i].invoices = staticRun.invoices
+                        }
+                    }
+                    self?.paymentRuns = runs
+                    print("✅ Loaded \(runs.count) payment runs")
+                case .failure(let error):
+                    print("❌ Fetch payment runs (/api/v2/payment-runs) failed: \(error)")
+                    // Fallback: try account-hub path
+                    self?.loadPaymentRunsFallback()
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    private func loadPaymentRunsFallback() {
+        // /api/v2/payment-runs failed — use static seed data.
+        // The real data comes from /api/v2/invoices/active-runs (now the primary path).
+        paymentRuns = PaymentRunsData.all
+        print("⚠️ Using static payment runs (\(paymentRuns.count) items)")
+    }
+
+    func paymentRunApprovalVisibility(for run: PaymentRun) -> ApprovalVisibility {
+        let isCreator = run.createdBy == userId
+        let isPending = run.isPending
+        // Use PO tier configs for payment run approval (same tier system)
+        if let cfg = ApprovalHelpers.resolveConfig(tierConfigRows, deptId: nil, amount: run.totalAmount)
+            ?? ApprovalHelpers.resolveConfig(tierConfigRows, deptId: nil) {
+            var fakePO = PurchaseOrder()
+            fakePO.id = run.id; fakePO.userId = run.createdBy
+            fakePO.status = isPending ? "PENDING" : run.status.uppercased()
+            fakePO.approvals = run.approval.map { Approval(userId: $0.userId, tierNumber: $0.tierNumber, approvedAt: $0.approvedAt) }
+            fakePO.netAmount = run.totalAmount
+            let vis = ApprovalHelpers.getVisibility(po: fakePO, config: cfg, userId: userId)
+            if vis.canApprove || vis.totalTiers > 0 { return vis }
+        }
+        // Fallback: only "all"-scope tier members or accountants can approve payment runs
+        // (dept-level PO approvers should NOT be able to approve company-wide payment runs)
+        let info = ApprovalHelpers.getApproverDeptIds(tierConfigRows, userId: userId)
+        let canApprove = (info.isApproverInAllScope || currentUser?.isAccountant == true) && isPending && !isCreator
+        let visible = canApprove || isCreator || (currentUser?.isAccountant == true)
+        return ApprovalVisibility(visible: visible, canApprove: canApprove, nextTier: canApprove ? 1 : nil,
+                                  totalTiers: canApprove ? 1 : 0, approvedCount: run.approval.count, isCreator: isCreator)
+    }
+
+    func approvePaymentRun(_ run: PaymentRun) {
+        guard run.isPending else { return }
+        let approvedTiers = Set(run.approval.map { $0.tierNumber })
+        let cfg = ApprovalHelpers.resolveConfig(tierConfigRows, deptId: nil)
+            ?? ApprovalHelpers.resolveConfig(invoiceTierConfigRows, deptId: nil)
+        let totalTiers = max(cfg?.count ?? 2, 2)
+        var nextTier = 1
+        for t in 1...totalTiers { if !approvedTiers.contains(t) { nextTier = t; break } }
+        let body: [String: Any] = ["tier_number": nextTier, "total_tiers": totalTiers]
+        POCodableTask.approvePaymentRun(run.id, body) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    self?.loadPaymentRuns()
+                case .failure(let error):
+                    print("❌ Approve payment run failed: \(error)")
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    func rejectPaymentRun() {
+        guard let t = rejectPaymentRunTarget, !rejectPaymentRunReason.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        let body: [String: Any] = ["rejection_reason": rejectPaymentRunReason.trimmingCharacters(in: .whitespaces)]
+        POCodableTask.rejectPaymentRun(t.id, body) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    self?.showRejectPaymentRunSheet = false
+                    self?.rejectPaymentRunTarget = nil
+                    self?.rejectPaymentRunReason = ""
+                    self?.loadPaymentRuns()
+                case .failure(let error):
+                    print("❌ Reject payment run failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()

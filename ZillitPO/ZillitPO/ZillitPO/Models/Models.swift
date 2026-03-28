@@ -589,54 +589,109 @@ struct Invoice: Identifiable, Equatable {
     var invoiceNumber: String = ""
     var vendorId: String?
     var departmentId: String?
-    var nominalCode: String?
     var description: String?
     var currency: String = "GBP"
     var invoiceDate: Int64?
     var dueDate: Int64?
-    var notes: String?
-    var netAmount: Double = 0
-    var vatAmount: Double?
-    var grossTotal: Double?
-    var status: String = "DRAFT"
-    var vatTreatment: String = "pending"
+    var effectiveDate: Int64?
+    var grossAmount: Double = 0
+    var status: String = "draft"
+    var approvalStatus: String = "pending"
+    var payMethod: String?
+    var costCentre: String?
+    var assignedTo: String?
+    var supplierName: String = ""
+    var reference: String?
+    var holdReason: String?
+    var holdNote: String?
+    var isOverdue: Bool = false
     var poId: String?
     var poNumber: String?
+    var poIds: [String] = []
     var lineItems: [LineItem] = []
-    var customFields: [CustomFieldSection] = []
     var approvals: [Approval] = []
+    var approvedBy: String?
+    var approvedAt: Int64?
     var rejectedBy: String?
     var rejectedAt: Int64?
     var rejectionReason: String?
+    var tags: [String] = []
     var createdAt: Int64 = 0
     var updatedAt: Int64 = 0
 
     // Display fields (resolved, not in DB)
-    var vendor: String = ""
-    var vendorAddress: String = ""
     var department: String = ""
 
     static func == (lhs: Invoice, rhs: Invoice) -> Bool { lhs.id == rhs.id }
     var invoiceStatus: InvoiceStatus { InvoiceStatus.fromAPI(status) }
-    var totalAmount: Double { netAmount }
+    var totalAmount: Double { grossAmount }
 }
 
 enum InvoiceStatus: String, CaseIterable {
-    case draft = "DRAFT", pending = "PENDING", approved = "APPROVED"
-    case acctEntered = "ACCT_ENTERED", posted = "POSTED"
-    case rejected = "REJECTED", closed = "CLOSED"
+    case draft = "draft", approval = "approval", approved = "approved"
+    case rejected = "rejected", paid = "paid", onHold = "on_hold"
+    case partiallyPaid = "partially_paid", voided = "voided"
 
     var displayName: String {
         switch self {
-        case .draft: return "Draft"; case .pending: return "Pending"
-        case .approved: return "Approved"; case .acctEntered: return "Acct Entered"
-        case .posted: return "Posted"; case .rejected: return "Rejected"
-        case .closed: return "Closed"
+        case .draft: return "Draft"
+        case .approval: return "Pending Approval"
+        case .approved: return "Approved"
+        case .rejected: return "Rejected"
+        case .paid: return "Paid"
+        case .onHold: return "On Hold"
+        case .partiallyPaid: return "Partially Paid"
+        case .voided: return "Voided"
         }
     }
     static func fromAPI(_ raw: String) -> InvoiceStatus {
-        InvoiceStatus(rawValue: raw.uppercased()) ?? .pending
+        InvoiceStatus(rawValue: raw.lowercased()) ?? .draft
     }
+}
+
+// MARK: - Payment Run
+
+struct PaymentRunInvoice: Identifiable, Equatable {
+    var id: String = UUID().uuidString
+    var invoiceNumber: String = ""
+    var supplierName: String = ""
+    var description: String = ""
+    var dueDate: Int64?
+    var amount: Double = 0
+    var currency: String = "GBP"
+}
+
+struct PaymentRunApproval: Identifiable, Equatable {
+    var id: String { "\(userId)-\(tierNumber)" }
+    var userId: String
+    var approvedAt: Int64
+    var tierNumber: Int
+}
+
+struct PaymentRun: Identifiable, Equatable {
+    var id: String = UUID().uuidString
+    var projectId: String = ""
+    var name: String = ""
+    var number: String = ""
+    var payMethod: String = ""
+    var approval: [PaymentRunApproval] = []
+    var status: String = "pending"
+    var totalAmount: Double = 0
+    var createdBy: String = ""
+    var createdAt: Int64 = 0
+    var updatedAt: Int64 = 0
+    var rejectedBy: String?
+    var rejectedAt: Int64?
+    var rejectionReason: String?
+    var invoiceCount: Int = 0
+    var computedTotal: Double = 0
+    var invoices: [PaymentRunInvoice] = []
+
+    static func == (lhs: PaymentRun, rhs: PaymentRun) -> Bool { lhs.id == rhs.id }
+    var isPending: Bool { status.lowercased() == "pending" }
+    var isApproved: Bool { status.lowercased() == "approved" }
+    var isRejected: Bool { status.lowercased() == "rejected" }
+    var approvedCount: Int { approval.count }
 }
 
 // MARK: - Non-DB models

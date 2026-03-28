@@ -49,4 +49,10 @@ struct FormatUtils {
         let df = DateFormatter(); df.dateFormat = "dd MMM yyyy"; df.locale = Locale(identifier: "en_GB")
         return df.string(from: Date(timeIntervalSince1970: Double(ms) / 1000))
     }
+
+    static func formatDateTime(_ ms: Int64?) -> String {
+        guard let ms = ms, ms > 0 else { return "—" }
+        let df = DateFormatter(); df.dateFormat = "dd MMM yyyy | h:mm a"; df.locale = Locale(identifier: "en_GB")
+        return df.string(from: Date(timeIntervalSince1970: Double(ms) / 1000))
+    }
 }

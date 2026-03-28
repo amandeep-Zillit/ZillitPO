@@ -35,6 +35,17 @@ enum PORequest {
 
     // MARK: - Invoices
     case fetchInvoices(String)
+    case createInvoice([String: Any])
+    case approveInvoice(String, [String: Any])      // id, body
+    case rejectInvoice(String, [String: Any])       // id, body
+
+    // MARK: - Invoice Approval Tiers
+    case fetchInvoiceApprovalTiers
+
+    // MARK: - Payment Runs
+    case fetchPaymentRuns
+    case approvePaymentRun(String, [String: Any])   // id, body
+    case rejectPaymentRun(String, [String: Any])    // id, body
 }
 
 extension PORequest: POURLRequestProtocol {
@@ -116,6 +127,35 @@ extension PORequest: POURLRequestProtocol {
         // MARK: Invoices
         case .fetchInvoices(let path):
             return APIClient.shared.buildRequest(.get, path)
+
+        case .createInvoice(let body):
+            return APIClient.shared.buildRequest(.post, "/api/v2/invoices", body: body)
+
+        case .approveInvoice(let id, let body):
+            let endPoint = "/api/v2/invoices/\(id)/approve"
+            return APIClient.shared.buildRequest(.post, endPoint, body: body)
+
+        case .rejectInvoice(let id, let body):
+            let endPoint = "/api/v2/invoices/\(id)/reject"
+            return APIClient.shared.buildRequest(.post, endPoint, body: body)
+
+        // MARK: Invoice Approval Tiers
+        case .fetchInvoiceApprovalTiers:
+            let endPoint = "/api/v2/account-hub/approval-tiers?module=invoices"
+            return APIClient.shared.buildRequest(.get, endPoint)
+
+        // MARK: Payment Runs (Active Runs)
+        case .fetchPaymentRuns:
+            let endPoint = "/api/v2/invoices/active-runs"
+            return APIClient.shared.buildRequest(.get, endPoint)
+
+        case .approvePaymentRun(let id, let body):
+            let endPoint = "/api/v2/invoices/active-runs/\(id)/approve"
+            return APIClient.shared.buildRequest(.post, endPoint, body: body)
+
+        case .rejectPaymentRun(let id, let body):
+            let endPoint = "/api/v2/invoices/active-runs/\(id)/reject"
+            return APIClient.shared.buildRequest(.post, endPoint, body: body)
         }
     }
 }
