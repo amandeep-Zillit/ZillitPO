@@ -214,7 +214,7 @@ struct PODetailContentView: View {
                                     }
                                     Spacer()
                                     VStack(alignment: .trailing, spacing: 2) {
-                                        Text("Tier \(approval.tierNumber)")
+                                        Text("Level \(approval.tierNumber)")
                                             .font(.system(size: 9, weight: .semibold)).foregroundColor(.green)
                                             .padding(.horizontal, 6).padding(.vertical, 2)
                                             .background(Color.green.opacity(0.1)).cornerRadius(3)
@@ -451,7 +451,7 @@ struct PODetailContentView: View {
                 // Tier info
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text("Tier \(tierNum)")
+                        Text("Level \(tierNum)")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundColor(isCurrentTier ? .goldDark : .primary)
                         if isApproved {

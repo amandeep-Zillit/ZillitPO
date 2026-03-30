@@ -88,13 +88,14 @@ extension POViewModel {
         }
         if let task = invoiceTiersTask.urlDataTask { task.resume() } else { group.leave() }
 
-        // After all complete, load POs, drafts, invoices, payment runs, and form template
+        // After all complete, load POs, drafts, invoices, payment runs, settings, and form template
         group.notify(queue: .main) { [weak self] in
             self?.updateInvoiceApproverStatus()
             self?.loadPOs()
             self?.loadDrafts()
             self?.loadInvoices()
             self?.loadPaymentRuns()
+            self?.loadInvoiceSettings()
             self?.loadFormTemplate()
         }
     }
@@ -525,6 +526,23 @@ extension POViewModel {
         }.urlDataTask?.resume()
     }
 
+    /// Accounts team: move invoice from inbox → approval (sends to approval chain)
+    func processInvoice(_ inv: Invoice) {
+        guard currentUser?.isAccountant == true else { return }
+        let body: [String: Any] = ["status": "approval"]
+        POCodableTask.updateInvoice(inv.id, body) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    print("✅ Invoice processed → approval")
+                    self?.loadInvoices()
+                case .failure(let error):
+                    print("❌ Process invoice failed: \(error)")
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
     func invoiceApprovalVisibility(for inv: Invoice) -> ApprovalVisibility {
         let isCreator = inv.userId == userId
         let isAssigned = inv.assignedTo == userId
@@ -675,6 +693,179 @@ extension POViewModel {
                 case .failure(let error):
                     print("❌ Reject payment run failed: \(error)")
                 }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    // MARK: - Invoice Settings
+
+    func loadInvoiceSettings() {
+        POCodableTask.getInvoiceSettings { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let response):
+                    if let d = response?.data {
+                        self?.invoiceAlerts = d.alerts
+                        self?.invoiceTeamMembers = d.teamMembers
+                        self?.invoiceRunAuth = d.runAuthorization
+                        self?.invoiceAssignmentRules = d.assignmentRules
+                        print("✅ Invoice settings: \(d.alerts.count) alerts, \(d.teamMembers.count) team, \(d.runAuthorization.count) run auth, \(d.assignmentRules.count) rules")
+                    }
+                case .failure(let error):
+                    print("❌ Invoice settings failed: \(error)")
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    // MARK: - Invoice Upload
+
+    func uploadInvoiceFile(_ data: Data, fileName: String, mimeType: String) {
+        uploading = true
+        uploadError = nil
+        uploadExtraction = nil
+        uploadId = nil
+        guard let req = APIClient.shared.buildMultipartRequest(
+            "/api/v2/invoices/upload", fileData: data, fileName: fileName, mimeType: mimeType, fieldName: "file"
+        ) else {
+            uploadError = "Failed to build upload request"; uploading = false; return
+        }
+        let task: URLSessionDataTask = APIClient.shared.codableResultTask(with: req) { [weak self] (result: Result<APIResponse<InvoiceExtraction>?, Error>) in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let response):
+                    if let ext = response?.data {
+                        self?.uploadExtraction = ext
+                        self?.uploadId = ext.upload_id
+                    }
+                case .failure(let error):
+                    self?.uploadError = error.localizedDescription
+                }
+                self?.uploading = false
+            }
+        }
+        task.resume()
+    }
+
+    func submitInvoiceUpload() {
+        guard let ext = uploadExtraction, let type = invoiceType else { return }
+        uploadSubmitting = true
+        let gross = ext.grossValue
+        let net = ext.netValue
+        let vat = ext.vatValue
+        let payMethod: String = {
+            switch type {
+            case "wire": return "wire"
+            case "cheque": return "cheque"
+            default: return "bacs"
+            }
+        }()
+        let defaultDept = DepartmentsData.all.first { $0.identifier == currentUser?.departmentIdentifier }?.id ?? ""
+
+        var body: [String: Any] = [
+            "description": uploadFileName.isEmpty ? "Uploaded invoice" : uploadFileName,
+            "pay_method": payMethod,
+            "currency": ext.currency ?? "GBP",
+            "status": "inbox",
+        ]
+        body["gross_amount"] = gross
+        if net > 0 { body["net_amount"] = net }
+        if vat > 0 { body["vat_amount"] = vat }
+        if let d = ext.invoice_date, !d.isEmpty { body["invoice_date"] = d }
+        if let d = ext.due_date, !d.isEmpty { body["due_date"] = d }
+        if let n = ext.invoice_number, !n.isEmpty { body["invoice_number"] = n }
+        if let p = ext.po_number, !p.isEmpty { body["po_number"] = p }
+        if !defaultDept.isEmpty { body["department_id"] = defaultDept }
+        if let uid = uploadId { body["upload_id"] = uid }
+        // Supplier details
+        if let supplier = ext.supplier {
+            var s: [String: Any] = [:]
+            if let n = supplier.name, !n.isEmpty { s["name"] = n; body["supplier_name"] = n }
+            if let a = supplier.address, !a.isEmpty { s["address"] = a }
+            if let e = supplier.email, !e.isEmpty { s["email"] = e }
+            if let p = supplier.phone, !p.isEmpty { s["phone"] = p }
+            if let v = supplier.vat_number, !v.isEmpty { s["vat_number"] = v }
+            if !s.isEmpty { body["supplier"] = s }
+        }
+        // Line items
+        if let items = ext.line_items, !items.isEmpty {
+            body["line_items"] = items.map { item -> [String: Any] in
+                var li: [String: Any] = [:]
+                if let d = item.description, !d.isEmpty { li["description"] = d }
+                if item.quantityValue > 0 { li["quantity"] = item.quantityValue }
+                if item.unitPriceValue > 0 { li["unit_price"] = item.unitPriceValue }
+                if item.amountValue > 0 { li["amount"] = item.amountValue }
+                return li
+            }
+        }
+
+        POCodableTask.createInvoice(body) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    self?.uploadSubmitted = true; self?.uploadSubmitting = false; self?.showTypeSelect = false
+                    self?.loadInvoices()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { self?.closeInvoiceUpload() }
+                case .failure(let error):
+                    self?.uploadError = error.localizedDescription; self?.uploadSubmitting = false
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    func closeInvoiceUpload() {
+        showUploadPreview = false; uploadFileName = ""; uploadFileData = nil; uploadFileMimeType = ""
+        uploading = false; uploadError = nil; uploadExtraction = nil; uploadId = nil
+        showTypeSelect = false; invoiceType = nil; uploadSubmitting = false; uploadSubmitted = false
+    }
+
+    // MARK: - Payment Run Detail (run auth based)
+
+    var isRunAuthApprover: Bool {
+        invoiceRunAuth.contains { $0.user.contains(userId) }
+    }
+
+    func openRunDetail(_ runId: String) {
+        runDetailLoading = true
+        selectedRunDetail = PaymentRunDetail(run: PaymentRun(), invoices: [])
+        POCodableTask.getPaymentRun(runId) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let response):
+                    if let raw = response?.data {
+                        let run = raw.run?.toPaymentRun() ?? PaymentRun()
+                        let v = self?.vendors ?? []
+                        let d = DepartmentsData.all
+                        let invoices = (raw.invoices ?? []).map { $0.toInvoice(vendors: v, departments: d) }
+                        self?.selectedRunDetail = PaymentRunDetail(run: run, invoices: invoices)
+                    }
+                case .failure(let error):
+                    print("❌ Fetch run detail failed: \(error)")
+                    self?.selectedRunDetail = nil
+                }
+                self?.runDetailLoading = false
+            }
+        }.urlDataTask?.resume()
+    }
+
+    func approveRunAuth() {
+        guard let detail = selectedRunDetail else { return }
+        let sortedAuth = invoiceRunAuth.sorted { $0.tier < $1.tier }
+        let nextLevel = sortedAuth.first { level in
+            !detail.run.approval.contains { a in a.tierNumber == level.tier }
+        }
+        guard let level = nextLevel else { return }
+        approvingRunId = detail.run.id
+        let body: [String: Any] = ["tier_number": level.tier, "total_tiers": sortedAuth.count]
+        POCodableTask.approvePaymentRun(detail.run.id, body) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    self?.openRunDetail(detail.run.id); self?.loadPaymentRuns()
+                case .failure(let error):
+                    print("❌ Approve run failed: \(error)")
+                }
+                self?.approvingRunId = nil
             }
         }.urlDataTask?.resume()
     }

@@ -60,7 +60,12 @@ struct InvoicesModuleView: View {
 
     private func isInvoiceVisible(_ inv: Invoice) -> Bool {
         guard let u = appState.currentUser else { return false }
+        // Creator always sees their own invoices
         if inv.userId == u.id { return true }
+        // Inbox invoices: only accounts team can see them (to process)
+        if inv.status == "inbox" {
+            return u.isAccountant
+        }
         if (inv.departmentId ?? "") == u.departmentId { return true }
         if inv.approvals.contains(where: { $0.userId == u.id }) { return true }
         if inv.assignedTo == u.id { return true }
@@ -129,6 +134,7 @@ struct InvoicesModuleView: View {
         )
         .sheet(isPresented: $appState.showRejectInvoiceSheet) {
             RejectInvoiceSheetView().environmentObject(appState)
+            
         }
         .sheet(isPresented: $appState.showRejectPaymentRunSheet) {
             RejectPaymentRunSheetView().environmentObject(appState)
@@ -339,6 +345,18 @@ struct InvoiceRow: View {
     let invoice: Invoice
     var showApprovalInfo: Bool = false
     var appState: POViewModel? = nil
+    var onViewFile: (() -> Void)? = nil
+
+    /// Display name: use supplier name, fall back to description stripped of "Invoice — " prefix
+    private var displayName: String {
+        if !invoice.supplierName.isEmpty { return invoice.supplierName }
+        if let desc = invoice.description, !desc.isEmpty {
+            if desc.hasPrefix("Invoice — ") { return String(desc.dropFirst(10)) }
+            if desc.hasPrefix("Invoice - ") { return String(desc.dropFirst(10)) }
+            return desc
+        }
+        return "—"
+    }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -346,11 +364,19 @@ struct InvoiceRow: View {
                 Text(invoice.invoiceNumber.isEmpty ? "—" : invoice.invoiceNumber)
                     .font(.system(size: 11, weight: .medium, design: .monospaced))
                     .foregroundColor(.goldDark)
-                Text(invoice.supplierName.isEmpty ? "—" : invoice.supplierName)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.black).lineLimit(1)
-                if let desc = invoice.description, !desc.isEmpty {
-                    Text(desc).font(.system(size: 10)).foregroundColor(.secondary).lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(displayName)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.black).lineLimit(1)
+                    if onViewFile != nil {
+                        Button(action: { onViewFile?() }) {
+                            Text("View")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundColor(.goldDark)
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(Color.gold.opacity(0.12)).cornerRadius(4)
+                        }.buttonStyle(BorderlessButtonStyle())
+                    }
                 }
                 if let poNum = invoice.poNumber, !poNum.isEmpty {
                     Text("PO: \(poNum)").font(.system(size: 9, weight: .medium)).foregroundColor(.blue.opacity(0.7))
@@ -396,14 +422,21 @@ struct InvoiceRow: View {
             }
         }
 
-        label = invoice.invoiceStatus.displayName
+        label = {
+            switch invoice.invoiceStatus {
+            case .inbox: return "Pending at Accounts"
+            case .draft: return "Pending"
+            default: return invoice.invoiceStatus.displayName
+            }
+        }()
         colors = {
             switch invoice.invoiceStatus {
+            case .inbox: return (.orange, Color.orange.opacity(0.1))
             case .rejected: return (.red, Color.red.opacity(0.1))
             case .paid: return (.blue, Color.blue.opacity(0.1))
             case .voided: return (.gray, Color.gray.opacity(0.1))
             case .approved: return (.green, Color.green.opacity(0.1))
-            case .draft: return (.orange, Color.orange.opacity(0.1))
+            case .draft: return (.goldDark, Color.gold.opacity(0.15))
             case .onHold: return (.purple, Color.purple.opacity(0.1))
             case .partiallyPaid: return (.blue, Color.blue.opacity(0.1))
             default: return (.goldDark, Color.gold.opacity(0.15))
@@ -492,8 +525,6 @@ struct InvoiceDetailContentView: View {
                             linkedPOsSection
                         }
 
-                        // Line Items
-                        if !invoice.lineItems.isEmpty { lineItemsSection }
 
                         // Approval chain
                         invoiceApprovalFlowSection
@@ -507,11 +538,14 @@ struct InvoiceDetailContentView: View {
                         auditFooter
                     }
                     .padding(.horizontal, 16).padding(.top, 14)
-                    .padding(.bottom, vis.canApprove ? 80 : 24)
+                    .padding(.bottom, (vis.canApprove || (invoice.status == "inbox" && appState.currentUser?.isAccountant == true)) ? 80 : 24)
             }
 
             // ── Pinned action bar ──────────────────────────────────────────
-            if vis.canApprove {
+            if invoice.status == "inbox" && appState.currentUser?.isAccountant == true {
+                // Accounts team: process inbox invoice → send to approval
+                processInvoiceBar
+            } else if vis.canApprove {
                 actionBar
             }
         }
@@ -519,16 +553,37 @@ struct InvoiceDetailContentView: View {
 
     // MARK: - Header
 
+    @State private var showDocumentViewer = false
+
     private var invoiceHeader: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(invoice.invoiceNumber.isEmpty ? "—" : invoice.invoiceNumber)
                 .font(.system(size: 12, weight: .semibold, design: .monospaced))
                 .foregroundColor(.goldDark)
-            Text((invoice.description ?? "").isEmpty ? "No description" : invoice.description ?? "")
-                .font(.system(size: 16, weight: .bold)).foregroundColor(.primary)
+            HStack(spacing: 8) {
+                Text({
+                    let desc = invoice.description ?? ""
+                    if desc.isEmpty { return invoice.supplierName.isEmpty ? "No description" : invoice.supplierName }
+                    if desc.hasPrefix("Invoice — ") { return String(desc.dropFirst(10)) }
+                    if desc.hasPrefix("Invoice - ") { return String(desc.dropFirst(10)) }
+                    return desc
+                }())
+                    .font(.system(size: 16, weight: .bold)).foregroundColor(.primary)
+                Button(action: { showDocumentViewer = true }) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "eye.fill").font(.system(size: 10))
+                        Text("View").font(.system(size: 10, weight: .semibold))
+                    }
+                    .foregroundColor(.goldDark)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(Color.gold.opacity(0.12)).cornerRadius(4)
+                }.buttonStyle(BorderlessButtonStyle())
+            }
             // Status badge row
             HStack(spacing: 6) {
-                invoiceStatusBadge
+                if invoice.invoiceStatus != .inbox {
+                    invoiceStatusBadge
+                }
                 if let pm = invoice.payMethod, pm == "wire" || pm == "cheque" {
                     Text("No PO · \(pm == "wire" ? "Urgent Wire" : "Cheque Request")")
                         .font(.system(size: 10, weight: .semibold)).foregroundColor(Color(red: 0.91, green: 0.29, blue: 0.48))
@@ -547,7 +602,7 @@ struct InvoiceDetailContentView: View {
             switch invoice.invoiceStatus {
             case .approved, .paid: return (invoice.invoiceStatus.displayName, .green, Color.green.opacity(0.1))
             case .rejected: return (invoice.invoiceStatus.displayName, .red, Color.red.opacity(0.1))
-            case .draft: return (invoice.invoiceStatus.displayName, .orange, Color.orange.opacity(0.1))
+            case .draft: return ("Pending", .goldDark, Color.gold.opacity(0.15))
             case .onHold: return (invoice.invoiceStatus.displayName, .purple, Color.purple.opacity(0.1))
             default: return (invoice.invoiceStatus.displayName, .goldDark, Color.gold.opacity(0.15))
             }
@@ -560,11 +615,32 @@ struct InvoiceDetailContentView: View {
     // MARK: - Supplier
 
     private var supplierSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             Text("VENDOR").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary)
                 .tracking(0.6)
             Text(invoice.supplierName.isEmpty ? "—" : invoice.supplierName)
                 .font(.system(size: 14, weight: .semibold))
+            if !invoice.vendorAddress.isEmpty {
+                Text(invoice.vendorAddress)
+                    .font(.system(size: 11)).foregroundColor(.secondary)
+            }
+            if !invoice.vendorPhone.isEmpty || !invoice.vendorEmail.isEmpty {
+                Divider()
+                HStack(spacing: 16) {
+                    if !invoice.vendorPhone.isEmpty {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("PHONE").font(.system(size: 8, weight: .bold)).foregroundColor(.gray).tracking(0.4)
+                            Text(invoice.vendorPhone).font(.system(size: 11, weight: .medium))
+                        }
+                    }
+                    if !invoice.vendorEmail.isEmpty {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("EMAIL").font(.system(size: 8, weight: .bold)).foregroundColor(.gray).tracking(0.4)
+                            Text(invoice.vendorEmail).font(.system(size: 11, weight: .medium))
+                        }
+                    }
+                }
+            }
         }
         .padding(14).frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.white).cornerRadius(10)
@@ -630,11 +706,11 @@ struct InvoiceDetailContentView: View {
 
     private var amountsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("AMOUNTS").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
+            Text("GROSS AMOUNTS").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
             HStack(alignment: .bottom, spacing: 4) {
                 Text(FormatUtils.formatCurrency(invoice.grossAmount, code: invoice.currency))
                     .font(.system(size: 22, weight: .bold, design: .monospaced)).foregroundColor(.primary)
-                Text("Gross").font(.system(size: 11)).foregroundColor(.secondary).padding(.bottom, 3)
+                
             }
             if let costCentre = invoice.costCentre, !costCentre.isEmpty {
                 Text("Cost Centre: \(costCentre)").font(.system(size: 11)).foregroundColor(.secondary)
@@ -653,7 +729,7 @@ struct InvoiceDetailContentView: View {
             Divider().frame(height: 44)
             dateCell(label: "Due Date", value: invoice.dueDate.flatMap { $0 > 0 ? FormatUtils.formatTimestamp($0) : nil } ?? "—", overdue: invoice.isOverdue)
             Divider().frame(height: 44)
-            dateCell(label: "Effective Date", value: "—")
+            dateCell(label: "Effective Date", value: invoice.effectiveDate.flatMap { $0 > 0 ? FormatUtils.formatTimestamp($0) : nil } ?? "—")
         }
         .background(Color.white).cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
@@ -732,6 +808,7 @@ struct InvoiceDetailContentView: View {
 
     private var auditFooter: some View {
         let creator = UsersData.byId[invoice.userId]
+        let updater = invoice.updatedBy.flatMap { UsersData.byId[$0] }
         return HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("CREATED BY").font(.system(size: 8, weight: .bold)).foregroundColor(.secondary).tracking(0.5)
@@ -740,10 +817,23 @@ struct InvoiceDetailContentView: View {
                     Text(d).font(.system(size: 10)).foregroundColor(.secondary)
                 }
                 if invoice.createdAt > 0 {
-                    Text(FormatUtils.formatTimestamp(invoice.createdAt)).font(.system(size: 10)).foregroundColor(.secondary)
+                    Text(FormatUtils.formatDateTime(invoice.createdAt)).font(.system(size: 10)).foregroundColor(.secondary)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+
+            if invoice.updatedAt > 0 {
+                Divider().frame(height: 54).padding(.horizontal, 8)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("UPDATED BY").font(.system(size: 8, weight: .bold)).foregroundColor(.secondary).tracking(0.5)
+                    Text(updater?.fullName ?? invoice.updatedBy ?? "—").font(.system(size: 13, weight: .semibold))
+                    if let d = updater?.displayDesignation, !d.isEmpty {
+                        Text(d).font(.system(size: 10)).foregroundColor(.secondary)
+                    }
+                    Text(FormatUtils.formatDateTime(invoice.updatedAt)).font(.system(size: 10)).foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
 
             if let assignedTo = invoice.assignedTo, !assignedTo.isEmpty, let assignee = UsersData.byId[assignedTo] {
                 Divider().frame(height: 54).padding(.horizontal, 8)
@@ -786,6 +876,26 @@ struct InvoiceDetailContentView: View {
         .overlay(Rectangle().fill(Color.borderColor).frame(height: 1), alignment: .top)
     }
 
+    // MARK: - Process Invoice Bar (Accounts team: inbox → approval)
+
+    private var processInvoiceBar: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("INBOX").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(1)
+                Text("Send to approval chain").font(.system(size: 12)).foregroundColor(.secondary)
+            }
+            Spacer()
+            Button(action: { appState.processInvoice(invoice); onClose() }) {
+                Text("Send to Approval").font(.system(size: 13, weight: .bold)).foregroundColor(.black)
+                    .padding(.horizontal, 20).padding(.vertical, 10)
+                    .background(Color.gold).cornerRadius(8)
+            }.buttonStyle(BorderlessButtonStyle())
+        }
+        .padding(.horizontal, 16).padding(.vertical, 12)
+        .background(Color(UIColor.systemGroupedBackground))
+        .overlay(Rectangle().fill(Color.borderColor).frame(height: 1), alignment: .top)
+    }
+
     // MARK: - Approval Flow Section
 
     private var invoiceApprovalFlowSection: some View {
@@ -800,7 +910,7 @@ struct InvoiceDetailContentView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack {
                         Image(systemName: "person.3.fill").font(.system(size: 12)).foregroundColor(.goldDark)
-                        Text("APPROVAL FLOW").font(.system(size: 10, weight: .bold)).foregroundColor(.secondary)
+                        Text("APPROVAL CHAIN").font(.system(size: 10, weight: .bold)).foregroundColor(.secondary)
                         Spacer()
                         if invoice.invoiceStatus == .approval {
                             Text("\(invoice.approvals.count)/\(totalTiers) Approved")
@@ -827,24 +937,7 @@ struct InvoiceDetailContentView: View {
                         }
                     }
 
-                    HStack(spacing: 8) {
-                        ZStack {
-                            Circle().fill(Color.goldDark).frame(width: 22, height: 22)
-                            Text(String((UsersData.byId[invoice.userId]?.firstName ?? "?").prefix(1)))
-                                .font(.system(size: 10, weight: .bold)).foregroundColor(.white)
-                        }
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("Raised by").font(.system(size: 9)).foregroundColor(.secondary)
-                            Text(UsersData.byId[invoice.userId]?.fullName ?? invoice.userId)
-                                .font(.system(size: 12, weight: .medium))
-                        }
-                        Spacer()
-                        if invoice.createdAt > 0 {
-                            Text(FormatUtils.formatTimestamp(invoice.createdAt)).font(.system(size: 10)).foregroundColor(.secondary)
-                        }
-                    }
-                    .padding(.horizontal, 14).padding(.vertical, 8)
-                    .background(Color(UIColor.systemGray6).opacity(0.5))
+                    EmptyView()
                 }
                 .background(Color.white).cornerRadius(10)
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
@@ -898,7 +991,7 @@ struct InvoiceDetailContentView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text("Tier \(tierNum)").font(.system(size: 12, weight: .semibold))
+                        Text("Level \(tierNum)").font(.system(size: 12, weight: .semibold))
                             .foregroundColor(isCurrentTier ? .goldDark : .primary)
                         if isApproved {
                             Text("Approved").font(.system(size: 9, weight: .semibold)).foregroundColor(.green)
@@ -1056,7 +1149,13 @@ struct PaymentRunDetailPage: View {
     }
 
     private var showActions: Bool {
-        liveRun.isPending && liveRun.createdBy != appState.userId
+        guard liveRun.isPending && liveRun.createdBy != appState.userId else { return false }
+        // Hide if this user already approved at their tier
+        let userAlreadyApproved = liveRun.approval.contains { $0.userId == appState.userId }
+        if userAlreadyApproved { return false }
+        // Check if user can approve via tier visibility
+        let vis = appState.paymentRunApprovalVisibility(for: liveRun)
+        return vis.canApprove
     }
 
     private var tierChain: [(tier: Int, users: [AppUser], isApproved: Bool)] {
@@ -1445,87 +1544,255 @@ struct UploadInvoicePage: View {
     @EnvironmentObject var appState: POViewModel
     @Environment(\.presentationMode) var presentationMode
 
+    // Step tracking: 1 = pick file, 2 = preview + extract, 3 = type select
+    @State private var step: Int = 1
+
+    // File selection
     @State private var selectedImage: UIImage?
     @State private var selectedFileName: String?
     @State private var selectedFileURL: URL?
     @State private var showImagePicker = false
     @State private var showDocumentPicker = false
     @State private var imagePickerSource: UIImagePickerController.SourceType = .photoLibrary
+
+    // Upload / extraction
+    @State private var isUploading = false
+    @State private var uploadError: String?
+    @State private var extraction: InvoiceExtraction?
+
+    // Type selection
+    @State private var selectedType: String? = nil // "po", "cheque", "wire"
     @State private var isSubmitting = false
-    @State private var errorMessage: String?
     @State private var showError = false
+    @State private var errorMessage: String?
+
+    private var hasFile: Bool { selectedImage != nil || selectedFileName != nil }
 
     var body: some View {
         ZStack {
             Color.bgBase.edgesIgnoringSafeArea(.all)
-            VStack(spacing: 20) {
 
-                // Drop zone / preview
-                VStack(spacing: 16) {
-                    if let img = selectedImage {
-                        Image(uiImage: img)
-                            .resizable().scaledToFit()
-                            .frame(maxHeight: 180).cornerRadius(8)
-                        Text("Photo selected — tap an option below to change")
-                            .font(.system(size: 12)).foregroundColor(.secondary)
-                    } else if let name = selectedFileName {
-                        Image(systemName: "doc.fill").font(.system(size: 48)).foregroundColor(.gold)
-                        Text(name).font(.system(size: 14, weight: .medium)).multilineTextAlignment(.center)
-                        Text("Tap an option below to change").font(.system(size: 12)).foregroundColor(.secondary)
-                    } else {
-                        Image(systemName: "arrow.up.doc.fill").font(.system(size: 48)).foregroundColor(.gold)
-                        Text("Upload Invoice").font(.system(size: 20, weight: .bold))
-                        Text("Select a file to upload your invoice").font(.system(size: 13)).foregroundColor(.secondary)
-                    }
+            ScrollView {
+                VStack(spacing: 20) {
+                    if step == 1 { filePickerStep }
+                    else if step == 2 { previewStep }
+                    else if step == 3 { typeSelectStep }
                 }
-                .frame(maxWidth: .infinity).padding(.vertical, 40).background(Color.white).cornerRadius(12)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12).stroke(Color.gold.opacity(0.3), lineWidth: 1)
-                        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [8])).foregroundColor(Color.gold.opacity(0.4)))
-                )
-
-                // Pick options
-                VStack(spacing: 12) {
-                    uploadOptionButton(icon: "camera.fill", title: "Take Photo", subtitle: "Capture invoice with camera") {
-                        imagePickerSource = .camera; showImagePicker = true
-                    }
-                    uploadOptionButton(icon: "photo.fill", title: "Photo Library", subtitle: "Choose from saved photos") {
-                        imagePickerSource = .photoLibrary; showImagePicker = true
-                    }
-                    uploadOptionButton(icon: "doc.fill", title: "Choose File", subtitle: "Upload PDF or document") {
-                        showDocumentPicker = true
-                    }
-                }
-
-                // Submit — only shown after a file is selected
-                if selectedImage != nil || selectedFileName != nil {
-                    Button(action: submitInvoice) {
-                        HStack(spacing: 8) {
-                            if isSubmitting { ActivityIndicator(isAnimating: true).frame(width: 18, height: 18) }
-                            Text(isSubmitting ? "Submitting..." : "Submit Invoice")
-                                .font(.system(size: 15, weight: .semibold))
-                        }
-                        .frame(maxWidth: .infinity).frame(height: 48)
-                        .background(Color.gold).foregroundColor(.white).cornerRadius(10)
-                    }
-                    .disabled(isSubmitting)
-                }
+                .padding(.horizontal, 20).padding(.top, 20)
             }
-            .padding(.horizontal, 20).padding(.top, 20)
         }
         .navigationBarTitle(Text("Upload Invoice"), displayMode: .inline)
         .sheet(isPresented: $showImagePicker) {
             InvoiceImagePicker(sourceType: imagePickerSource, selectedImage: $selectedImage, isPresented: $showImagePicker)
-                .onDisappear { if selectedImage != nil { selectedFileName = nil; selectedFileURL = nil } }
+                .onDisappear {
+                    if selectedImage != nil { selectedFileName = nil; selectedFileURL = nil; startUpload() }
+                }
         }
         .sheet(isPresented: $showDocumentPicker) {
             InvoiceDocumentPicker(selectedFileName: $selectedFileName, selectedFileURL: $selectedFileURL, isPresented: $showDocumentPicker)
-                .onDisappear { if selectedFileName != nil { selectedImage = nil } }
+                .onDisappear {
+                    if selectedFileName != nil { selectedImage = nil; startUpload() }
+                }
         }
         .alert(isPresented: $showError) {
-            Alert(title: Text("Submission Failed"), message: Text(errorMessage ?? "Unknown error"), dismissButton: .default(Text("OK")))
+            Alert(title: Text("Error"), message: Text(errorMessage ?? "Unknown error"), dismissButton: .default(Text("OK")))
         }
     }
+
+    // ── Step 1: File Picker ──
+
+    private var filePickerStep: some View {
+        VStack(spacing: 20) {
+            VStack(spacing: 16) {
+                Image(systemName: "arrow.up.doc.fill").font(.system(size: 48)).foregroundColor(.gold)
+                Text("Upload Invoice").font(.system(size: 20, weight: .bold))
+                Text("Select a file to upload your invoice").font(.system(size: 13)).foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity).padding(.vertical, 40).background(Color.white).cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12).stroke(Color.gold.opacity(0.3), lineWidth: 1)
+                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [8])).foregroundColor(Color.gold.opacity(0.4)))
+            )
+
+            VStack(spacing: 12) {
+                uploadOptionButton(icon: "camera.fill", title: "Take Photo", subtitle: "Capture invoice with camera") {
+                    imagePickerSource = .camera; showImagePicker = true
+                }
+                uploadOptionButton(icon: "photo.fill", title: "Photo Library", subtitle: "Choose from saved photos") {
+                    imagePickerSource = .photoLibrary; showImagePicker = true
+                }
+                uploadOptionButton(icon: "doc.fill", title: "Choose File", subtitle: "Upload PDF or document") {
+                    showDocumentPicker = true
+                }
+            }
+        }
+    }
+
+    // ── Step 2: Preview + Extraction ──
+
+    private var previewStep: some View {
+        VStack(spacing: 16) {
+            // File preview
+            VStack(spacing: 12) {
+                if let img = selectedImage {
+                    Image(uiImage: img)
+                        .resizable().scaledToFit()
+                        .frame(maxHeight: 240).cornerRadius(8)
+                } else if let name = selectedFileName {
+                    Image(systemName: "doc.fill").font(.system(size: 48)).foregroundColor(.gold)
+                    Text(name).font(.system(size: 14, weight: .medium)).multilineTextAlignment(.center)
+                }
+            }
+            .frame(maxWidth: .infinity).padding(.vertical, 24).background(Color.white).cornerRadius(12)
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
+
+            // Extraction status
+            if isUploading {
+                HStack(spacing: 8) {
+                    ActivityIndicator(isAnimating: true).frame(width: 18, height: 18)
+                    Text("Extracting invoice data...").font(.system(size: 13)).foregroundColor(.goldDark)
+                }
+                .padding(12).frame(maxWidth: .infinity)
+                .background(Color.gold.opacity(0.08)).cornerRadius(8)
+            } else if let error = uploadError {
+                HStack(spacing: 8) {
+                    Image(systemName: "xmark.circle.fill").foregroundColor(.red)
+                    Text(error).font(.system(size: 12)).foregroundColor(.red)
+                }
+                .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.red.opacity(0.06)).cornerRadius(8)
+
+                Button("Try Again") { startUpload() }
+                    .font(.system(size: 13, weight: .semibold)).foregroundColor(.goldDark)
+            } else if let ext = extraction {
+                // Extraction summary
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("EXTRACTED DATA").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
+                    if let name = ext.supplier?.name, !name.isEmpty {
+                        extractionRow("Supplier", name)
+                    }
+                    if let num = ext.invoice_number, !num.isEmpty {
+                        extractionRow("Invoice #", num)
+                    }
+                    if let po = ext.po_number, !po.isEmpty {
+                        extractionRow("PO Number", po)
+                    }
+                    if ext.grossValue > 0 {
+                        extractionRow("Gross", FormatUtils.formatCurrency(ext.grossValue, code: ext.currency ?? "GBP"))
+                    }
+                    if ext.netValue > 0 {
+                        extractionRow("Net", FormatUtils.formatCurrency(ext.netValue, code: ext.currency ?? "GBP"))
+                    }
+                    if let cur = ext.currency, !cur.isEmpty {
+                        extractionRow("Currency", cur)
+                    }
+                    if let items = ext.line_items, !items.isEmpty {
+                        extractionRow("Line Items", "\(items.count) item\(items.count == 1 ? "" : "s")")
+                    }
+                    if let conf = ext.confidence {
+                        extractionRow("Confidence", "\(conf)%")
+                    }
+                }
+                .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.white).cornerRadius(10)
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+            }
+
+            Spacer().frame(height: 4)
+
+            // Actions
+            HStack(spacing: 12) {
+                Button("Change File") {
+                    extraction = nil; uploadError = nil; isUploading = false
+                    selectedImage = nil; selectedFileName = nil; selectedFileURL = nil
+                    step = 1
+                }
+                .font(.system(size: 13, weight: .medium)).foregroundColor(.secondary)
+                .frame(maxWidth: .infinity).frame(height: 48)
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+
+                Button("Send to Accounts") { step = 3 }
+                    .font(.system(size: 14, weight: .bold)).foregroundColor(.black)
+                    .frame(maxWidth: .infinity).frame(height: 48)
+                    .background(!isUploading ? Color.gold : Color.gray.opacity(0.3))
+                    .cornerRadius(10)
+                    .disabled(isUploading)
+            }
+        }
+    }
+
+    // ── Step 3: Type Selection ──
+
+    private var typeSelectStep: some View {
+        VStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Send to Accounts").font(.system(size: 18, weight: .bold))
+                Text("How should this invoice be processed?").font(.system(size: 13)).foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            typeOption(
+                value: "po",
+                icon: "cart.fill",
+                title: "Against Purchase Order",
+                subtitle: "Standard invoice matched to an existing PO"
+            )
+            typeOption(
+                value: "cheque",
+                icon: "banknote.fill",
+                title: "Cheque Request",
+                subtitle: "Payment via cheque — no PO required"
+            )
+            typeOption(
+                value: "wire",
+                icon: "bolt.fill",
+                title: "Wire Request",
+                subtitle: "Urgent wire transfer — requires override approval"
+            )
+
+            Spacer().frame(height: 4)
+
+            HStack(spacing: 12) {
+                Button("Back") { step = 2; selectedType = nil }
+                    .font(.system(size: 13, weight: .medium)).foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity).frame(height: 48)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+
+                Button(action: submitInvoice) {
+                    HStack(spacing: 6) {
+                        if isSubmitting { ActivityIndicator(isAnimating: true).frame(width: 16, height: 16) }
+                        Text(isSubmitting ? "Sending..." : "Confirm & Send")
+                    }
+                    .font(.system(size: 14, weight: .bold)).foregroundColor(.black)
+                    .frame(maxWidth: .infinity).frame(height: 48)
+                    .background(selectedType != nil && !isSubmitting ? Color.gold : Color.gray.opacity(0.3))
+                    .cornerRadius(10)
+                }
+                .disabled(selectedType == nil || isSubmitting)
+            }
+        }
+    }
+
+    private func typeOption(value: String, icon: String, title: String, subtitle: String) -> some View {
+        Button { selectedType = value } label: {
+            HStack(spacing: 12) {
+                Image(systemName: selectedType == value ? "largecircle.fill.circle" : "circle")
+                    .font(.system(size: 20)).foregroundColor(selectedType == value ? .gold : .gray)
+                Image(systemName: icon).font(.system(size: 16)).foregroundColor(.goldDark)
+                    .frame(width: 32, height: 32).background(Color.gold.opacity(0.12)).cornerRadius(6)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.system(size: 14, weight: .semibold)).foregroundColor(.primary)
+                    Text(subtitle).font(.system(size: 11)).foregroundColor(.secondary)
+                }
+                Spacer()
+            }
+            .padding(14).background(Color.white).cornerRadius(12)
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(selectedType == value ? Color.gold : Color.borderColor, lineWidth: selectedType == value ? 1.5 : 1))
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+
+    // ── Helpers ──
 
     private func uploadOptionButton(icon: String, title: String, subtitle: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
@@ -1545,17 +1812,101 @@ struct UploadInvoicePage: View {
         }.buttonStyle(BorderlessButtonStyle())
     }
 
+    private func extractionRow(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label).font(.system(size: 11, weight: .bold)).foregroundColor(.gray)
+            Spacer()
+            Text(value).font(.system(size: 12, weight: .semibold))
+        }
+    }
+
+    private func startUpload() {
+        step = 2; isUploading = true; uploadError = nil; extraction = nil
+
+        // Build file data
+        var fileData: Data?
+        var fileName = "invoice"
+        var mimeType = "application/octet-stream"
+
+        if let img = selectedImage, let data = img.jpegData(compressionQuality: 0.85) {
+            fileData = data; fileName = "invoice.jpg"; mimeType = "image/jpeg"
+        } else if let url = selectedFileURL {
+            _ = url.startAccessingSecurityScopedResource()
+            fileData = try? Data(contentsOf: url)
+            url.stopAccessingSecurityScopedResource()
+            fileName = url.lastPathComponent
+            let ext = url.pathExtension.lowercased()
+            mimeType = ext == "pdf" ? "application/pdf" : ext == "png" ? "image/png" : "image/jpeg"
+        }
+
+        guard let data = fileData else {
+            uploadError = "Failed to read file"; isUploading = false; return
+        }
+
+        // Upload for extraction
+        guard let req = APIClient.shared.buildMultipartRequest(
+            "/api/v2/invoices/upload", fileData: data, fileName: fileName, mimeType: mimeType, fieldName: "file"
+        ) else {
+            uploadError = "Failed to build request"; isUploading = false; return
+        }
+
+        let task: URLSessionDataTask = APIClient.shared.codableResultTask(with: req) { (result: Result<APIResponse<InvoiceExtraction>?, Error>) in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let response):
+                    self.extraction = response?.data
+                case .failure(let error):
+                    self.uploadError = error.localizedDescription
+                }
+                self.isUploading = false
+            }
+        }
+        task.resume()
+    }
+
     private func submitInvoice() {
-        guard let user = appState.currentUser else { return }
+        guard let type = selectedType, let user = appState.currentUser else { return }
         isSubmitting = true
-        let body: [String: Any] = [
-            "supplier_name": selectedFileName ?? "Invoice",
+
+        let ext = extraction
+        let payMethod: String = {
+            switch type {
+            case "wire": return "wire"
+            case "cheque": return "cheque"
+            default: return "bacs"
+            }
+        }()
+
+        let supplierName = ext?.supplier?.name ?? selectedFileName ?? "Uploaded invoice"
+        var body: [String: Any] = [
             "description": selectedFileName ?? "Uploaded invoice",
-            "gross_amount": 0,
-            "currency": "GBP",
+            "supplier_name": supplierName,
+            "pay_method": payMethod,
+            "currency": ext?.currency ?? "GBP",
             "department_id": user.departmentId,
-            "status": "approval"
+            "status": "inbox",
+            "gross_amount": ext?.grossValue ?? 0,
         ]
+        if let ext = ext {
+            if ext.netValue > 0 { body["net_amount"] = ext.netValue }
+            if ext.vatValue > 0 { body["vat_amount"] = ext.vatValue }
+            if let d = ext.invoice_date, !d.isEmpty { body["invoice_date"] = d }
+            if let d = ext.due_date, !d.isEmpty { body["due_date"] = d }
+            if let n = ext.invoice_number, !n.isEmpty { body["invoice_number"] = n }
+            if let p = ext.po_number, !p.isEmpty { body["po_number"] = p }
+            if let uid = ext.upload_id { body["upload_id"] = uid }
+            if let items = ext.line_items, !items.isEmpty {
+                body["line_items"] = items.map { item -> [String: Any] in
+                    var li: [String: Any] = [:]
+                    if let d = item.description, !d.isEmpty { li["description"] = d }
+                    if item.quantityValue > 0 { li["quantity"] = item.quantityValue }
+                    if item.unitPriceValue > 0 { li["unit_price"] = item.unitPriceValue }
+                    if item.amountValue > 0 { li["amount"] = item.amountValue }
+                    return li
+                }
+            }
+        }
+
         appState.submitInvoice(body) { success, error in
             isSubmitting = false
             if success {

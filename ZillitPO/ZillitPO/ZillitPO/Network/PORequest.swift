@@ -36,14 +36,21 @@ enum PORequest {
     // MARK: - Invoices
     case fetchInvoices(String)
     case createInvoice([String: Any])
+    case updateInvoice(String, [String: Any])       // id, body (for status changes etc)
+    case deleteInvoice(String)
     case approveInvoice(String, [String: Any])      // id, body
     case rejectInvoice(String, [String: Any])       // id, body
 
     // MARK: - Invoice Approval Tiers
     case fetchInvoiceApprovalTiers
 
+    // MARK: - Invoice Settings
+    case getInvoiceSettings
+    case updateInvoiceSettings([String: Any])
+
     // MARK: - Payment Runs
     case fetchPaymentRuns
+    case getPaymentRun(String)                       // runId
     case approvePaymentRun(String, [String: Any])   // id, body
     case rejectPaymentRun(String, [String: Any])    // id, body
 }
@@ -131,6 +138,12 @@ extension PORequest: POURLRequestProtocol {
         case .createInvoice(let body):
             return APIClient.shared.buildRequest(.post, "/api/v2/invoices", body: body)
 
+        case .updateInvoice(let id, let body):
+            return APIClient.shared.buildRequest(.patch, "/api/v2/invoices/\(id)", body: body)
+
+        case .deleteInvoice(let id):
+            return APIClient.shared.buildRequest(.delete, "/api/v2/invoices/\(id)")
+
         case .approveInvoice(let id, let body):
             let endPoint = "/api/v2/invoices/\(id)/approve"
             return APIClient.shared.buildRequest(.post, endPoint, body: body)
@@ -144,10 +157,20 @@ extension PORequest: POURLRequestProtocol {
             let endPoint = "/api/v2/account-hub/approval-tiers?module=invoices"
             return APIClient.shared.buildRequest(.get, endPoint)
 
+        // MARK: Invoice Settings
+        case .getInvoiceSettings:
+            return APIClient.shared.buildRequest(.get, "/api/v2/invoices/settings")
+
+        case .updateInvoiceSettings(let body):
+            return APIClient.shared.buildRequest(.patch, "/api/v2/invoices/settings", body: body)
+
         // MARK: Payment Runs (Active Runs)
         case .fetchPaymentRuns:
             let endPoint = "/api/v2/invoices/active-runs"
             return APIClient.shared.buildRequest(.get, endPoint)
+
+        case .getPaymentRun(let id):
+            return APIClient.shared.buildRequest(.get, "/api/v2/invoices/active-runs/\(id)")
 
         case .approvePaymentRun(let id, let body):
             let endPoint = "/api/v2/invoices/active-runs/\(id)/approve"

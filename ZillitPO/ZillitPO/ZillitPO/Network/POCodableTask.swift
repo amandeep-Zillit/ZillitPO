@@ -36,14 +36,21 @@ enum POCodableTask {
     // MARK: - Invoices (typed responses)
     case fetchInvoices(String, (Result<APIResponse<[InvoiceRaw]>?, Error>) -> Void)
     case createInvoice([String: Any], (Result<Data?, Error>) -> Void)
+    case updateInvoice(String, [String: Any], (Result<Data?, Error>) -> Void)
+    case deleteInvoice(String, (Result<Data?, Error>) -> Void)
     case approveInvoice(String, [String: Any], (Result<Data?, Error>) -> Void)
     case rejectInvoice(String, [String: Any], (Result<Data?, Error>) -> Void)
 
     // MARK: - Invoice Approval Tiers (typed response)
     case fetchInvoiceApprovalTiers((Result<APIResponse<[ApprovalTierConfig]>?, Error>) -> Void)
 
+    // MARK: - Invoice Settings
+    case getInvoiceSettings((Result<APIResponse<InvoiceSettingsRaw>?, Error>) -> Void)
+    case updateInvoiceSettings([String: Any], (Result<Data?, Error>) -> Void)
+
     // MARK: - Payment Runs (typed responses)
     case fetchPaymentRuns((Result<APIResponse<[PaymentRunRaw]>?, Error>) -> Void)
+    case getPaymentRun(String, (Result<APIResponse<PaymentRunDetailRaw>?, Error>) -> Void)
     case approvePaymentRun(String, [String: Any], (Result<Data?, Error>) -> Void)
     case rejectPaymentRun(String, [String: Any], (Result<Data?, Error>) -> Void)
 }
@@ -134,6 +141,14 @@ extension POCodableTask: PODataTaskProtocol {
             guard let urlRequest = PORequest.createInvoice(body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
 
+        case .updateInvoice(let id, let body, let completion):
+            guard let urlRequest = PORequest.updateInvoice(id, body).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
+
+        case .deleteInvoice(let id, let completion):
+            guard let urlRequest = PORequest.deleteInvoice(id).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
+
         case .approveInvoice(let id, let body, let completion):
             guard let urlRequest = PORequest.approveInvoice(id, body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
@@ -147,9 +162,22 @@ extension POCodableTask: PODataTaskProtocol {
             guard let urlRequest = PORequest.fetchInvoiceApprovalTiers.urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
 
+        // MARK: Invoice Settings
+        case .getInvoiceSettings(let completion):
+            guard let urlRequest = PORequest.getInvoiceSettings.urlRequest else { return nil }
+            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+
+        case .updateInvoiceSettings(let body, let completion):
+            guard let urlRequest = PORequest.updateInvoiceSettings(body).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
+
         // MARK: Payment Runs
         case .fetchPaymentRuns(let completion):
             guard let urlRequest = PORequest.fetchPaymentRuns.urlRequest else { return nil }
+            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+
+        case .getPaymentRun(let id, let completion):
+            guard let urlRequest = PORequest.getPaymentRun(id).urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
 
         case .approvePaymentRun(let id, let body, let completion):

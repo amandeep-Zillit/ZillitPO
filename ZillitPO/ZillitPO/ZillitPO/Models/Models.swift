@@ -618,9 +618,15 @@ struct Invoice: Identifiable, Equatable {
     var tags: [String] = []
     var createdAt: Int64 = 0
     var updatedAt: Int64 = 0
+    var updatedBy: String?
 
     // Display fields (resolved, not in DB)
     var department: String = ""
+    var vendorAddress: String = ""
+    var vendorEmail: String = ""
+    var vendorPhone: String = ""
+    var vendorContact: String = ""
+    var vendorVatNumber: String?
 
     static func == (lhs: Invoice, rhs: Invoice) -> Bool { lhs.id == rhs.id }
     var invoiceStatus: InvoiceStatus { InvoiceStatus.fromAPI(status) }
@@ -628,12 +634,15 @@ struct Invoice: Identifiable, Equatable {
 }
 
 enum InvoiceStatus: String, CaseIterable {
+    case inbox = "inbox"
     case draft = "draft", approval = "approval", approved = "approved"
     case rejected = "rejected", paid = "paid", onHold = "on_hold"
     case partiallyPaid = "partially_paid", voided = "voided"
+    case override_ = "override"
 
     var displayName: String {
         switch self {
+        case .inbox: return "Inbox"
         case .draft: return "Draft"
         case .approval: return "Pending Approval"
         case .approved: return "Approved"
@@ -642,10 +651,12 @@ enum InvoiceStatus: String, CaseIterable {
         case .onHold: return "On Hold"
         case .partiallyPaid: return "Partially Paid"
         case .voided: return "Voided"
+        case .override_: return "Override"
         }
     }
     static func fromAPI(_ raw: String) -> InvoiceStatus {
-        InvoiceStatus(rawValue: raw.lowercased()) ?? .draft
+        if raw.lowercased() == "override" { return .override_ }
+        return InvoiceStatus(rawValue: raw.lowercased()) ?? .draft
     }
 }
 

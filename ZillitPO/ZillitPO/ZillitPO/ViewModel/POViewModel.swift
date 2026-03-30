@@ -50,11 +50,35 @@ class POViewModel: ObservableObject {
     @Published var rejectInvoiceReason = ""
     @Published var isInvoiceApprover = false
 
+    // Invoice settings state
+    @Published var invoiceAlerts: [String] = []
+    @Published var invoiceTeamMembers: [InvoiceTeamMember] = []
+    @Published var invoiceAssignmentRules: [InvoiceAssignmentRule] = []
+    @Published var invoiceRunAuth: [RunAuthLevel] = []
+
+    // Invoice upload state
+    @Published var showUploadPreview = false
+    @Published var uploadFileName: String = ""
+    @Published var uploadFileData: Data?
+    @Published var uploadFileMimeType: String = ""
+    @Published var uploading = false
+    @Published var uploadError: String?
+    @Published var uploadExtraction: InvoiceExtraction?
+    @Published var uploadId: String?
+    @Published var showTypeSelect = false
+    @Published var invoiceType: String?
+    @Published var uploadSubmitting = false
+    @Published var uploadSubmitted = false
+
     // Payment Run state
     @Published var paymentRuns: [PaymentRun] = []
     @Published var showRejectPaymentRunSheet = false
     @Published var rejectPaymentRunTarget: PaymentRun?
     @Published var rejectPaymentRunReason = ""
+    @Published var pendingRunsLoading = false
+    @Published var selectedRunDetail: PaymentRunDetail?
+    @Published var runDetailLoading = false
+    @Published var approvingRunId: String?
 
     init() { currentUser = UsersData.byId[userId]; configureAPI() }
 

@@ -52,6 +52,31 @@ class APIClient {
         return req
     }
 
+    // MARK: - Build Multipart Request (for file uploads)
+
+    func buildMultipartRequest(_ path: String, fileData: Data, fileName: String, mimeType: String, fieldName: String = "file") -> URLRequest? {
+        let urlString = path.hasPrefix("http") ? path : "\(baseURL)\(path)"
+        guard let url = URL(string: urlString) else { return nil }
+
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.timeoutInterval = 60
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        req.setValue(projectId, forHTTPHeaderField: "x-project-id")
+        req.setValue(userId, forHTTPHeaderField: "x-user-id")
+        req.setValue(String(isAccountant), forHTTPHeaderField: "x-is-accountant")
+
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"\(fieldName)\"; filename=\"\(fileName)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
+        body.append(fileData)
+        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+        req.httpBody = body
+        return req
+    }
+
     // MARK: - Codable Result Task (typed response — matches Zillit main app pattern)
 
     func codableResultTask<T: Decodable>(with request: URLRequest, completion: @escaping (Result<APIResponse<T>?, Error>) -> Void) -> URLSessionDataTask {
@@ -366,7 +391,7 @@ struct InvoiceRaw: Codable {
     var rejection_reason: String?; var rejected_by: String?; var rejected_at: Int?
     var tags: [String]?
     var invoice_date: Int?; var due_date: Int?; var effective_date: Int?
-    var created_at: Int?; var updated_at: Int?
+    var created_at: Int?; var updated_at: Int?; var updated_by: String?
 
     enum CodingKeys: String, CodingKey {
         case id, project_id, invoice_number, vendor_id, department_id, description
@@ -377,7 +402,7 @@ struct InvoiceRaw: Codable {
         case po_id, po_number, po_ids, line_items
         case rejection_reason, rejected_by, rejected_at
         case tags, invoice_date, due_date, effective_date
-        case created_at, updated_at
+        case created_at, updated_at, updated_by
     }
 
     init(from decoder: Decoder) throws {
@@ -406,6 +431,7 @@ struct InvoiceRaw: Codable {
         po_ids = try? c.decode([String].self, forKey: .po_ids)
         rejection_reason = try? c.decode(String.self, forKey: .rejection_reason)
         rejected_by = try? c.decode(String.self, forKey: .rejected_by)
+        updated_by = try? c.decode(String.self, forKey: .updated_by)
         tags = try? c.decode([String].self, forKey: .tags)
         approvals = try? c.decode(FlexibleApprovals.self, forKey: .approvals)
         line_items = try? c.decode(FlexibleLineItems.self, forKey: .line_items)
@@ -423,6 +449,7 @@ struct InvoiceRaw: Codable {
 
 extension InvoiceRaw {
     func toInvoice(vendors: [Vendor], departments: [Department]) -> Invoice {
+        let v = vendors.first { $0.id == (vendor_id ?? "") }
         let d = departments.first { $0.id == (department_id ?? "") || $0.identifier == (department_id ?? "") }
         let items = (line_items?.items ?? []).map { raw -> LineItem in
             var li = LineItem(id: raw.id ?? UUID().uuidString, description: raw.description ?? "",
@@ -443,7 +470,12 @@ extension InvoiceRaw {
         inv.grossAmount = gross_amount ?? 0
         inv.status = status ?? "draft"; inv.approvalStatus = approval_status ?? "pending"
         inv.payMethod = pay_method; inv.costCentre = cost_centre; inv.assignedTo = assigned_to
-        inv.supplierName = supplier_name ?? ""; inv.reference = reference
+        inv.supplierName = v?.name ?? supplier_name ?? ""; inv.reference = reference
+        inv.vendorAddress = v?.address.formatted ?? ""
+        inv.vendorEmail = v?.email ?? ""
+        inv.vendorPhone = v != nil ? "\(v!.phone.countryCode) \(v!.phone.number)".trimmingCharacters(in: .whitespaces) : ""
+        inv.vendorContact = v?.contactPerson ?? ""
+        inv.vendorVatNumber = v?.vatNumber
         inv.holdReason = hold_reason; inv.holdNote = hold_note; inv.isOverdue = is_overdue ?? false
         inv.poId = po_id; inv.poNumber = po_number; inv.poIds = po_ids ?? []
         inv.approvals = apps; inv.approvedBy = approved_by
@@ -453,7 +485,7 @@ extension InvoiceRaw {
         inv.invoiceDate = invoice_date.map { Int64($0) }
         inv.dueDate = due_date.map { Int64($0) }
         inv.effectiveDate = effective_date.map { Int64($0) }
-        inv.createdAt = Int64(created_at ?? 0); inv.updatedAt = Int64(updated_at ?? 0)
+        inv.createdAt = Int64(created_at ?? 0); inv.updatedAt = Int64(updated_at ?? 0); inv.updatedBy = updated_by
         inv.department = d?.displayName ?? ""; inv.lineItems = items
         return inv
     }

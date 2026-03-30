@@ -61,6 +61,7 @@ struct ContentView: View {
                             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.gold.opacity(0.3), lineWidth: 1))
                             .contentShape(Rectangle())
                         }.buttonStyle(BorderlessButtonStyle())
+
                     }.padding(.horizontal, 20)
 
                     Spacer()
