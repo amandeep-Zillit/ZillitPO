@@ -214,7 +214,7 @@ struct ReceiptsTabView: View {
 
 struct CardTabView: View {
     @EnvironmentObject var appState: POViewModel
-    @State private var showRequestCard = false
+    @State private var navigateToRequestCard = false
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -231,14 +231,14 @@ struct CardTabView: View {
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
                     } else {
                         ForEach(appState.userCards) { card in
-                            CardRow(card: card)
+                            CardRow(card: card, isAccountant: appState.currentUser?.isAccountant ?? false)
                         }
                     }
                 }.padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 80)
             }
 
             // Request new card button
-            Button(action: { showRequestCard = true }) {
+            Button(action: { navigateToRequestCard = true }) {
                 HStack(spacing: 6) {
                     Image(systemName: "plus").font(.system(size: 14, weight: .bold))
                     Text("Request Card").font(.system(size: 14, weight: .bold))
@@ -247,55 +247,63 @@ struct CardTabView: View {
                 .background(Color.gold).cornerRadius(28)
             }.padding(.trailing, 20).padding(.bottom, 24)
         }
-        .sheet(isPresented: $showRequestCard) {
-            RequestCardSheet().environmentObject(appState)
-        }
+        .background(
+            NavigationLink(destination: RequestCardPage().environmentObject(appState), isActive: $navigateToRequestCard) { EmptyView() }
+                .frame(width: 0, height: 0).hidden()
+        )
     }
 }
 
 struct CardRow: View {
     let card: ExpenseCard
+    var isAccountant: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Status + issuer
+            // Top: card icon + status
             HStack {
                 Image(systemName: "creditcard.fill").font(.system(size: 18)).foregroundColor(.goldDark)
                 Spacer()
                 let (fg, bg) = cardStatusColor(card.status)
-                let label = card.status == "requested" && !card.approvals.isEmpty
-                    ? "\(card.statusDisplay) (\(card.approvals.count) approved)" : card.statusDisplay
-                Text(label).font(.system(size: 10, weight: .semibold)).foregroundColor(fg)
+                Text(card.statusDisplay(isAccountant: isAccountant)).font(.system(size: 10, weight: .semibold)).foregroundColor(fg)
                     .padding(.horizontal, 8).padding(.vertical, 3).background(bg).cornerRadius(4)
             }
 
-            if card.status == "active" || card.status == "digital_active" || card.status == "suspended" {
+            if card.status == "active" || card.status == "suspended" {
+                // ── Active / Suspended Card ──
                 // Card number
-                HStack(spacing: 4) {
-                    Text("•••• •••• ••••").font(.system(size: 14, design: .monospaced)).foregroundColor(.gray)
+                HStack(spacing: 2) {
+                    Text("•••• •••• ••••").font(.system(size: 15, design: .monospaced)).foregroundColor(.gray)
                     Text(card.lastFour.isEmpty ? "0000" : card.lastFour)
-                        .font(.system(size: 14, weight: .bold, design: .monospaced))
+                        .font(.system(size: 15, weight: .bold, design: .monospaced))
                 }
-                // Holder
-                Text(card.holderName).font(.system(size: 14, weight: .bold))
-                HStack(spacing: 4) {
-                    if !card.issuerDisplay.isEmpty && card.issuerDisplay != "—" {
-                        Text(card.issuerDisplay).font(.system(size: 10)).foregroundColor(.secondary)
-                    }
-                    if !card.department.isEmpty {
-                        Text("· \(card.department)").font(.system(size: 10)).foregroundColor(.secondary)
-                    }
+                // Holder + designation
+                Text(card.holderFullName).font(.system(size: 14, weight: .bold))
+                if !card.bankName.isEmpty {
+                    Text(card.bankName).font(.system(size: 11)).foregroundColor(.secondary)
                 }
+
+                // BS Control
+                if !card.bsControlCode.isEmpty {
+                    HStack {
+                        Text("BS Control").font(.system(size: 10)).foregroundColor(.secondary)
+                        Spacer()
+                        Text(card.bsControlCode).font(.system(size: 12, weight: .bold, design: .monospaced))
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(Color.bgRaised).cornerRadius(6)
+                }
+
                 // Limit / Spent
                 HStack {
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("LIMIT").font(.system(size: 8, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
+                        Text("Limit").font(.system(size: 10)).foregroundColor(.secondary)
                         Text("\(FormatUtils.formatGBP(card.monthlyLimit))/mo")
                             .font(.system(size: 13, weight: .semibold, design: .monospaced)).foregroundColor(.goldDark)
                     }
                     Spacer()
                     VStack(alignment: .trailing, spacing: 1) {
-                        Text("SPENT").font(.system(size: 8, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
+                        Text("Spent").font(.system(size: 10)).foregroundColor(.secondary)
                         Text(FormatUtils.formatGBP(card.spentAmount))
                             .font(.system(size: 13, weight: .semibold, design: .monospaced))
                     }
@@ -309,96 +317,225 @@ struct CardRow: View {
                             .frame(width: geo.size.width * CGFloat(min(card.spendPercent, 1.0)), height: 6)
                     }
                 }.frame(height: 6)
+
             } else if card.status == "requested" {
-                Text("Pending Approval").font(.system(size: 13, design: .monospaced)).foregroundColor(.gray)
-                Text(card.holderName).font(.system(size: 14, weight: .bold))
-                HStack(spacing: 4) {
-                    if !card.department.isEmpty { Text(card.department).font(.system(size: 10)).foregroundColor(.secondary) }
+                // ── Requested ──
+                Text("Awaiting Review").font(.system(size: 13, design: .monospaced)).foregroundColor(.gray)
+                Text(card.holderFullName).font(.system(size: 14, weight: .bold))
+                if !card.holderDesignation.isEmpty {
+                    Text(card.holderDesignation).font(.system(size: 11)).foregroundColor(.secondary)
                 }
-                if card.proposedLimit > 0 {
+                if card.monthlyLimit > 0 {
                     HStack {
-                        Text("Proposed Limit").font(.system(size: 11)).foregroundColor(.secondary)
+                        Text("Proposed Limit").font(.system(size: 10)).foregroundColor(.secondary)
                         Spacer()
-                        Text(FormatUtils.formatGBP(card.proposedLimit)).font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundColor(.goldDark)
+                        Text("\(FormatUtils.formatGBP(card.monthlyLimit))/mo")
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundColor(.goldDark)
                     }
                 }
-            } else if card.status == "rejected" {
-                Text("Rejected").font(.system(size: 13, design: .monospaced)).foregroundColor(.red)
-                Text(card.holderName).font(.system(size: 14, weight: .bold))
-                if let reason = card.rejectionReason, !reason.isEmpty {
-                    Text(reason).font(.system(size: 11)).foregroundColor(.red)
-                        .padding(8).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.red.opacity(0.06)).cornerRadius(6)
+
+            } else if card.status == "pending" || card.status == "approved" || card.status == "override" {
+                // ── Pending Approval / Approved / In-Progress ──
+                let displayLabel = card.statusDisplay(isAccountant: isAccountant)
+                let color: Color = (card.status == "pending") ? .orange : isAccountant ? .green : .goldDark
+                Text(displayLabel).font(.system(size: 13, design: .monospaced)).foregroundColor(color)
+                Text(card.holderFullName).font(.system(size: 14, weight: .bold))
+                HStack(spacing: 4) {
+                    if !card.holderDesignation.isEmpty { Text(card.holderDesignation).font(.system(size: 11)).foregroundColor(.secondary) }
+                    if !card.bankName.isEmpty { Text("· \(card.bankName)").font(.system(size: 11)).foregroundColor(.secondary) }
                 }
+                // BS Control
+                if !card.bsControlCode.isEmpty {
+                    HStack {
+                        Text("BS Control").font(.system(size: 10)).foregroundColor(.secondary)
+                        Spacer()
+                        Text(card.bsControlCode).font(.system(size: 12, weight: .bold, design: .monospaced))
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(Color.bgRaised).cornerRadius(6)
+                }
+                if card.monthlyLimit > 0 {
+                    HStack {
+                        Text("Proposed Limit").font(.system(size: 10)).foregroundColor(.secondary)
+                        Spacer()
+                        Text("\(FormatUtils.formatGBP(card.monthlyLimit))/mo")
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundColor(.goldDark)
+                    }
+                }
+
+            } else if card.status == "rejected" {
+                // ── Rejected ──
+                Text("Rejected").font(.system(size: 13, design: .monospaced)).foregroundColor(.red)
+                Text(card.holderFullName).font(.system(size: 14, weight: .bold))
+                if !card.holderDesignation.isEmpty {
+                    Text(card.holderDesignation).font(.system(size: 11)).foregroundColor(.secondary)
+                }
+                if card.monthlyLimit > 0 {
+                    HStack {
+                        Text("Proposed Limit").font(.system(size: 10)).foregroundColor(.secondary)
+                        Spacer()
+                        Text("\(FormatUtils.formatGBP(card.monthlyLimit))/mo")
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundColor(.goldDark)
+                    }
+                }
+                if let reason = card.rejectionReason, !reason.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("REJECTION REASON").font(.system(size: 8, weight: .bold)).foregroundColor(Color(red: 0.91, green: 0.29, blue: 0.48)).tracking(0.4)
+                        Text(reason).font(.system(size: 12)).foregroundColor(.primary)
+                        if let rejBy = card.rejectedBy, !rejBy.isEmpty {
+                            HStack(spacing: 4) {
+                                Text("By \(UsersData.byId[rejBy]?.fullName ?? rejBy)").font(.system(size: 10)).foregroundColor(.secondary)
+                                if let rejAt = card.rejectedAt, rejAt > 0 {
+                                    Text("· \(FormatUtils.formatDateTime(rejAt))").font(.system(size: 10)).foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                    }
+                    .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(red: 0.91, green: 0.29, blue: 0.48).opacity(0.06)).cornerRadius(8)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.91, green: 0.29, blue: 0.48).opacity(0.2), lineWidth: 1))
+                }
+
             } else {
-                Text(card.holderName).font(.system(size: 14, weight: .bold))
+                // ── Other status ──
+                Text(card.holderFullName).font(.system(size: 14, weight: .bold))
+                if !card.holderDesignation.isEmpty {
+                    Text(card.holderDesignation).font(.system(size: 11)).foregroundColor(.secondary)
+                }
             }
         }
-        .padding(14).background(Color.white).cornerRadius(10)
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+        .padding(14).background(Color.white).cornerRadius(12)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
     }
 
     private func cardStatusColor(_ s: String) -> (Color, Color) {
         switch s {
-        case "active", "digital_active": return (.green, Color.green.opacity(0.1))
+        case "active": return (.green, Color.green.opacity(0.1))
         case "requested": return (.orange, Color.orange.opacity(0.1))
-        case "pending", "in_transit": return (.goldDark, Color.gold.opacity(0.15))
+        case "pending": return (.goldDark, Color.gold.opacity(0.15))
+        case "approved", "override": return isAccountant ? (.green, Color.green.opacity(0.1)) : (.goldDark, Color.gold.opacity(0.15))
         case "rejected": return (.red, Color.red.opacity(0.1))
-        case "suspended", "inactive": return (.gray, Color.gray.opacity(0.1))
+        case "suspended": return (.gray, Color.gray.opacity(0.1))
         default: return (.goldDark, Color.gold.opacity(0.15))
         }
     }
 }
 
-struct RequestCardSheet: View {
+struct RequestCardPage: View {
     @EnvironmentObject var appState: POViewModel
     @Environment(\.presentationMode) var presentationMode
     @State private var proposedLimit = ""
     @State private var submitting = false
 
     var body: some View {
-        NavigationView {
-            ZStack {
-                Color.bgBase.edgesIgnoringSafeArea(.all)
+        ZStack(alignment: .bottom) {
+            Color.bgBase.edgesIgnoringSafeArea(.all)
+
+            ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Card Holder").font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
-                        Text(appState.currentUser?.fullName ?? "—").font(.system(size: 14, weight: .medium))
-                            .padding(10).frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color.bgRaised).cornerRadius(8)
+                    // Icon header
+                    VStack(spacing: 12) {
+                        Image(systemName: "creditcard.fill").font(.system(size: 40)).foregroundColor(.gold)
+                        Text("Request New Card").font(.system(size: 18, weight: .bold))
+                        Text("Your request will be sent to the accounts team for review and approval.")
+                            .font(.system(size: 13)).foregroundColor(.secondary).multilineTextAlignment(.center)
                     }
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Department").font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
-                        Text(appState.currentUser?.displayDepartment ?? "—").font(.system(size: 14, weight: .medium))
-                            .padding(10).frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color.bgRaised).cornerRadius(8)
+                    .frame(maxWidth: .infinity).padding(.vertical, 24)
+                    .background(Color.white).cornerRadius(12)
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
+
+                    // Form card
+                    VStack(spacing: 0) {
+                        formRow(label: "Card Holder", value: appState.currentUser?.fullName ?? "—")
+                        Divider().padding(.leading, 14)
+                        formRow(label: "Department", value: appState.currentUser?.displayDepartment ?? "—")
+                        Divider().padding(.leading, 14)
+                        formRow(label: "Designation", value: appState.currentUser?.displayDesignation ?? "—")
+                        Divider().padding(.leading, 14)
+
+                        // Proposed limit input
+                        HStack {
+                            Text("Proposed Limit").font(.system(size: 12)).foregroundColor(.secondary)
+                            Spacer()
+                            HStack(spacing: 2) {
+                                Text("£").font(.system(size: 14, weight: .semibold)).foregroundColor(.goldDark)
+                                TextField("e.g. 1500", text: $proposedLimit)
+                                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                    .foregroundColor(.goldDark)
+                                    .keyboardType(.decimalPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .frame(width: 100)
+                            }
+                            .padding(6).background(Color.bgRaised).cornerRadius(6)
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
+                        }
+                        .padding(.horizontal, 14).padding(.vertical, 12)
                     }
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Proposed Limit (£)").font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
-                        TextField("e.g. 1500", text: $proposedLimit)
-                            .font(.system(size: 14)).keyboardType(.decimalPad)
-                            .padding(10).background(Color.white).cornerRadius(8)
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                    .background(Color.white).cornerRadius(10)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+
+                    // Info note
+                    HStack(spacing: 10) {
+                        Image(systemName: "info.circle.fill").font(.system(size: 14)).foregroundColor(.blue)
+                        Text("The accounts team will assign the card issuer, set the final limit, and process your request through the approval chain.")
+                            .font(.system(size: 11)).foregroundColor(.secondary)
                     }
-                    Text("Your request will be sent to the accounts team for review.")
-                        .font(.system(size: 11)).foregroundColor(.gray)
-                        .padding(10).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.bgRaised).cornerRadius(8)
-                    Spacer()
-                }.padding()
+                    .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.blue.opacity(0.04)).cornerRadius(8)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.blue.opacity(0.15), lineWidth: 1))
+
+                }.padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 80)
             }
-            .navigationBarTitle(Text("Request New Card"), displayMode: .inline)
-            .navigationBarItems(
-                leading: Button("Cancel") { presentationMode.wrappedValue.dismiss() }.foregroundColor(.goldDark),
-                trailing: Button("Submit") {
+
+            // Submit bar
+            HStack(spacing: 12) {
+                Button(action: { presentationMode.wrappedValue.dismiss() }) {
+                    Text("Cancel").font(.system(size: 14, weight: .semibold)).foregroundColor(.primary)
+                        .frame(maxWidth: .infinity).padding(.vertical, 14)
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                }.buttonStyle(BorderlessButtonStyle())
+
+                Button(action: {
                     guard !submitting, let limit = Double(proposedLimit), limit > 0 else { return }
                     submitting = true
                     appState.requestNewCard(proposedLimit: limit)
                     presentationMode.wrappedValue.dismiss()
-                }.foregroundColor(.goldDark).font(.system(size: 16, weight: .bold))
-                .disabled(Double(proposedLimit) == nil || Double(proposedLimit)! <= 0)
-            )
+                }) {
+                    HStack(spacing: 6) {
+                        if submitting { ActivityIndicator(isAnimating: true).frame(width: 16, height: 16) }
+                        Text(submitting ? "Submitting..." : "Submit Request")
+                    }
+                    .font(.system(size: 14, weight: .bold)).foregroundColor(.black)
+                    .frame(maxWidth: .infinity).padding(.vertical, 14)
+                    .background(Double(proposedLimit) ?? 0 > 0 && !submitting ? Color.gold : Color.gray.opacity(0.3))
+                    .cornerRadius(10)
+                }
+                .buttonStyle(BorderlessButtonStyle())
+                .disabled(Double(proposedLimit) ?? 0 <= 0 || submitting)
+            }
+            .padding(.horizontal, 16).padding(.vertical, 12)
+            .background(Color.white)
+            .overlay(Rectangle().fill(Color.borderColor).frame(height: 1), alignment: .top)
         }
+        .navigationBarTitle(Text("Request New Card"), displayMode: .inline)
+        .navigationBarBackButtonHidden(true)
+        .navigationBarItems(leading:
+            Button(action: { presentationMode.wrappedValue.dismiss() }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left").font(.system(size: 14, weight: .semibold))
+                    Text("Back").font(.system(size: 16))
+                }.foregroundColor(.goldDark)
+            }
+        )
+    }
+
+    private func formRow(label: String, value: String) -> some View {
+        HStack {
+            Text(label).font(.system(size: 12)).foregroundColor(.secondary)
+            Spacer()
+            Text(value).font(.system(size: 12, weight: .semibold))
+        }
+        .padding(.horizontal, 14).padding(.vertical, 12)
     }
 }
 
@@ -428,7 +565,7 @@ struct CardsForApprovalTabView: View {
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
                     } else {
                         ForEach(cards) { card in
-                            ApprovalCardRow(card: card, onApprove: {
+                            ApprovalCardRow(card: card, tierConfigs: appState.cardTierConfigRows, onApprove: {
                                 appState.approveCard(card)
                             }, onReject: {
                                 rejectTarget = card; showRejectSheet = true
@@ -472,51 +609,122 @@ struct CardsForApprovalTabView: View {
 
 struct ApprovalCardRow: View {
     let card: ExpenseCard
+    let tierConfigs: [ApprovalTierConfig]
     let onApprove: () -> Void
     let onReject: () -> Void
 
+    private var totalTiers: Int {
+        let cfg = ApprovalHelpers.resolveConfig(tierConfigs, deptId: card.departmentId, amount: card.monthlyLimit)
+            ?? ApprovalHelpers.resolveConfig(tierConfigs, deptId: nil, amount: card.monthlyLimit)
+            ?? ApprovalHelpers.resolveConfig(tierConfigs, deptId: nil)
+        return ApprovalHelpers.getTotalTiers(cfg)
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
+            // Top: card icon + Pending (0/2) badge
             HStack {
-                Image(systemName: "creditcard.fill").font(.system(size: 16)).foregroundColor(.goldDark)
+                Image(systemName: "creditcard.fill").font(.system(size: 18)).foregroundColor(.goldDark)
                 Spacer()
-                Text("Requested (\(card.approvals.count) approved)")
-                    .font(.system(size: 10, weight: .semibold)).foregroundColor(.orange)
+                Text("Pending (\(card.approvals.count)/\(totalTiers))")
+                    .font(.system(size: 10, weight: .bold)).foregroundColor(.orange)
                     .padding(.horizontal, 8).padding(.vertical, 3)
                     .background(Color.orange.opacity(0.1)).cornerRadius(4)
             }
-            Text(card.holderName).font(.system(size: 15, weight: .bold))
-            HStack(spacing: 6) {
-                if !card.department.isEmpty { Text(card.department).font(.system(size: 11)).foregroundColor(.secondary) }
-                if !card.issuerDisplay.isEmpty && card.issuerDisplay != "—" {
-                    Text("· \(card.issuerDisplay)").font(.system(size: 11)).foregroundColor(.secondary)
+
+            // Status label
+            Text("Pending Approval").font(.system(size: 13, design: .monospaced)).foregroundColor(.orange)
+
+            // Holder name + designation + bank
+            Text(card.holderFullName).font(.system(size: 15, weight: .bold))
+            HStack(spacing: 4) {
+                if !card.holderDesignation.isEmpty {
+                    Text(card.holderDesignation).font(.system(size: 11)).foregroundColor(.secondary)
+                }
+                if !card.bankName.isEmpty {
+                    Text("· \(card.bankName)").font(.system(size: 11)).foregroundColor(.secondary)
                 }
             }
-            if card.proposedLimit > 0 || card.monthlyLimit > 0 {
+
+            // BS Control
+            if !card.bsControlCode.isEmpty {
                 HStack {
-                    Text("Proposed Limit").font(.system(size: 11)).foregroundColor(.secondary)
+                    Text("BS Control").font(.system(size: 11)).foregroundColor(.secondary)
                     Spacer()
-                    Text(FormatUtils.formatGBP(card.proposedLimit > 0 ? card.proposedLimit : card.monthlyLimit))
-                        .font(.system(size: 13, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
+                    Text(card.bsControlCode).font(.system(size: 13, weight: .bold, design: .monospaced))
+                }
+                .padding(.horizontal, 10).padding(.vertical, 8)
+                .background(Color.bgRaised).cornerRadius(8)
+            }
+
+            // Proposed Limit
+            if card.monthlyLimit > 0 {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Proposed Limit").font(.system(size: 10)).foregroundColor(.secondary)
+                    Text("\(FormatUtils.formatGBP(card.monthlyLimit))/mo")
+                        .font(.system(size: 14, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
                 }
             }
-            // Approve / Reject
+
+            // Approval Chain circles (Level 1, Level 2, etc.)
+            if totalTiers > 0 {
+                HStack(spacing: 0) {
+                    ForEach(1...totalTiers, id: \.self) { tier in
+                        let isApproved = card.approvals.contains { $0.tierNumber == tier }
+                        let isCurrent = !isApproved && (tier == 1 || card.approvals.contains { $0.tierNumber == tier - 1 })
+
+                        if tier > 1 {
+                            Rectangle()
+                                .fill(card.approvals.contains { $0.tierNumber == tier - 1 } ? Color.green.opacity(0.4) : Color.gray.opacity(0.3))
+                                .frame(width: 20, height: 2)
+                        }
+
+                        VStack(spacing: 4) {
+                            ZStack {
+                                Circle()
+                                    .fill(isApproved ? Color.green : isCurrent ? Color.gold : Color.gray.opacity(0.25))
+                                    .frame(width: 28, height: 28)
+                                if isApproved {
+                                    Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundColor(.white)
+                                } else if isCurrent {
+                                    Circle().fill(Color.white).frame(width: 10, height: 10)
+                                }
+                            }
+                            Text("Level \(tier)")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundColor(isApproved ? .green : isCurrent ? .goldDark : .gray)
+                            if isApproved {
+                                let approver = card.approvals.first { $0.tierNumber == tier }
+                                let name = approver.flatMap { UsersData.byId[$0.userId]?.fullName } ?? ""
+                                if !name.isEmpty {
+                                    Text(name).font(.system(size: 8, weight: .medium)).foregroundColor(.green).lineLimit(1)
+                                }
+                            } else {
+                                Text("Awaiting").font(.system(size: 8)).foregroundColor(isCurrent ? .goldDark : .gray)
+                            }
+                        }.frame(minWidth: 60)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
+            // Approve / Reject buttons
             HStack(spacing: 10) {
                 Spacer()
                 Button(action: onReject) {
                     Text("Reject").font(.system(size: 12, weight: .bold)).foregroundColor(.white)
                         .padding(.horizontal, 16).padding(.vertical, 8)
-                        .background(Color(red: 0.91, green: 0.29, blue: 0.48)).cornerRadius(8)
+                        .background(Color.red).cornerRadius(8)
                 }.buttonStyle(BorderlessButtonStyle())
                 Button(action: onApprove) {
-                    Text("Approve").font(.system(size: 12, weight: .bold)).foregroundColor(.black)
+                    Text("Approve").font(.system(size: 12, weight: .bold)).foregroundColor(.white)
                         .padding(.horizontal, 16).padding(.vertical, 8)
-                        .background(Color.gold).cornerRadius(8)
+                        .background(Color.green).cornerRadius(8)
                 }.buttonStyle(BorderlessButtonStyle())
             }
         }
-        .padding(14).background(Color.white).cornerRadius(10)
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+        .padding(14).background(Color.white).cornerRadius(12)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
     }
 }
 

@@ -152,7 +152,7 @@ extension CardExpenseRequest: POURLRequestProtocol {
 
         // MARK: Approval Tiers
         case .fetchCardApprovalTiers:
-            let url = "http://localhost:3003/api/v2/account-hub/approval-tiers?module=card_processing"
+            let url = "http://localhost:3003/api/v2/account-hub/approval-tiers?module=card_expenses"
             guard let u = URL(string: url) else { return nil }
             var req = URLRequest(url: u)
             req.httpMethod = "GET"

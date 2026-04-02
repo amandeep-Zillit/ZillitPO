@@ -128,7 +128,7 @@ extension PORequest: POURLRequestProtocol {
 
         // MARK: Form Template
         case .fetchFormTemplate:
-            let endPoint = "/api/v2/purchase-orders/form-templates?module=purchase_orders"
+            let endPoint = "/api/v2/account-hub/form-templates?module=purchase_orders"
             return APIClient.shared.buildRequest(.get, endPoint)
 
         // MARK: Invoices

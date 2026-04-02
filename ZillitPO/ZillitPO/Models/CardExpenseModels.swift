@@ -162,6 +162,13 @@ struct ReceiptRaw: Codable {
 
 // MARK: - Card (Domain model)
 
+struct BankAccount: Codable, Equatable {
+    var id: String?
+    var name: String?
+    var account_number: String?
+    var sort_code: String?
+}
+
 struct ExpenseCard: Identifiable, Equatable {
     var id: String = UUID().uuidString
     var projectId: String = ""
@@ -175,9 +182,19 @@ struct ExpenseCard: Identifiable, Equatable {
     var monthlyLimit: Double = 0
     var currentBalance: Double = 0
     var proposedLimit: Double = 0
+    var bsControlCode: String = ""
+    var justification: String = ""
+    var requestedBy: String = ""
+    var requestedAt: Int64 = 0
     var approvals: [Approval] = []
+    var approvedBy: String?
+    var approvedAt: Int64?
     var rejectedBy: String?
+    var rejectedAt: Int64?
     var rejectionReason: String?
+    var digitalCardNumber: String?
+    var physicalCardNumber: String?
+    var bankAccount: BankAccount?
     var createdAt: Int64 = 0
     var updatedAt: Int64 = 0
 
@@ -185,27 +202,21 @@ struct ExpenseCard: Identifiable, Equatable {
 
     var spentAmount: Double { max(monthlyLimit - currentBalance, 0) }
     var spendPercent: Double { monthlyLimit > 0 ? spentAmount / monthlyLimit : 0 }
+    var bankName: String { bankAccount?.name ?? "" }
+    var holderUser: AppUser? { UsersData.byId[holderId] }
+    var holderFullName: String { holderUser?.fullName ?? holderName }
+    var holderDesignation: String { holderUser?.displayDesignation ?? "" }
+    var isDigitalOnly: Bool { digitalCardNumber != nil && !digitalCardNumber!.isEmpty && (physicalCardNumber == nil || physicalCardNumber!.isEmpty) }
 
-    var statusDisplay: String {
+    func statusDisplay(isAccountant: Bool) -> String {
         switch status {
-        case "active": return "Active"
+        case "active": return isDigitalOnly ? "Digital Active" : "Active"
         case "requested": return "Requested"
-        case "pending": return "Pending"
+        case "pending": return "Pending Approval"
+        case "approved", "override": return isAccountant ? (status == "override" ? "Override" : "Approved") : "In-Progress"
         case "rejected": return "Rejected"
-        case "in_transit": return "In Transit"
-        case "digital_active": return "Digital Active"
-        case "inactive": return "Inactive"
         case "suspended": return "Suspended"
         default: return status.capitalized
-        }
-    }
-
-    var issuerDisplay: String {
-        switch cardIssuer.lowercased() {
-        case "barclays": return "Barclays"
-        case "equals": return "Equals"
-        case "revolut": return "Revolut"
-        default: return cardIssuer.isEmpty ? "—" : cardIssuer
         }
     }
 }
@@ -215,69 +226,98 @@ struct ExpenseCard: Identifiable, Equatable {
 struct CardRaw: Codable {
     var id: String
     var project_id: String?
-    var holder_id: String?
-    var holder_name: String?
-    var department: String?
+    var user_id: String?
     var department_id: String?
     var status: String?
     var last_four: String?
     var card_issuer: String?
     var monthly_limit: Double?
     var current_balance: Double?
-    var proposed_limit: Double?
+    var proposed_float: Double?
+    var bs_control_code: String?
+    var justification: String?
+    var requested_by: String?
+    var requested_at: String?
     var approvals: [CardApprovalRaw]?
+    var approved_by: String?
+    var approved_at: String?
     var rejected_by: String?
+    var rejected_at: String?
     var rejection_reason: String?
-    var created_at: String?
+    var digital_card_number: String?
+    var physical_card_number: String?
+    var bank_account: BankAccount?
+    var updated_by: String?
     var updated_at: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, project_id, holder_id, holder_name, department, department_id
-        case status, last_four, card_issuer, monthly_limit, current_balance, proposed_limit
-        case approvals, rejected_by, rejection_reason, created_at, updated_at
+        case id, project_id, user_id, department_id
+        case status, last_four, card_issuer, monthly_limit, current_balance, proposed_float
+        case bs_control_code, justification, requested_by, requested_at
+        case approvals, approved_by, approved_at
+        case rejected_by, rejected_at, rejection_reason
+        case digital_card_number, physical_card_number, bank_account
+        case updated_by, updated_at
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
         project_id = try? c.decode(String.self, forKey: .project_id)
-        holder_id = try? c.decode(String.self, forKey: .holder_id)
-        holder_name = try? c.decode(String.self, forKey: .holder_name)
-        department = try? c.decode(String.self, forKey: .department)
+        user_id = try? c.decode(String.self, forKey: .user_id)
         department_id = try? c.decode(String.self, forKey: .department_id)
         status = try? c.decode(String.self, forKey: .status)
         last_four = try? c.decode(String.self, forKey: .last_four)
         card_issuer = try? c.decode(String.self, forKey: .card_issuer)
+        bs_control_code = try? c.decode(String.self, forKey: .bs_control_code)
+        justification = try? c.decode(String.self, forKey: .justification)
+        requested_by = try? c.decode(String.self, forKey: .requested_by)
+        requested_at = try? c.decode(String.self, forKey: .requested_at)
+        approved_by = try? c.decode(String.self, forKey: .approved_by)
+        approved_at = try? c.decode(String.self, forKey: .approved_at)
         rejected_by = try? c.decode(String.self, forKey: .rejected_by)
+        rejected_at = try? c.decode(String.self, forKey: .rejected_at)
         rejection_reason = try? c.decode(String.self, forKey: .rejection_reason)
+        digital_card_number = try? c.decode(String.self, forKey: .digital_card_number)
+        physical_card_number = try? c.decode(String.self, forKey: .physical_card_number)
+        updated_by = try? c.decode(String.self, forKey: .updated_by)
+        updated_at = try? c.decode(String.self, forKey: .updated_at)
+        bank_account = try? c.decode(BankAccount.self, forKey: .bank_account)
         approvals = try? c.decode([CardApprovalRaw].self, forKey: .approvals)
         monthly_limit = flexibleDoubleDecode(c, .monthly_limit)
         current_balance = flexibleDoubleDecode(c, .current_balance)
-        proposed_limit = flexibleDoubleDecode(c, .proposed_limit)
-        created_at = try? c.decode(String.self, forKey: .created_at)
-        updated_at = try? c.decode(String.self, forKey: .updated_at)
+        proposed_float = flexibleDoubleDecode(c, .proposed_float)
     }
 
     func toCard() -> ExpenseCard {
+        let dept = DepartmentsData.all.first { $0.id == (department_id ?? "") }
         var card = ExpenseCard()
         card.id = id
-        card.projectId = project_id ?? ""
-        card.holderId = holder_id ?? ""
-        card.holderName = holder_name ?? ""
-        card.department = department ?? ""
+        card.holderId = user_id ?? ""
+        card.holderName = UsersData.byId[user_id ?? ""]?.fullName ?? ""
+        card.department = dept?.displayName ?? ""
         card.departmentId = department_id ?? ""
         card.status = status ?? "requested"
         card.lastFour = last_four ?? ""
         card.cardIssuer = card_issuer ?? ""
         card.monthlyLimit = monthly_limit ?? 0
         card.currentBalance = current_balance ?? 0
-        card.proposedLimit = proposed_limit ?? 0
+        card.proposedLimit = proposed_float ?? 0
+        card.bsControlCode = bs_control_code ?? ""
+        card.justification = justification ?? ""
+        card.requestedBy = requested_by ?? ""
+        card.requestedAt = Int64(requested_at ?? "") ?? 0
+        card.approvedBy = approved_by
+        card.approvedAt = approved_at.flatMap { Int64($0) }
+        card.rejectedBy = rejected_by
+        card.rejectedAt = rejected_at.flatMap { Int64($0) }
+        card.rejectionReason = rejection_reason
+        card.digitalCardNumber = digital_card_number
+        card.physicalCardNumber = physical_card_number
+        card.bankAccount = bank_account
         card.approvals = (approvals ?? []).map {
             Approval(userId: $0.user_id ?? "", tierNumber: $0.tier_number ?? 0, approvedAt: Int64($0.approved_at ?? "") ?? 0)
         }
-        card.rejectedBy = rejected_by
-        card.rejectionReason = rejection_reason
-        card.createdAt = Int64(created_at ?? "") ?? 0
         card.updatedAt = Int64(updated_at ?? "") ?? 0
         return card
     }

@@ -67,7 +67,7 @@ extension POViewModel {
     // MARK: - Load Cards
 
     func loadUserCards() {
-        CardExpenseCodableTask.fetchCards("holder_id=\(userId)") { [weak self] result in
+        CardExpenseCodableTask.fetchCards("my=true") { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
@@ -81,15 +81,16 @@ extension POViewModel {
     }
 
     func loadAllRequestedCards() {
-        CardExpenseCodableTask.fetchCards("status=requested") { [weak self] result in
+        // Server filters to cards where current user is an approver
+        CardExpenseCodableTask.fetchCards("status=pending&for_approval=true") { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
                     self?.allCards = (response?.data ?? []).map { $0.toCard() }
-                    print("✅ Loaded \(self?.allCards.count ?? 0) all requested cards")
+                    print("✅ Loaded \(self?.allCards.count ?? 0) cards for approval")
                     self?.updateCardApproverStatus()
                 case .failure(let error):
-                    print("❌ Fetch all cards failed: \(error)")
+                    print("❌ Fetch cards for approval failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -114,22 +115,13 @@ extension POViewModel {
 
     func updateCardApproverStatus() {
         let info = ApprovalHelpers.getApproverDeptIds(cardTierConfigRows, userId: userId)
-        isCardApprover = info.isApproverInAllScope || !info.approverDeptIds.isEmpty || (currentUser?.isAccountant == true)
+        let inTiers = info.isApproverInAllScope || !info.approverDeptIds.isEmpty
+        isCardApprover = inTiers || !allCards.isEmpty || (currentUser?.isAccountant == true)
     }
 
     func cardsForApproval() -> [ExpenseCard] {
-        allCards.filter { card in
-            guard card.status == "requested" else { return false }
-            let cfg = ApprovalHelpers.resolveConfig(cardTierConfigRows, deptId: card.departmentId, amount: card.monthlyLimit)
-                ?? ApprovalHelpers.resolveConfig(cardTierConfigRows, deptId: card.departmentId)
-            guard let cfg = cfg else { return false }
-            var fakePO = PurchaseOrder()
-            fakePO.id = card.id; fakePO.userId = card.holderId; fakePO.status = "PENDING"
-            fakePO.departmentId = card.departmentId; fakePO.approvals = card.approvals
-            fakePO.netAmount = card.monthlyLimit
-            let vis = ApprovalHelpers.getVisibility(po: fakePO, config: cfg, userId: userId)
-            return vis.canApprove
-        }
+        // Server already filters via for_approval=true
+        return allCards
     }
 
     func approveCard(_ card: ExpenseCard) {
