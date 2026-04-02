@@ -15,20 +15,26 @@
 		33E901B2490204392C08ED1A /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09763CA00F19737D01701F26 /* Models.swift */; };
 		3520AC254B0EEB2CE0D3FAB8 /* InvoicesModuleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67A30CA6B2E5D2F7B08311C8 /* InvoicesModuleView.swift */; };
 		450E92B3106541B4FB2B4882 /* RejectSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3DF5F14E89F20F59FB509F7 /* RejectSheetView.swift */; };
+		5058608CAF86B34973D6DED6 /* CardExpenseModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2229226472E0263AB2829943 /* CardExpenseModels.swift */; };
 		51CB77D53C2B7D875F30A63B /* ZillitPOApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B57D8C30DC7258CD8598F6A /* ZillitPOApp.swift */; };
 		5491E241E6C3B39473B9FCB9 /* DepartmentPOModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4971A25360236769BF3C7A98 /* DepartmentPOModule.swift */; };
 		670B7CB8CFD3440F3E658CB9 /* VendorsModuleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6812F1C01215B74AA4C1BEAC /* VendorsModuleView.swift */; };
 		6B094D5A95D4758E1AD76D50 /* DateFieldView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC846F0DB232B84FFACE5F1A /* DateFieldView.swift */; };
+		701E96FB9B7EAC0A6FB2430E /* InvoiceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CA007516937912F3BA4A52E /* InvoiceModels.swift */; };
 		72C6034B63B6B6EDD30E5C83 /* POViewModel+funcs.swift in Sources */ = {isa = PBXBuildFile; fileRef = B24E075E1F9313AC205B8365 /* POViewModel+funcs.swift */; };
+		761C7E0990B5777C320DB8B4 /* POViewModel+cardExpenses.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C9E07093B3935D47E6AAE59 /* POViewModel+cardExpenses.swift */; };
 		774B7FC104CA594323D21856 /* LoaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF38B0F1B39DE5E18FF0FEED /* LoaderView.swift */; };
 		83C802D57DD5F1F29083F967 /* PORequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE11BE00E3FF59B95CE211C7 /* PORequest.swift */; };
 		9731929AF8A49FA6A53B05EF /* POStatsCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3249A0D4B64A7008A670D3D /* POStatsCards.swift */; };
 		9EB249AA0238A86382DF5710 /* POTemplatesListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6670BC6BB754B8093DA0923E /* POTemplatesListView.swift */; };
+		A65846A00B5412350DCAC480 /* CardExpensesModuleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9764F10EC4F2F3A29313DD05 /* CardExpensesModuleView.swift */; };
 		A78766B18100482E8D952295 /* POViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 168351D1931758DA901F933A /* POViewModel.swift */; };
 		B6CEC26AE7A3748A629B8FC3 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2381E2B5CA72D943987DCF8D /* APIClient.swift */; };
 		BCAF479A1212FAE60BC9F304 /* PODraftsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88F5B290EDB19FFDBCA0166D /* PODraftsListView.swift */; };
 		BE7F74A11D13BD44C7E7F29C /* PODetailModalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E744912AD6F810D89618665 /* PODetailModalView.swift */; };
 		C0B9E987AA9BC1F0C5541019 /* POViewModel+enums.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55EC0437F90CDC780913EDE8 /* POViewModel+enums.swift */; };
+		C13CF1EFFE7CD2A228EC14BB /* CardExpenseWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81FE4A1AE43759ED08F46D36 /* CardExpenseWebView.swift */; };
+		C5E0F08B5613517784C3A8AB /* CardExpenseCodableTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 510EB96594A0052E63424B6D /* CardExpenseCodableTask.swift */; };
 		C6162CD352BBF3D4E4D52D3E /* POViewModel+apis.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45D2F17C41A6F69204093DCE /* POViewModel+apis.swift */; };
 		CC148E24B8C17EEF616707F3 /* POCodableTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DBB8DC7E98BDB51D7D0CF81 /* POCodableTask.swift */; };
 		D626AE1BB7F5118FD2D5C1B8 /* StaticData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6659BE5956A7630BA255FB91 /* StaticData.swift */; };
@@ -36,14 +42,17 @@
 		DEA78B934C5ED94E55AC539E /* POFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7349E3AA955C5C02C9E2FEB /* POFormView.swift */; };
 		EBC789D2BBF282BFC8E76483 /* VATHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7983D12F61324F5BCA140EEB /* VATHelpers.swift */; };
 		FD6EE2EF5FAEF72678DC97CF /* QuickFiltersBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = D966C5823F87C20C53E76C1E /* QuickFiltersBar.swift */; };
-		AA00000000000000000B0001 /* InvoiceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000000000F0001 /* InvoiceModels.swift */; };
+		FFA56019A51F3D9C71380D37 /* CardExpenseRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23C6FBEDA567EF57CE1DF0A6 /* CardExpenseRequest.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		09763CA00F19737D01701F26 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		0DBB8DC7E98BDB51D7D0CF81 /* POCodableTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = POCodableTask.swift; sourceTree = "<group>"; };
 		168351D1931758DA901F933A /* POViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = POViewModel.swift; sourceTree = "<group>"; };
+		1C9E07093B3935D47E6AAE59 /* POViewModel+cardExpenses.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "POViewModel+cardExpenses.swift"; sourceTree = "<group>"; };
+		2229226472E0263AB2829943 /* CardExpenseModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardExpenseModels.swift; sourceTree = "<group>"; };
 		2381E2B5CA72D943987DCF8D /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		23C6FBEDA567EF57CE1DF0A6 /* CardExpenseRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardExpenseRequest.swift; sourceTree = "<group>"; };
 		2736C28D805D99F6CADAAD00 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		28E79E80D085384B606D1C43 /* ApprovalHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApprovalHelpers.swift; sourceTree = "<group>"; };
 		37F621DE001328FE4B12CDD1 /* CompatActionSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompatActionSheet.swift; sourceTree = "<group>"; };
@@ -51,6 +60,7 @@
 		45D2F17C41A6F69204093DCE /* POViewModel+apis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "POViewModel+apis.swift"; sourceTree = "<group>"; };
 		4971A25360236769BF3C7A98 /* DepartmentPOModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DepartmentPOModule.swift; sourceTree = "<group>"; };
 		4B57D8C30DC7258CD8598F6A /* ZillitPOApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZillitPOApp.swift; sourceTree = "<group>"; };
+		510EB96594A0052E63424B6D /* CardExpenseCodableTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardExpenseCodableTask.swift; sourceTree = "<group>"; };
 		55EC0437F90CDC780913EDE8 /* POViewModel+enums.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "POViewModel+enums.swift"; sourceTree = "<group>"; };
 		6659BE5956A7630BA255FB91 /* StaticData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StaticData.swift; sourceTree = "<group>"; };
 		666B5C9AB688C2DFC076CEC5 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -58,7 +68,10 @@
 		67A30CA6B2E5D2F7B08311C8 /* InvoicesModuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvoicesModuleView.swift; sourceTree = "<group>"; };
 		6812F1C01215B74AA4C1BEAC /* VendorsModuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VendorsModuleView.swift; sourceTree = "<group>"; };
 		7983D12F61324F5BCA140EEB /* VATHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VATHelpers.swift; sourceTree = "<group>"; };
+		7CA007516937912F3BA4A52E /* InvoiceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvoiceModels.swift; sourceTree = "<group>"; };
+		81FE4A1AE43759ED08F46D36 /* CardExpenseWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardExpenseWebView.swift; sourceTree = "<group>"; };
 		88F5B290EDB19FFDBCA0166D /* PODraftsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PODraftsListView.swift; sourceTree = "<group>"; };
+		9764F10EC4F2F3A29313DD05 /* CardExpensesModuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardExpensesModuleView.swift; sourceTree = "<group>"; };
 		9D96523BE6EC49850CF6841E /* ZillitPO.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ZillitPO.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AE11BE00E3FF59B95CE211C7 /* PORequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PORequest.swift; sourceTree = "<group>"; };
 		B24E075E1F9313AC205B8365 /* POViewModel+funcs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "POViewModel+funcs.swift"; sourceTree = "<group>"; };
@@ -71,7 +84,6 @@
 		E45CB1E49E570A54BAB7552A /* POTableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = POTableView.swift; sourceTree = "<group>"; };
 		EF38B0F1B39DE5E18FF0FEED /* LoaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoaderView.swift; sourceTree = "<group>"; };
 		F7349E3AA955C5C02C9E2FEB /* POFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = POFormView.swift; sourceTree = "<group>"; };
-		AA00000000000000000F0001 /* InvoiceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvoiceModels.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -80,6 +92,7 @@
 			children = (
 				168351D1931758DA901F933A /* POViewModel.swift */,
 				45D2F17C41A6F69204093DCE /* POViewModel+apis.swift */,
+				1C9E07093B3935D47E6AAE59 /* POViewModel+cardExpenses.swift */,
 				55EC0437F90CDC780913EDE8 /* POViewModel+enums.swift */,
 				B24E075E1F9313AC205B8365 /* POViewModel+funcs.swift */,
 			);
@@ -92,6 +105,15 @@
 				6659BE5956A7630BA255FB91 /* StaticData.swift */,
 			);
 			path = Data;
+			sourceTree = "<group>";
+		};
+		4936ED2A6A3AC7A0A18953E8 /* CardExpenses */ = {
+			isa = PBXGroup;
+			children = (
+				510EB96594A0052E63424B6D /* CardExpenseCodableTask.swift */,
+				23C6FBEDA567EF57CE1DF0A6 /* CardExpenseRequest.swift */,
+			);
+			path = CardExpenses;
 			sourceTree = "<group>";
 		};
 		53C135B79BB0488524F26701 /* PurchaseOrders */ = {
@@ -118,6 +140,15 @@
 				D3DF5F14E89F20F59FB509F7 /* RejectSheetView.swift */,
 			);
 			path = Components;
+			sourceTree = "<group>";
+		};
+		5D1F248352C40EA3023AD578 /* CardExpenses */ = {
+			isa = PBXGroup;
+			children = (
+				9764F10EC4F2F3A29313DD05 /* CardExpensesModuleView.swift */,
+				81FE4A1AE43759ED08F46D36 /* CardExpenseWebView.swift */,
+			);
+			path = CardExpenses;
 			sourceTree = "<group>";
 		};
 		8C3DD87D32739A94B2B46C93 /* Products */ = {
@@ -165,6 +196,7 @@
 				2381E2B5CA72D943987DCF8D /* APIClient.swift */,
 				0DBB8DC7E98BDB51D7D0CF81 /* POCodableTask.swift */,
 				AE11BE00E3FF59B95CE211C7 /* PORequest.swift */,
+				4936ED2A6A3AC7A0A18953E8 /* CardExpenses */,
 			);
 			path = Network;
 			sourceTree = "<group>";
@@ -182,6 +214,7 @@
 		C11EB9C40D267F1FF4A91262 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				5D1F248352C40EA3023AD578 /* CardExpenses */,
 				5B7325777A9F177DCBFF6E83 /* Components */,
 				A0DC193E8D008C1D3CC95748 /* Invoices */,
 				C9DAE5FAEC94B5815B2F94B7 /* Main */,
@@ -203,8 +236,9 @@
 		E0252A0EDA05B376E50BDD33 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				2229226472E0263AB2829943 /* CardExpenseModels.swift */,
+				7CA007516937912F3BA4A52E /* InvoiceModels.swift */,
 				09763CA00F19737D01701F26 /* Models.swift */,
-				AA00000000000000000F0001 /* InvoiceModels.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -280,14 +314,19 @@
 			files = (
 				B6CEC26AE7A3748A629B8FC3 /* APIClient.swift in Sources */,
 				2C316BD666D7D372ABED8EAD /* ApprovalHelpers.swift in Sources */,
+				C5E0F08B5613517784C3A8AB /* CardExpenseCodableTask.swift in Sources */,
+				5058608CAF86B34973D6DED6 /* CardExpenseModels.swift in Sources */,
+				FFA56019A51F3D9C71380D37 /* CardExpenseRequest.swift in Sources */,
+				C13CF1EFFE7CD2A228EC14BB /* CardExpenseWebView.swift in Sources */,
+				A65846A00B5412350DCAC480 /* CardExpensesModuleView.swift in Sources */,
 				31D1DD2D11380E16B76DBB64 /* CompatActionSheet.swift in Sources */,
 				DC3CCEDE3C9F39D081ACA40C /* ContentView.swift in Sources */,
 				6B094D5A95D4758E1AD76D50 /* DateFieldView.swift in Sources */,
 				5491E241E6C3B39473B9FCB9 /* DepartmentPOModule.swift in Sources */,
 				1CC8620810444BC263EC846B /* FormatUtils.swift in Sources */,
+				701E96FB9B7EAC0A6FB2430E /* InvoiceModels.swift in Sources */,
 				3520AC254B0EEB2CE0D3FAB8 /* InvoicesModuleView.swift in Sources */,
 				774B7FC104CA594323D21856 /* LoaderView.swift in Sources */,
-				AA00000000000000000B0001 /* InvoiceModels.swift in Sources */,
 				33E901B2490204392C08ED1A /* Models.swift in Sources */,
 				CC148E24B8C17EEF616707F3 /* POCodableTask.swift in Sources */,
 				BE7F74A11D13BD44C7E7F29C /* PODetailModalView.swift in Sources */,
@@ -298,6 +337,7 @@
 				2825F9B83DFDE6D04E8008E1 /* POTableView.swift in Sources */,
 				9EB249AA0238A86382DF5710 /* POTemplatesListView.swift in Sources */,
 				C6162CD352BBF3D4E4D52D3E /* POViewModel+apis.swift in Sources */,
+				761C7E0990B5777C320DB8B4 /* POViewModel+cardExpenses.swift in Sources */,
 				C0B9E987AA9BC1F0C5541019 /* POViewModel+enums.swift in Sources */,
 				72C6034B63B6B6EDD30E5C83 /* POViewModel+funcs.swift in Sources */,
 				A78766B18100482E8D952295 /* POViewModel.swift in Sources */,
@@ -392,7 +432,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com4.zillit.coda.po;
+				PRODUCT_BUNDLE_IDENTIFIER = com.zillit.coda.po;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -413,7 +453,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com4.zillit.coda.po;
+				PRODUCT_BUNDLE_IDENTIFIER = com.zillit.coda.po;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};

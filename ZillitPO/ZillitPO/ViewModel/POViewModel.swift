@@ -71,6 +71,13 @@ class POViewModel: ObservableObject {
     @Published var uploadSubmitting = false
     @Published var uploadSubmitted = false
 
+    // Card Expenses / Receipts state
+    @Published var receipts: [Receipt] = []
+    @Published var userCards: [ExpenseCard] = []
+    @Published var allCards: [ExpenseCard] = []
+    @Published var cardTierConfigRows: [ApprovalTierConfig] = []
+    @Published var isCardApprover = false
+
     // Payment Run state
     @Published var paymentRuns: [PaymentRun] = []
     @Published var showRejectPaymentRunSheet = false
