@@ -6,6 +6,7 @@ struct ContentView: View {
     @State private var showUserPicker = false
     @State private var showPurchaseOrders = false
     @State private var showCardExpenses = false
+    @State private var showCashExpenses = false
 
     var body: some View {
         NavigationView {
@@ -75,6 +76,21 @@ struct ContentView: View {
                                 Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(Color(red: 0.56, green: 0.27, blue: 0.68))
                             }.padding(14).background(Color.white).cornerRadius(12)
                             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.56, green: 0.27, blue: 0.68).opacity(0.3), lineWidth: 1))
+                            .contentShape(Rectangle())
+                        }.buttonStyle(BorderlessButtonStyle())
+
+                        NavigationLink(destination: CashExpensesHubView().environmentObject(appState), isActive: $showCashExpenses) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "sterlingsign.circle.fill").font(.system(size: 20)).foregroundColor(.white)
+                                    .frame(width: 36, height: 36).background(Color(red: 0.2, green: 0.7, blue: 0.45)).cornerRadius(8)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Cash & Expenses").font(.system(size: 15, weight: .semibold))
+                                    Text("Petty cash & out-of-pocket claims").font(.system(size: 12)).foregroundColor(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(Color(red: 0.2, green: 0.7, blue: 0.45))
+                            }.padding(14).background(Color.white).cornerRadius(12)
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.2, green: 0.7, blue: 0.45).opacity(0.3), lineWidth: 1))
                             .contentShape(Rectangle())
                         }.buttonStyle(BorderlessButtonStyle())
 

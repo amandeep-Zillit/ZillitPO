@@ -78,6 +78,20 @@ class POViewModel: ObservableObject {
     @Published var cardTierConfigRows: [ApprovalTierConfig] = []
     @Published var isCardApprover = false
 
+    // Cash & Expenses state
+    @Published var cashMeta: CashExpenseMetadata?
+    @Published var myFloats: [FloatRequest] = []
+    @Published var allFloats: [FloatRequest] = []
+    @Published var activeFloats: [FloatRequest] = []
+    @Published var approvalQueueFloats: [FloatRequest] = []
+    @Published var myClaims: [ClaimBatch] = []
+    @Published var myBatches: [ClaimBatch] = []
+    @Published var allClaims: [ClaimBatch] = []
+    @Published var codingQueue: [ClaimBatch] = []
+    @Published var auditQueue: [ClaimBatch] = []
+    @Published var approvalQueueClaims: [ClaimBatch] = []
+    @Published var signOffQueue: [ClaimBatch] = []
+
     // Payment Run state
     @Published var paymentRuns: [PaymentRun] = []
     @Published var showRejectPaymentRunSheet = false

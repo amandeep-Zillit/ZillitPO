@@ -31,7 +31,7 @@ struct SidebarView: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text(user.fullName).font(.system(size: 14)).foregroundColor(.primary)
-                                    Text(user.displayDepartment).font(.system(size: 11)).foregroundColor(.secondary)
+                                    Text(user.displayDesignation).font(.system(size: 11)).foregroundColor(.secondary)
                                 }
                                 Spacer()
                                 if user.id == appState.userId {

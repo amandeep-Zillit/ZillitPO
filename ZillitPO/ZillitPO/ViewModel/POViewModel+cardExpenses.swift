@@ -10,7 +10,7 @@ extension POViewModel {
     // MARK: - Load Receipts
 
     func loadCardExpenseReceipts() {
-        CardExpenseCodableTask.fetchMyReceipts(userId) { [weak self] result in
+        CardExpenseCodableTask.fetchMyReceipts("") { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):

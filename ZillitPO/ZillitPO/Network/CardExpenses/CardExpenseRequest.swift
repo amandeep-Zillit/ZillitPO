@@ -69,8 +69,8 @@ extension CardExpenseRequest: POURLRequestProtocol {
         case .fetchAllReceipts:
             return buildLocal(.get, "/api/v2/card-expenses/receipts")
 
-        case .fetchMyReceipts(let userId):
-            return buildLocal(.get, "/api/v2/card-expenses/receipts/my?userId=\(userId)")
+        case .fetchMyReceipts:
+            return buildLocal(.get, "/api/v2/card-expenses/receipts/my")
 
         case .confirmReceipt(let id):
             return buildLocal(.post, "/api/v2/card-expenses/receipts/\(id)/confirm")
