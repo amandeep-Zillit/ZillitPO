@@ -160,6 +160,491 @@ struct ReceiptRaw: Codable {
     }
 }
 
+// MARK: - Smart Alert (from /api/v2/card-expenses/alerts)
+
+struct SmartAlert: Identifiable, Equatable {
+    var id: String = UUID().uuidString
+    var type: String = ""           // anomaly | duplicate_risk | velocity | merchant
+    var title: String = ""
+    var description: String = ""
+    var priority: String = ""       // high | medium | low
+    var status: String = ""         // active | resolved | dismissed
+    var detectedAt: Int64 = 0
+    var resolvedAt: Int64 = 0
+    var bsControlCode: String = ""
+    var cardLastFour: String = ""
+    var holderId: String = ""
+    var holderName: String = ""
+    var department: String = ""
+    var amount: Double = 0
+    var transactionId: String = ""
+    var savings: Double = 0
+
+    static func == (lhs: SmartAlert, rhs: SmartAlert) -> Bool { lhs.id == rhs.id }
+
+    var typeDisplay: String {
+        switch type.lowercased() {
+        case "anomaly":        return "Anomaly"
+        case "duplicate_risk", "duplicate": return "Duplicate Risk"
+        case "velocity":       return "Velocity"
+        case "merchant":       return "Merchant"
+        default:               return type.capitalized
+        }
+    }
+
+    var priorityDisplay: String {
+        switch priority.lowercased() {
+        case "high":   return "High Priority"
+        case "medium": return "Medium Priority"
+        case "low":    return "Low Priority"
+        default:       return priority.capitalized
+        }
+    }
+
+    var statusDisplay: String {
+        switch status.lowercased() {
+        case "active":    return "Active"
+        case "resolved":  return "Resolved"
+        case "dismissed": return "Dismissed"
+        default:          return status.capitalized
+        }
+    }
+}
+
+struct SmartAlertRaw: Decodable {
+    var id: String
+    var type: String?
+    var title: String?
+    var description: String?
+    var priority: String?
+    var status: String?
+    var detected_at: String?
+    var resolved_at: String?
+    var bs_control_code: String?
+    var card_last_four: String?
+    var card_last4: String?
+    var holder_id: String?
+    var user_id: String?
+    var holder_name: String?
+    var department_id: String?
+    var department_name: String?
+    var amount: Double?
+    var transaction_id: String?
+    var savings: Double?
+    var created_at: String?
+
+    func toSmartAlert() -> SmartAlert {
+        var a = SmartAlert()
+        a.id = id
+        a.type = type ?? ""
+        a.title = title ?? ""
+        a.description = description ?? ""
+        a.priority = priority ?? ""
+        a.status = status ?? "active"
+        a.detectedAt = Int64(detected_at ?? created_at ?? "") ?? 0
+        a.resolvedAt = Int64(resolved_at ?? "") ?? 0
+        a.bsControlCode = bs_control_code ?? ""
+        a.cardLastFour = card_last_four ?? card_last4 ?? ""
+        let uid = holder_id ?? user_id ?? ""
+        a.holderId = uid
+        a.holderName = UsersData.byId[uid]?.fullName ?? holder_name ?? uid
+        if let name = department_name, !name.isEmpty {
+            a.department = name
+        } else if let dept = DepartmentsData.all.first(where: { $0.id == (department_id ?? "") }) {
+            a.department = dept.displayName
+        } else if let h = UsersData.byId[uid] {
+            a.department = h.displayDepartment
+        }
+        a.amount = amount ?? 0
+        a.transactionId = transaction_id ?? ""
+        a.savings = savings ?? 0
+        return a
+    }
+}
+
+// MARK: - Top-Up Item (from /api/v2/card-expenses/topups)
+
+struct TopUpItem: Identifiable, Equatable {
+    var id: String = UUID().uuidString
+    var entityType: String = ""        // "card" or "cash"
+    var entityId: String = ""
+    var receiptId: String?
+    var cardId: String = ""
+    var cardLastFour: String = ""
+    var userId: String = ""
+    var holderName: String = ""
+    var departmentId: String = ""
+    var department: String = ""
+    var amount: Double = 0
+    var method: String = ""             // top_up, restore, expense
+    var status: String = ""             // skipped, completed, partial, pending
+    var note: String = ""
+    var receiptMerchant: String = ""
+    var receiptAmount: Double = 0
+    var cardBalance: Double = 0
+    var cardLimit: Double = 0
+    var cardSpent: Double = 0
+    var bsControlCode: String = ""
+    var floatBalance: Double = 0
+    var floatIssued: Double = 0
+    var floatSpent: Double = 0
+    var floatReqNumber: String = ""
+    var floatStatus: String = ""
+    var createdAt: Int64 = 0
+    var updatedAt: Int64 = 0
+
+    static func == (lhs: TopUpItem, rhs: TopUpItem) -> Bool { lhs.id == rhs.id }
+
+    var statusDisplay: String {
+        switch status.lowercased() {
+        case "completed": return "Completed"
+        case "skipped":   return "Skipped"
+        case "partial":   return "Partial"
+        case "pending":   return "Pending"
+        default:          return status.capitalized
+        }
+    }
+
+    var methodDisplay: String {
+        switch method.lowercased() {
+        case "top_up":  return "Top-Up"
+        case "restore": return "Restore"
+        case "expense": return "Expense"
+        default:        return method.capitalized
+        }
+    }
+}
+
+struct TopUpItemRaw: Decodable {
+    var id: String
+    var project_id: String?
+    var entity_id: String?
+    var entity_type: String?
+    var receipt_id: String?
+    var holder_name: String?
+    var card_last_four: String?
+    var amount: Double?
+    var method: String?
+    var status: String?
+    var created_at: String?
+    var updated_at: String?
+    var note: String?
+    var card_id: String?
+    var user_id: String?
+    var department_id: String?
+    var bs_control_code: String?
+    var receipt_merchant: String?
+    var receipt_amount: String?
+    var card_balance: Double?
+    var card_limit: Double?
+    var card_spent: Double?
+    var float_balance: Double?
+    var float_issued: Double?
+    var float_spent: Double?
+    var float_req_number: String?
+    var float_status: String?
+
+    func toTopUpItem() -> TopUpItem {
+        var t = TopUpItem()
+        t.id = id
+        t.entityType = entity_type ?? ""
+        t.entityId = entity_id ?? ""
+        t.receiptId = receipt_id
+        t.cardId = card_id ?? ""
+        t.cardLastFour = card_last_four ?? ""
+        t.userId = user_id ?? ""
+        let resolvedName = UsersData.byId[user_id ?? ""]?.fullName
+            ?? holder_name
+            ?? user_id
+            ?? ""
+        t.holderName = resolvedName
+        t.departmentId = department_id ?? ""
+        if let dept = DepartmentsData.all.first(where: { $0.id == (department_id ?? "") }) {
+            t.department = dept.displayName
+        }
+        t.amount = amount ?? 0
+        t.method = method ?? ""
+        t.status = status ?? ""
+        t.note = note ?? ""
+        t.receiptMerchant = receipt_merchant ?? ""
+        t.receiptAmount = Double(receipt_amount ?? "") ?? 0
+        t.cardBalance = card_balance ?? 0
+        t.cardLimit = card_limit ?? 0
+        t.cardSpent = card_spent ?? 0
+        t.bsControlCode = bs_control_code ?? ""
+        t.floatBalance = float_balance ?? 0
+        t.floatIssued = float_issued ?? 0
+        t.floatSpent = float_spent ?? 0
+        t.floatReqNumber = float_req_number ?? ""
+        t.floatStatus = float_status ?? ""
+        t.createdAt = Int64(created_at ?? "") ?? 0
+        t.updatedAt = Int64(updated_at ?? "") ?? 0
+        return t
+    }
+}
+
+// MARK: - Card Transaction (Domain model)
+
+struct CardTransaction: Identifiable, Equatable {
+    var id: String = UUID().uuidString
+    var projectId: String = ""
+    var cardId: String = ""
+    var holderId: String = ""
+    var holderName: String = ""
+    var department: String = ""
+    var cardLastFour: String = ""
+    var merchant: String = ""
+    var description: String = ""
+    var amount: Double = 0
+    var currency: String = "GBP"
+    var transactionDate: Int64 = 0
+    var status: String = "pending"            // pending, pending_receipt, pending_code, awaiting_approval, approved, queried, under_review, escalated, posted
+    var hasReceipt: Bool = false
+    var receiptId: String?
+    var linkedTransactionId: String = ""
+    var matchStatus: String = ""
+    var duplicateDismissed: Bool = false
+    var personalDismissed: Bool = false
+    var duplicateScore: Double?
+    var personalScore: Double?
+    var nominalCode: String = ""
+    var notes: String = ""
+    var taxAmount: Double = 0
+    var netAmount: Double = 0
+    var grossAmount: Double = 0
+    var approvedBy: String = ""
+    var approvedAt: Int64 = 0
+    var approvals: [CardApproval] = []
+    var episode: String = ""
+    var codeDescription: String = ""
+    var createdAt: Int64 = 0
+    var updatedAt: Int64 = 0
+
+    static func == (lhs: CardTransaction, rhs: CardTransaction) -> Bool { lhs.id == rhs.id }
+
+    var statusDisplay: String {
+        switch status.lowercased() {
+        case "pending", "pending_receipt": return "Pending Receipt"
+        case "pending_coding", "pending_code": return "Pending Code"
+        case "awaiting_approval": return "Awaiting Approval"
+        case "approved", "matched", "coded": return "Approved"
+        case "queried": return "Queried"
+        case "under_review": return "Under Review"
+        case "escalated": return "Escalated"
+        case "posted": return "Posted"
+        default: return status.capitalized
+        }
+    }
+}
+
+struct CardReceiptAttachmentRaw: Codable {
+    var id: String?
+    var name: String?
+}
+
+struct CardApproval: Equatable {
+    var userId: String = ""
+    var tierNumber: Int = 0
+    var approvedAt: Int64 = 0
+    var override: Bool = false
+    var reason: String = ""
+}
+
+struct CardTxApprovalRaw: Codable {
+    var user_id: String?
+    var tier_number: Int?
+    var approved_at: Double?
+    var isOverride: Bool?
+    var reason: String?
+
+    enum CodingKeys: String, CodingKey {
+        case user_id, tier_number, approved_at, reason
+        case isOverride = "override"
+    }
+}
+
+struct CardTransactionRaw: Decodable {
+    var id: String
+    var project_id: String?
+    var user_id: String?
+    var holder_id: String?
+    var holder_name: String?
+    var card_holder_name: String?
+    var department_id: String?
+    var department_name: String?
+    var card_id: String?
+    var card_last_four: String?
+    var last_four: String?
+    var transaction_id: String?
+    var description: String?
+    var merchant: String?
+    var merchant_name: String?
+    var amount: String?
+    var date: String?
+    var status: String?
+    var nominal_code: String?
+    var code_description: String?
+    var episode: String?
+    var receipt_attachment: CardReceiptAttachmentRaw?
+    var match_status: String?
+    var duplicate_dismissed: Bool?
+    var personal_dismissed: Bool?
+    var duplicate_score: Double?
+    var personal_score: Double?
+    var tax_amount: Double?
+    var net_amount: Double?
+    var gross_amount: Double?
+    var is_urgent: Bool?
+    var request_top_up: Bool?
+    var approved_by: String?
+    var approved_at: String?
+    var approvals: [CardTxApprovalRaw]?
+    var created_at: String?
+    var updated_at: String?
+
+    struct AnyKey: CodingKey {
+        var stringValue: String
+        var intValue: Int?
+        init?(stringValue: String) { self.stringValue = stringValue; intValue = nil }
+        init?(intValue: Int) { self.intValue = intValue; stringValue = "\(intValue)" }
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: AnyKey.self)
+        func str(_ keys: String...) -> String? {
+            for k in keys {
+                if let key = AnyKey(stringValue: k), let v = try? c.decode(String.self, forKey: key), !v.isEmpty { return v }
+            }
+            return nil
+        }
+        func dbl(_ keys: String...) -> Double? {
+            for k in keys {
+                if let key = AnyKey(stringValue: k) {
+                    if let d = try? c.decode(Double.self, forKey: key) { return d }
+                    if let s = try? c.decode(String.self, forKey: key), let d = Double(s) { return d }
+                }
+            }
+            return nil
+        }
+        func bool(_ keys: String...) -> Bool? {
+            for k in keys {
+                if let key = AnyKey(stringValue: k), let b = try? c.decode(Bool.self, forKey: key) { return b }
+            }
+            return nil
+        }
+
+        id = str("id") ?? UUID().uuidString
+        project_id = str("project_id", "projectId")
+        user_id = str("user_id", "userId")
+        holder_id = str("holder_id", "holderId")
+        holder_name = str("holder_name", "holderName")
+        card_holder_name = str("card_holder_name", "cardHolderName")
+        department_id = str("department_id", "departmentId")
+        department_name = str("department_name", "departmentName")
+        card_id = str("card_id", "cardId")
+        card_last_four = str("card_last_four", "cardLastFour", "lastFour", "last_four", "transaction_card_last4", "transactionCardLast4")
+        last_four = nil
+        transaction_id = str("transaction_id", "transactionId")
+        description = str("description")
+        merchant = str("merchant", "transaction_merchant", "transactionMerchant")
+        merchant_name = str("merchant_name", "merchantName")
+        if let d = dbl("amount") { amount = String(d) } else { amount = nil }
+        date = str("date") ?? str("transaction_date", "transactionDate")
+        status = str("status")
+        nominal_code = str("nominal_code", "nominalCode")
+        code_description = str("code_description", "codeDescription")
+        episode = str("episode")
+        // Receipt attachment may be an object OR a top-level receiptId
+        if let key = AnyKey(stringValue: "receipt_attachment"),
+           let att = try? c.decode(CardReceiptAttachmentRaw.self, forKey: key) {
+            receipt_attachment = att
+        } else if let key = AnyKey(stringValue: "receiptAttachment"),
+                  let att = try? c.decode(CardReceiptAttachmentRaw.self, forKey: key) {
+            receipt_attachment = att
+        } else if let rid = str("receipt_id", "receiptId") {
+            var att = CardReceiptAttachmentRaw(); att.id = rid
+            receipt_attachment = att
+        } else {
+            receipt_attachment = nil
+        }
+        match_status = str("match_status", "matchStatus")
+        duplicate_dismissed = bool("duplicate_dismissed", "duplicateDismissed")
+        personal_dismissed = bool("personal_dismissed", "personalDismissed")
+        duplicate_score = dbl("duplicate_score", "duplicateScore")
+        personal_score = dbl("personal_score", "personalScore")
+        tax_amount = dbl("tax_amount", "taxAmount")
+        net_amount = dbl("net_amount", "netAmount")
+        gross_amount = dbl("gross_amount", "grossAmount")
+        is_urgent = bool("is_urgent", "isUrgent")
+        request_top_up = bool("request_top_up", "requestTopUp")
+        approved_by = str("approved_by", "approvedBy")
+        approved_at = str("approved_at", "approvedAt")
+        if let key = AnyKey(stringValue: "approvals"),
+           let arr = try? c.decode([CardTxApprovalRaw].self, forKey: key) {
+            approvals = arr
+        } else { approvals = nil }
+        created_at = str("created_at", "createdAt")
+        updated_at = str("updated_at", "updatedAt")
+    }
+
+    func toCardTransaction() -> CardTransaction {
+        var t = CardTransaction()
+        t.id = id
+        t.projectId = project_id ?? ""
+        let uid = holder_id ?? user_id ?? ""
+        t.holderId = uid
+        t.holderName = UsersData.byId[uid]?.fullName
+            ?? holder_name
+            ?? card_holder_name
+            ?? ""
+        if let name = department_name, !name.isEmpty {
+            t.department = name
+        } else if let dept = DepartmentsData.all.first(where: { $0.id == (department_id ?? "") }) {
+            t.department = dept.displayName
+        } else if let h = UsersData.byId[uid] {
+            t.department = h.displayDepartment
+        }
+        t.cardLastFour = card_last_four ?? last_four ?? ""
+        t.cardId = card_id ?? ""
+        let m = merchant ?? merchant_name ?? description ?? ""
+        t.merchant = m
+        t.description = description ?? m
+        t.amount = Double(amount ?? "") ?? 0
+        t.currency = "GBP"
+        t.transactionDate = Int64(date ?? "") ?? 0
+        t.status = status ?? "pending_receipt"
+        t.hasReceipt = receipt_attachment != nil
+        t.receiptId = receipt_attachment?.id
+        t.linkedTransactionId = transaction_id ?? ""
+        t.matchStatus = match_status ?? ""
+        t.duplicateDismissed = duplicate_dismissed ?? false
+        t.personalDismissed = personal_dismissed ?? false
+        t.duplicateScore = duplicate_score
+        t.personalScore = personal_score
+        t.nominalCode = nominal_code ?? ""
+        t.notes = code_description ?? ""
+        t.codeDescription = code_description ?? ""
+        t.episode = episode ?? ""
+        t.taxAmount = tax_amount ?? 0
+        t.netAmount = net_amount ?? 0
+        t.grossAmount = gross_amount ?? 0
+        t.approvedBy = approved_by ?? ""
+        t.approvedAt = Int64(approved_at ?? "") ?? 0
+        t.approvals = (approvals ?? []).map { raw in
+            var a = CardApproval()
+            a.userId = raw.user_id ?? ""
+            a.tierNumber = raw.tier_number ?? 0
+            a.approvedAt = Int64(raw.approved_at ?? 0)
+            a.override = raw.isOverride ?? false
+            a.reason = raw.reason ?? ""
+            return a
+        }
+        t.createdAt = Int64(created_at ?? "") ?? 0
+        t.updatedAt = Int64(updated_at ?? "") ?? 0
+        return t
+    }
+}
+
 // MARK: - Card (Domain model)
 
 struct BankAccount: Codable, Equatable {

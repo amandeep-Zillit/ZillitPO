@@ -40,6 +40,7 @@ enum PORequest {
     case deleteInvoice(String)
     case approveInvoice(String, [String: Any])      // id, body
     case rejectInvoice(String, [String: Any])       // id, body
+    case fetchInvoiceHistory(String)                // id
 
     // MARK: - Invoice Approval Tiers
     case fetchInvoiceApprovalTiers
@@ -151,6 +152,9 @@ extension PORequest: POURLRequestProtocol {
         case .rejectInvoice(let id, let body):
             let endPoint = "/api/v2/invoices/\(id)/reject"
             return APIClient.shared.buildRequest(.post, endPoint, body: body)
+
+        case .fetchInvoiceHistory(let id):
+            return APIClient.shared.buildRequest(.get, "/api/v2/invoices/\(id)/history")
 
         // MARK: Invoice Approval Tiers
         case .fetchInvoiceApprovalTiers:

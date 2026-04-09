@@ -14,6 +14,9 @@ enum CardExpenseCodableTask {
     case flagReceiptPersonal(String, (Result<Data?, Error>) -> Void)
     case submitCoding(String, [String: Any], (Result<Data?, Error>) -> Void)
 
+    // Transactions
+    case fetchTransactions(String, (Result<APIResponse<[CardTransactionRaw]>?, Error>) -> Void)
+
     // Cards
     case fetchCards(String, (Result<APIResponse<[CardRaw]>?, Error>) -> Void)
     case fetchAllCards((Result<APIResponse<[CardRaw]>?, Error>) -> Void)
@@ -23,6 +26,11 @@ enum CardExpenseCodableTask {
 
     // Approval Tiers
     case fetchCardApprovalTiers((Result<APIResponse<[ApprovalTierConfig]>?, Error>) -> Void)
+
+    // Accountant Hub queues
+    case fetchTopUps((Result<APIResponse<[TopUpItemRaw]>?, Error>) -> Void)
+    case fetchSmartAlerts((Result<APIResponse<[SmartAlertRaw]>?, Error>) -> Void)
+    case fetchCardHistory((Result<APIResponse<[CardTransactionRaw]>?, Error>) -> Void)
 }
 
 extension CardExpenseCodableTask: PODataTaskProtocol {
@@ -54,6 +62,18 @@ extension CardExpenseCodableTask: PODataTaskProtocol {
             guard let req = CardExpenseRequest.submitCoding(id, body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: req, completion: completion)
 
+        // Transactions — /transactions, or /receipts/my (params == "my"), or /receipts (params == "all")
+        case .fetchTransactions(let params, let completion):
+            let request: CardExpenseRequest = {
+                switch params {
+                case "my":  return .fetchMyReceipts("")
+                case "all": return .fetchAllReceipts
+                default:    return .fetchTransactions(params)
+                }
+            }()
+            guard let req = request.urlRequest else { return nil }
+            return APIClient.shared.codableResultTask(with: req, completion: completion)
+
         // Cards
         case .fetchCards(let params, let completion):
             guard let req = CardExpenseRequest.fetchCards(params).urlRequest else { return nil }
@@ -78,6 +98,17 @@ extension CardExpenseCodableTask: PODataTaskProtocol {
         // Approval Tiers
         case .fetchCardApprovalTiers(let completion):
             guard let req = CardExpenseRequest.fetchCardApprovalTiers.urlRequest else { return nil }
+            return APIClient.shared.codableResultTask(with: req, completion: completion)
+
+        // Accountant Hub queues
+        case .fetchTopUps(let completion):
+            guard let req = CardExpenseRequest.fetchTopUps.urlRequest else { return nil }
+            return APIClient.shared.codableResultTask(with: req, completion: completion)
+        case .fetchSmartAlerts(let completion):
+            guard let req = CardExpenseRequest.fetchSmartAlerts.urlRequest else { return nil }
+            return APIClient.shared.codableResultTask(with: req, completion: completion)
+        case .fetchCardHistory(let completion):
+            guard let req = CardExpenseRequest.fetchCardHistory.urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: req, completion: completion)
         }
     }

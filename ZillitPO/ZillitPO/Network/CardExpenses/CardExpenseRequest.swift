@@ -6,7 +6,7 @@
 import Foundation
 
 enum CardExpenseRequest {
-    static let baseURL = "http://localhost:3005"
+    static let baseURL = "http://192.168.1.7:3005"
 
     // MARK: - Receipts
     case fetchAllReceipts
@@ -39,6 +39,11 @@ enum CardExpenseRequest {
 
     // MARK: - Overview
     case fetchOverview
+
+    // MARK: - Accountant Hub queues
+    case fetchTopUps
+    case fetchSmartAlerts
+    case fetchCardHistory
 
     // MARK: - Settings
     case fetchSettings
@@ -152,7 +157,7 @@ extension CardExpenseRequest: POURLRequestProtocol {
 
         // MARK: Approval Tiers
         case .fetchCardApprovalTiers:
-            let url = "http://localhost:3003/api/v2/account-hub/approval-tiers?module=card_expenses"
+            let url = "http://192.168.1.7:3003/api/v2/account-hub/approval-tiers?module=card_expenses"
             guard let u = URL(string: url) else { return nil }
             var req = URLRequest(url: u)
             req.httpMethod = "GET"
@@ -165,6 +170,14 @@ extension CardExpenseRequest: POURLRequestProtocol {
         // MARK: Overview
         case .fetchOverview:
             return buildLocal(.get, "/api/v2/card-expenses/overview")
+
+        // MARK: Accountant Hub queues
+        case .fetchTopUps:
+            return buildLocal(.get, "/api/v2/card-expenses/topups")
+        case .fetchSmartAlerts:
+            return buildLocal(.get, "/api/v2/card-expenses/alerts")
+        case .fetchCardHistory:
+            return buildLocal(.get, "/api/v2/card-expenses/receipts/posted-history")
 
         // MARK: Settings
         case .fetchSettings:

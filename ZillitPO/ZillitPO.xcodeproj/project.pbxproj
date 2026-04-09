@@ -80,7 +80,7 @@
 		88F5B290EDB19FFDBCA0166D /* PODraftsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PODraftsListView.swift; sourceTree = "<group>"; };
 		8FB867D43BE6C60094565AE4 /* CashExpenseRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashExpenseRequest.swift; sourceTree = "<group>"; };
 		9764F10EC4F2F3A29313DD05 /* CardExpensesModuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardExpensesModuleView.swift; sourceTree = "<group>"; };
-		9D96523BE6EC49850CF6841E /* ZillitPO.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ZillitPO.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		9D96523BE6EC49850CF6841E /* ZillitPO.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ZillitPO.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AE11BE00E3FF59B95CE211C7 /* PORequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PORequest.swift; sourceTree = "<group>"; };
 		B24E075E1F9313AC205B8365 /* POViewModel+funcs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "POViewModel+funcs.swift"; sourceTree = "<group>"; };
 		B532B37DABAB2B4686CF510A /* FormatUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormatUtils.swift; sourceTree = "<group>"; };
@@ -318,8 +318,6 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1500;
-				TargetAttributes = {
-				};
 			};
 			buildConfigurationList = 850016FF538AF5A3F2D8CC23 /* Build configuration list for PBXProject "ZillitPO" */;
 			developmentRegion = en;
@@ -461,6 +459,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8L9XZ22RX8;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ZillitPO/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
@@ -481,6 +480,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8L9XZ22RX8;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ZillitPO/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;

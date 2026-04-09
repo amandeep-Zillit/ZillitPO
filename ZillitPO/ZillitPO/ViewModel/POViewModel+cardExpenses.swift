@@ -9,6 +9,116 @@ extension POViewModel {
 
     // MARK: - Load Receipts
 
+    func loadAllCardReceipts() {
+        CardExpenseCodableTask.fetchTransactions("all") { [weak self] result in
+            DispatchQueue.main.async {
+                if case .success(let r) = result {
+                    self?.cardReceipts = (r?.data ?? []).map { $0.toCardTransaction() }
+                    print("✅ Loaded \(self?.cardReceipts.count ?? 0) card receipts (all)")
+                } else if case .failure(let e) = result { print("❌ All card receipts failed: \(e)") }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    func loadMyCardReceipts() {
+        CardExpenseCodableTask.fetchTransactions("my") { [weak self] result in
+            DispatchQueue.main.async {
+                if case .success(let r) = result {
+                    self?.myCardReceipts = (r?.data ?? []).map { $0.toCardTransaction() }
+                    print("✅ Loaded \(self?.myCardReceipts.count ?? 0) my card receipts")
+                } else if case .failure(let e) = result { print("❌ My card receipts failed: \(e)") }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    func loadCardTransactions() {
+        CardExpenseCodableTask.fetchTransactions("") { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let response):
+                    self?.cardTransactions = (response?.data ?? []).map { $0.toCardTransaction() }
+                    print("✅ Loaded \(self?.cardTransactions.count ?? 0) card transactions")
+                case .failure(let error):
+                    print("❌ Fetch card transactions failed: \(error)")
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    func loadTopUpQueue() {
+        CardExpenseCodableTask.fetchTopUps { [weak self] result in
+            DispatchQueue.main.async {
+                if case .success(let r) = result {
+                    // Web shows only card top-ups, not cash-float entries
+                    let all = (r?.data ?? []).map { $0.toTopUpItem() }
+                    self?.topUpQueue = all.filter { $0.entityType.lowercased() == "card" }
+                    print("✅ Loaded \(self?.topUpQueue.count ?? 0) top-up items (filtered card only from \(all.count))")
+                } else if case .failure(let e) = result { print("❌ Top-ups failed: \(e)") }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    func loadSmartAlerts() {
+        CardExpenseCodableTask.fetchSmartAlerts { [weak self] result in
+            DispatchQueue.main.async {
+                if case .success(let r) = result {
+                    self?.smartAlerts = (r?.data ?? []).map { $0.toSmartAlert() }
+                    print("✅ Loaded \(self?.smartAlerts.count ?? 0) smart alerts")
+                } else if case .failure(let e) = result { print("❌ Smart alerts failed: \(e)") }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    func resolveSmartAlert(_ id: String) {
+        guard let idx = smartAlerts.firstIndex(where: { $0.id == id }) else { return }
+        var a = smartAlerts[idx]
+        a.status = "resolved"
+        a.resolvedAt = Int64(Date().timeIntervalSince1970 * 1000)
+        smartAlerts[idx] = a
+    }
+
+    func dismissSmartAlert(_ id: String) {
+        smartAlerts.removeAll { $0.id == id }
+    }
+
+    func loadCardHistory() {
+        CardExpenseCodableTask.fetchCardHistory { [weak self] result in
+            DispatchQueue.main.async {
+                if case .success(let r) = result {
+                    self?.cardHistory = (r?.data ?? []).map { $0.toCardTransaction() }
+                    print("✅ Loaded \(self?.cardHistory.count ?? 0) card history items")
+                } else if case .failure(let e) = result { print("❌ Card history failed: \(e)") }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    func updateCardTransaction(id: String, merchant: String, amount: String, nominalCode: String, notes: String) {
+        guard let idx = cardTransactions.firstIndex(where: { $0.id == id }) else { return }
+        var t = cardTransactions[idx]
+        t.merchant = merchant
+        t.description = merchant
+        if let a = Double(amount), a > 0 { t.amount = a }
+        t.nominalCode = nominalCode
+        t.notes = notes
+        cardTransactions[idx] = t
+        print("✅ Card transaction \(id) updated locally")
+
+        // Best-effort backend update
+        let body: [String: Any] = [
+            "description": merchant,
+            "amount": amount,
+            "nominal_code": nominalCode,
+            "code_description": notes
+        ]
+        guard let req = CardExpenseRequest.updateTransaction(id, body).urlRequest else { return }
+        APIClient.shared.dataResultTask(with: req) { result in
+            DispatchQueue.main.async {
+                if case .failure(let e) = result { print("❌ Update transaction backend failed: \(e)") }
+                else { print("✅ Update transaction backend succeeded") }
+            }
+        }.resume()
+    }
+
     func loadCardExpenseReceipts() {
         CardExpenseCodableTask.fetchMyReceipts("") { [weak self] result in
             DispatchQueue.main.async {
@@ -21,6 +131,17 @@ extension POViewModel {
                 }
             }
         }.urlDataTask?.resume()
+    }
+
+    func updateReceiptDetails(id: String, merchant: String, amount: String, date: String, nominalCode: String) {
+        guard let idx = receipts.firstIndex(where: { $0.id == id }) else { return }
+        var r = receipts[idx]
+        r.merchantDetected = merchant.isEmpty ? nil : merchant
+        r.amountDetected = amount.isEmpty ? nil : amount
+        r.dateDetected = date.isEmpty ? nil : date
+        r.nominalCode = nominalCode.isEmpty ? nil : nominalCode
+        receipts[idx] = r
+        print("✅ Receipt \(id) details updated locally")
     }
 
     func confirmReceipt(_ receipt: Receipt) {
@@ -67,7 +188,8 @@ extension POViewModel {
     // MARK: - Load Cards
 
     func loadUserCards() {
-        CardExpenseCodableTask.fetchCards("my=true") { [weak self] result in
+        let params = currentUser?.isAccountant == true ? "" : "my=true"
+        CardExpenseCodableTask.fetchCards(params) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
@@ -172,8 +294,16 @@ extension POViewModel {
 
     func loadAllCardExpenseData() {
         loadCardExpenseReceipts()
+        loadCardTransactions()
+        loadMyCardReceipts()
         loadUserCards()
         loadCardApprovalTiers()
         loadAllRequestedCards()
+        if currentUser?.isAccountant == true {
+            loadAllCardReceipts()
+            loadTopUpQueue()
+            loadSmartAlerts()
+            loadCardHistory()
+        }
     }
 }

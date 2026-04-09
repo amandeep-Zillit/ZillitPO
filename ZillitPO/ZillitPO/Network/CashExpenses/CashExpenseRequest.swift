@@ -6,7 +6,8 @@
 import Foundation
 
 enum CashExpenseRequest {
-    static let baseURL = "http://localhost:3006"
+    static let baseURL = "http://192.168.1.7:3006" 
+    
 
     // Metadata (roles, settings)
     case fetchMetadata

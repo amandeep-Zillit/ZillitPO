@@ -8,6 +8,35 @@
 
 import Foundation
 
+// MARK: - Invoice History Entry
+
+struct InvoiceHistoryEntry: Codable, Identifiable {
+    var id: String { "\(timestamp ?? 0)-\(action ?? "")" }
+    var action: String?
+    var details: String?
+    var timestamp: Int64?
+    var userId: String?
+    var userName: String?
+
+    enum CodingKeys: String, CodingKey {
+        case action, details, timestamp
+        case userId = "user_id"
+        case userName = "user_name"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        action = try? c.decode(String.self, forKey: .action)
+        details = try? c.decode(String.self, forKey: .details)
+        if let ts = try? c.decode(Int64.self, forKey: .timestamp) { timestamp = ts }
+        else if let ts = try? c.decode(Double.self, forKey: .timestamp) { timestamp = Int64(ts) }
+        else if let ts = try? c.decode(String.self, forKey: .timestamp) { timestamp = Int64(ts) }
+        else { timestamp = nil }
+        userId = try? c.decode(String.self, forKey: .userId)
+        userName = try? c.decode(String.self, forKey: .userName)
+    }
+}
+
 // MARK: - Run Authorization Level
 
 struct RunAuthLevel: Codable, Equatable {

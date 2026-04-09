@@ -19,9 +19,8 @@ struct CashExpensesHubView: View {
     private var isCoord: Bool { appState.cashMeta?.is_coordinator == true }
 
     private var auditClaims: [ClaimBatch] { appState.auditQueue }
-    private var approvalClaims: [ClaimBatch] {
-        appState.allClaims.filter { ["AWAITING_APPROVAL", "ESCALATED", "READY_TO_POST"].contains($0.status.uppercased()) }
-    }
+    private var approvalClaims: [ClaimBatch] { appState.approvalQueueClaims }
+    private var approvalQueueTotal: Int { appState.approvalQueueFloats.count + appState.approvalQueueClaims.count }
     private var codingClaims: [ClaimBatch] {
         appState.allClaims.filter { ["CODING", "CODED"].contains($0.status.uppercased()) }
     }
@@ -65,34 +64,8 @@ struct CashExpensesHubView: View {
                         .contentShape(Rectangle())
                     }.buttonStyle(BorderlessButtonStyle())
 
-                    // Accountant-only tiles
-                    if isAcct {
-                        // Audit Queue tile
-                        NavigationLink(destination: AuditQueuePage().environmentObject(appState), isActive: $navigateToAuditQueue) { EmptyView() }.hidden()
-                        Button(action: { navigateToAuditQueue = true }) {
-                            HStack(spacing: 12) {
-                                Image(systemName: "checkmark.shield.fill").font(.system(size: 20)).foregroundColor(.white)
-                                    .frame(width: 36, height: 36).background(Color(red: 0.2, green: 0.6, blue: 0.86)).cornerRadius(8)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    HStack(spacing: 6) {
-                                        Text("Audit Queue").font(.system(size: 15, weight: .semibold))
-                                        if !auditClaims.isEmpty {
-                                            Text("\(auditClaims.count)")
-                                                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                                .foregroundColor(.white).padding(.horizontal, 6).padding(.vertical, 2)
-                                                .background(Color(red: 0.2, green: 0.6, blue: 0.86)).cornerRadius(8)
-                                        }
-                                    }
-                                    Text("Review & verify submitted claims").font(.system(size: 12)).foregroundColor(.secondary)
-                                }
-                                Spacer()
-                                Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(Color(red: 0.2, green: 0.6, blue: 0.86))
-                            }.padding(14).background(Color.white).cornerRadius(12)
-                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.2, green: 0.6, blue: 0.86).opacity(0.3), lineWidth: 1))
-                            .contentShape(Rectangle())
-                        }.buttonStyle(BorderlessButtonStyle())
-
-                        // Approval Queue tile
+                    // Approval Queue tile (accountant + coordinator)
+                    if isAcct || isCoord {
                         NavigationLink(destination: ApprovalQueuePage().environmentObject(appState), isActive: $navigateToApprovalQueue) { EmptyView() }.hidden()
                         Button(action: { navigateToApprovalQueue = true }) {
                             HStack(spacing: 12) {
@@ -101,14 +74,14 @@ struct CashExpensesHubView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     HStack(spacing: 6) {
                                         Text("Approval Queue").font(.system(size: 15, weight: .semibold))
-                                        if !approvalClaims.isEmpty {
-                                            Text("\(approvalClaims.count)")
+                                        if approvalQueueTotal > 0 {
+                                            Text("\(approvalQueueTotal)")
                                                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                                                 .foregroundColor(.white).padding(.horizontal, 6).padding(.vertical, 2)
                                                 .background(Color.goldDark).cornerRadius(8)
                                         }
                                     }
-                                    Text("Approve or reject pending claims").font(.system(size: 12)).foregroundColor(.secondary)
+                                    Text("Approve or reject pending floats & claims").font(.system(size: 12)).foregroundColor(.secondary)
                                 }
                                 Spacer()
                                 Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(.goldDark)
@@ -145,30 +118,6 @@ struct CashExpensesHubView: View {
                             .contentShape(Rectangle())
                         }.buttonStyle(BorderlessButtonStyle())
 
-                        // Approval Queue tile
-                        NavigationLink(destination: ApprovalQueuePage().environmentObject(appState), isActive: $navigateToApprovalQueue) { EmptyView() }.hidden()
-                        Button(action: { navigateToApprovalQueue = true }) {
-                            HStack(spacing: 12) {
-                                Image(systemName: "person.badge.shield.checkmark.fill").font(.system(size: 20)).foregroundColor(.white)
-                                    .frame(width: 36, height: 36).background(Color.goldDark).cornerRadius(8)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    HStack(spacing: 6) {
-                                        Text("Approval Queue").font(.system(size: 15, weight: .semibold))
-                                        if !appState.approvalQueueFloats.isEmpty {
-                                            Text("\(appState.approvalQueueFloats.count)")
-                                                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                                .foregroundColor(.white).padding(.horizontal, 6).padding(.vertical, 2)
-                                                .background(Color.goldDark).cornerRadius(8)
-                                        }
-                                    }
-                                    Text("Floats awaiting your approval").font(.system(size: 12)).foregroundColor(.secondary)
-                                }
-                                Spacer()
-                                Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(.goldDark)
-                            }.padding(14).background(Color.white).cornerRadius(12)
-                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.gold.opacity(0.3), lineWidth: 1))
-                            .contentShape(Rectangle())
-                        }.buttonStyle(BorderlessButtonStyle())
                     }
 
                     Spacer()
@@ -192,9 +141,17 @@ struct PettyCashModuleView: View {
     private var isCoord: Bool { appState.cashMeta?.is_coordinator == true }
     private var isSenior: Bool { appState.cashMeta?.is_senior == true }
 
+    private var hasOpenFloat: Bool {
+        let terminal: Set<String> = ["CLOSED", "RETURNED", "REJECTED"]
+        return appState.myFloats.contains { !terminal.contains($0.status.uppercased()) }
+    }
+    private var newFloatDisabled: Bool {
+        activeTab == "Float Request" && hasOpenFloat
+    }
+
     private var tabs: [String] {
         if isAcct {
-            return ["Active Floats", "Post & Ledger", "Cash Recon", "Sign-off"]
+            return ["Active Floats", "History"]
         }
         if isCoord {
             return ["Active Floats", "Float Request", "Submit Claim", "My Claims"]
@@ -204,29 +161,65 @@ struct PettyCashModuleView: View {
     }
 
     @State private var activeTab = ""
+    @State private var navigateToNewFloat = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Tab bar
-            HStack(spacing: 0) {
-                ForEach(tabs, id: \.self) { tab in
-                    let isActive = activeTab == tab
-                    Button(action: { activeTab = tab }) {
-                        Text(tab).font(.system(size: 11, weight: isActive ? .semibold : .regular)).lineLimit(1)
-                            .foregroundColor(isActive ? .goldDark : .secondary)
-                            .frame(maxWidth: .infinity).padding(.vertical, 10)
-                            .overlay(isActive ? Rectangle().fill(Color.goldDark).frame(height: 2) : nil, alignment: .bottom)
-                    }.buttonStyle(BorderlessButtonStyle())
+        ZStack(alignment: .bottomTrailing) {
+            VStack(spacing: 0) {
+                // Tab bar
+                HStack(spacing: 0) {
+                    ForEach(tabs, id: \.self) { tab in
+                        let isActive = activeTab == tab
+                        Button(action: { activeTab = tab }) {
+                            Text(tab).font(.system(size: 11, weight: isActive ? .semibold : .regular)).lineLimit(1)
+                                .foregroundColor(isActive ? .goldDark : .secondary)
+                                .frame(maxWidth: .infinity).padding(.vertical, 10)
+                                .overlay(isActive ? Rectangle().fill(Color.goldDark).frame(height: 2) : nil, alignment: .bottom)
+                        }.buttonStyle(BorderlessButtonStyle())
+                    }
                 }
-            }
-            .overlay(Rectangle().fill(Color.borderColor).frame(height: 1), alignment: .bottom)
+                .overlay(Rectangle().fill(Color.borderColor).frame(height: 1), alignment: .bottom)
 
-            // Content
-            cashTabContent
+                // Content
+                cashTabContent
+            }
+
+            if (isAcct && activeTab == "Active Floats") || activeTab == "Float Request" {
+                VStack(alignment: .trailing, spacing: 8) {
+                    if newFloatDisabled {
+                        HStack(spacing: 6) {
+                            Image(systemName: "info.circle.fill").font(.system(size: 11)).foregroundColor(.orange)
+                            Text("You already have an open float. Close it before requesting a new one.")
+                                .font(.system(size: 11)).foregroundColor(.primary)
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 8)
+                        .background(Color.orange.opacity(0.12)).cornerRadius(8)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.orange.opacity(0.4), lineWidth: 1))
+                    }
+                    Button(action: { if !newFloatDisabled { navigateToNewFloat = true } }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "plus").font(.system(size: 14, weight: .bold))
+                            Text("New Float").font(.system(size: 14, weight: .bold))
+                        }
+                        .foregroundColor(newFloatDisabled ? .white : .black)
+                        .padding(.horizontal, 20).padding(.vertical, 14)
+                        .background(newFloatDisabled ? Color.gray.opacity(0.5) : Color.gold).cornerRadius(28)
+                    }
+                    .disabled(newFloatDisabled)
+                }
+                .padding(.trailing, 20).padding(.bottom, 24).padding(.leading, 20)
+            }
         }
+        .background(
+            NavigationLink(destination: FloatRequestFormView().environmentObject(appState).navigationBarTitle(Text("New Float"), displayMode: .inline), isActive: $navigateToNewFloat) { EmptyView() }
+                .frame(width: 0, height: 0).hidden()
+        )
         .background(Color.bgBase)
         .navigationBarTitle(Text("Petty Cash"), displayMode: .inline)
-        .onAppear { if activeTab.isEmpty { activeTab = isAcct ? "Active Floats" : isCoord ? "Active Floats" : "Float Request" } }
+        .onAppear {
+            if activeTab.isEmpty { activeTab = isAcct ? "Active Floats" : isCoord ? "Active Floats" : "Float Request" }
+            appState.loadAllCashExpenseData()
+        }
     }
 
     @ViewBuilder
@@ -236,9 +229,10 @@ struct PettyCashModuleView: View {
         case "Post & Ledger": ClaimsListView(claims: appState.allPettyCashClaims.filter { ["READY_TO_POST", "POSTED"].contains($0.status.uppercased()) }, title: "Post & Ledger", hideFilterSearch: true).environmentObject(appState)
         case "Cash Recon": ReconciliationView().environmentObject(appState)
         case "Sign-off": SignOffListView().environmentObject(appState)
-        case "Approval Queue": FloatsListView(floats: appState.approvalQueueFloats).environmentObject(appState)
+        case "Approval Queue": ApprovalQueuePage().environmentObject(appState)
+        case "History": ClaimsListView(claims: appState.allPettyCashClaims, title: "History").environmentObject(appState)
         case "Coding Queue": CodingQueueListView(claims: appState.codingQueue).environmentObject(appState)
-        case "Float Request": FloatRequestFormView().environmentObject(appState)
+        case "Float Request": FloatRequestListView().environmentObject(appState)
         case "Submit Claim":  SubmitClaimFormView(expenseType: "pc").environmentObject(appState)
         case "My Claims":    ClaimsListView(claims: appState.myPettyCashClaims, title: "My Claims", filterMode: .myClaims).environmentObject(appState)
         default: EmptyView()
@@ -261,7 +255,7 @@ struct OutOfPocketModuleView: View {
 
     private var tabs: [String] {
         if isAcct {
-            return ["Post & Ledger", "Payment", "Sign-off"]
+            return ["Payment Routing", "History"]
         }
         if isCoord {
             return ["Submit Claim", "My Claims"]
@@ -311,16 +305,58 @@ struct OutOfPocketModuleView: View {
         )
         .background(Color.bgBase)
         .navigationBarTitle(Text("Out of Pocket"), displayMode: .inline)
-        .onAppear { if activeTab.isEmpty { activeTab = isAcct ? "Post & Ledger" : "Submit Claim" } }
+        .onAppear {
+            if activeTab.isEmpty { activeTab = isAcct ? "Payment Routing" : "Submit Claim" }
+            appState.loadAllCashExpenseData()
+        }
+    }
+
+    private func oopStatCard(label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.system(size: 8, weight: .bold)).foregroundColor(.secondary).tracking(0.4).lineLimit(1).minimumScaleFactor(0.8)
+            Text(value).font(.system(size: 18, weight: .bold, design: .monospaced)).foregroundColor(.primary).lineLimit(1).minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(10)
+        .background(Color.white).cornerRadius(8)
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+    }
+
+    private func oopStatsCards(_ claims: [ClaimBatch], firstLabel: String) -> some View {
+        let total = claims.reduce(0.0) { $0 + $1.totalGross }
+        let claimants = Set(claims.map { $0.userId }).count
+        return HStack(spacing: 8) {
+            oopStatCard(label: firstLabel, value: "\(claims.count)")
+            oopStatCard(label: "TOTAL VALUE", value: FormatUtils.formatGBP(total))
+            oopStatCard(label: "CLAIMANTS", value: "\(claimants)")
+        }
+        .frame(height: 64)
+        .padding(.horizontal, 16).padding(.top, 12)
     }
 
     @ViewBuilder
     private var oopTabContent: some View {
         switch activeTab {
-        case "Post & Ledger":  ClaimsListView(claims: appState.allOOPClaims.filter { ["READY_TO_POST", "POSTED"].contains($0.status.uppercased()) }, title: "Post & Ledger", hideFilterSearch: true).environmentObject(appState)
-        case "Payment":        ClaimsListView(claims: appState.allOOPClaims.filter { $0.status.uppercased() == "POSTED" }, title: "Payment Routing").environmentObject(appState)
-        case "Sign-off":       OOPSignOffListView().environmentObject(appState)
-        case "Approval Queue": ClaimsListView(claims: appState.allOOPClaims.filter { ["AWAITING_APPROVAL", "ESCALATED", "IN_AUDIT"].contains($0.status.uppercased()) }, title: "Approval Queue").environmentObject(appState)
+        case "Post & Ledger":
+            let c = appState.allOOPClaims.filter { ["READY_TO_POST", "POSTED"].contains($0.status.uppercased()) }
+            VStack(spacing: 0) {
+                oopStatsCards(c, firstLabel: "BATCHES")
+                ClaimsListView(claims: c, title: "Post & Ledger", hideFilterSearch: true).environmentObject(appState)
+            }
+        case "Payment Routing":
+            PaymentRoutingView().environmentObject(appState)
+        case "Sign-off":
+            let c = appState.signOffQueue.filter { $0.isOutOfPocket }
+            VStack(spacing: 0) {
+                oopStatsCards(c, firstLabel: "AWAITING SIGN-OFF")
+                OOPSignOffListView().environmentObject(appState)
+            }
+        case "Approval Queue": ApprovalQueuePage().environmentObject(appState)
+        case "History":
+            let c = appState.allOOPClaims
+            VStack(spacing: 0) {
+                oopStatsCards(c, firstLabel: "BATCHES")
+                ClaimsListView(claims: c, title: "History").environmentObject(appState)
+            }
         case "Coding Queue":   ClaimsListView(claims: appState.codingQueue, title: "Coding Queue", filterMode: .expenseType).environmentObject(appState)
         case "Submit Claim":   SubmitClaimFormView(expenseType: "oop").environmentObject(appState)
         case "My Claims":      ClaimsListView(claims: appState.myOOPClaims, title: "My Claims", filterMode: .myClaims).environmentObject(appState)
@@ -441,7 +477,13 @@ struct ClaimsListView: View {
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
                     } else {
                         ForEach(filtered) { claim in
-                            ClaimRow(claim: claim)
+                            if filterMode == .myClaims {
+                                NavigationLink(destination: ClaimDetailPage(claim: claim)) {
+                                    ClaimRow(claim: claim)
+                                }.buttonStyle(PlainButtonStyle())
+                            } else {
+                                ClaimRow(claim: claim)
+                            }
                         }
                     }
                 }.padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 20)
@@ -560,8 +602,14 @@ struct FloatsListView: View {
                     .padding(.horizontal, 16)
                 } else {
                     ForEach(floats) { f in
-                        FloatCard(float: f, batches: appState.allClaims.filter { $0.floatRequestId == f.id })
+                        NavigationLink(destination: FloatDetailView(float: f).environmentObject(appState)) {
+                            FloatCard(
+                                float: f,
+                                batches: appState.allClaims.filter { $0.floatRequestId == f.id },
+                                disableInternalTap: true
+                            )
                             .padding(.horizontal, 16)
+                        }.buttonStyle(PlainButtonStyle())
                     }
                 }
             }.padding(.top, 8).padding(.bottom, 20)
@@ -572,64 +620,77 @@ struct FloatsListView: View {
 struct FloatCard: View {
     let float: FloatRequest
     var batches: [ClaimBatch] = []
-    @State private var expanded = false
+    var disableInternalTap: Bool = false
+    var forceExpanded: Bool = false
+    var onTap: (() -> Void)? = nil
+    @State private var expandedState = false
     @State private var selectedBatchId: String?
 
+    private var expanded: Bool { forceExpanded || expandedState }
     private var balance: Double { float.issuedFloat - float.receiptsAmount }
+
+    @ViewBuilder private var headerContent: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Row 1: avatar + name + float number + status
+            HStack(spacing: 8) {
+                if !disableInternalTap && onTap == nil {
+                    Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 10, weight: .semibold)).foregroundColor(.gray)
+                }
+                if let user = UsersData.byId[float.userId] {
+                    ZStack {
+                        Circle().fill(Color.gold.opacity(0.2)).frame(width: 32, height: 32)
+                        Text(user.initials).font(.system(size: 11, weight: .bold)).foregroundColor(.goldDark)
+                    }
+                    Text(user.fullName).font(.system(size: 14, weight: .bold)).lineLimit(1)
+                }
+                Text("· \(float.reqNumber)").font(.system(size: 11, design: .monospaced)).foregroundColor(.secondary)
+                Spacer()
+                let (fg, bg) = floatStatusColor(float.status)
+                Text(float.statusDisplay.uppercased()).font(.system(size: 8, weight: .bold)).foregroundColor(fg)
+                    .padding(.horizontal, 6).padding(.vertical, 3).background(bg).cornerRadius(4)
+            }
+
+            // Row 2: submitted date + cost code + duration
+            HStack(spacing: 6) {
+                Text("Submitted \(FormatUtils.formatTimestamp(float.createdAt))").font(.system(size: 10)).foregroundColor(.gray)
+                if !float.costCode.isEmpty {
+                    Text("· \(float.costCode.uppercased())").font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
+                }
+                if !float.duration.isEmpty {
+                    Text("· \(float.duration) days duration").font(.system(size: 10)).foregroundColor(.gray)
+                }
+            }
+
+            // Row 3: amounts (Issued / Spent / Balance)
+            HStack(spacing: 0) {
+                VStack(spacing: 2) {
+                    Text("ISSUED").font(.system(size: 8, weight: .bold)).foregroundColor(.secondary).tracking(0.3)
+                    Text(FormatUtils.formatGBP(float.issuedFloat)).font(.system(size: 14, weight: .bold, design: .monospaced))
+                }.frame(maxWidth: .infinity)
+                VStack(spacing: 2) {
+                    Text("SPENT").font(.system(size: 8, weight: .bold)).foregroundColor(.secondary).tracking(0.3)
+                    Text(FormatUtils.formatGBP(float.receiptsAmount)).font(.system(size: 14, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
+                }.frame(maxWidth: .infinity)
+                VStack(spacing: 2) {
+                    Text("BALANCE").font(.system(size: 8, weight: .bold)).foregroundColor(.secondary).tracking(0.3)
+                    Text(FormatUtils.formatGBP(balance)).font(.system(size: 14, weight: .bold, design: .monospaced)).foregroundColor(.green)
+                }.frame(maxWidth: .infinity)
+            }
+            .padding(.vertical, 6).background(Color.bgRaised).cornerRadius(8)
+        }
+        .padding(12).contentShape(Rectangle())
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Tap header to expand ──
-            Button(action: { expanded.toggle() }) {
-                VStack(alignment: .leading, spacing: 8) {
-                    // Row 1: avatar + name + float number + status
-                    HStack(spacing: 8) {
-                        Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                            .font(.system(size: 10, weight: .semibold)).foregroundColor(.gray)
-                        if let user = UsersData.byId[float.userId] {
-                            ZStack {
-                                Circle().fill(Color.gold.opacity(0.2)).frame(width: 32, height: 32)
-                                Text(user.initials).font(.system(size: 11, weight: .bold)).foregroundColor(.goldDark)
-                            }
-                            Text(user.fullName).font(.system(size: 14, weight: .bold)).lineLimit(1)
-                        }
-                        Text("· \(float.reqNumber)").font(.system(size: 11, design: .monospaced)).foregroundColor(.secondary)
-                        Spacer()
-                        let (fg, bg) = floatStatusColor(float.status)
-                        Text(float.statusDisplay.uppercased()).font(.system(size: 8, weight: .bold)).foregroundColor(fg)
-                            .padding(.horizontal, 6).padding(.vertical, 3).background(bg).cornerRadius(4)
-                    }
-
-                    // Row 2: submitted date + cost code + duration
-                    HStack(spacing: 6) {
-                        Text("Submitted \(FormatUtils.formatTimestamp(float.createdAt))").font(.system(size: 10)).foregroundColor(.gray)
-                        if !float.costCode.isEmpty {
-                            Text("· \(float.costCode.uppercased())").font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
-                        }
-                        if !float.duration.isEmpty {
-                            Text("· \(float.duration) days duration").font(.system(size: 10)).foregroundColor(.gray)
-                        }
-                    }
-
-                    // Row 3: amounts (Issued / Spent / Balance)
-                    HStack(spacing: 0) {
-                        VStack(spacing: 2) {
-                            Text("ISSUED").font(.system(size: 8, weight: .bold)).foregroundColor(.secondary).tracking(0.3)
-                            Text(FormatUtils.formatGBP(float.issuedFloat)).font(.system(size: 14, weight: .bold, design: .monospaced))
-                        }.frame(maxWidth: .infinity)
-                        VStack(spacing: 2) {
-                            Text("SPENT").font(.system(size: 8, weight: .bold)).foregroundColor(.secondary).tracking(0.3)
-                            Text(FormatUtils.formatGBP(float.receiptsAmount)).font(.system(size: 14, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
-                        }.frame(maxWidth: .infinity)
-                        VStack(spacing: 2) {
-                            Text("BALANCE").font(.system(size: 8, weight: .bold)).foregroundColor(.secondary).tracking(0.3)
-                            Text(FormatUtils.formatGBP(balance)).font(.system(size: 14, weight: .bold, design: .monospaced)).foregroundColor(.green)
-                        }.frame(maxWidth: .infinity)
-                    }
-                    .padding(.vertical, 6).background(Color.bgRaised).cornerRadius(8)
-                }
-                .padding(12).contentShape(Rectangle())
-            }.buttonStyle(PlainButtonStyle())
+            if let onTap = onTap {
+                Button(action: onTap) { headerContent }.buttonStyle(PlainButtonStyle())
+            } else if disableInternalTap {
+                headerContent
+            } else {
+                Button(action: { expandedState.toggle() }) { headerContent }.buttonStyle(PlainButtonStyle())
+            }
 
             // ── Expanded: details + batches ──
             if expanded {
@@ -840,6 +901,609 @@ struct ClaimReceiptItem: Identifiable {
     var fileData: Data?
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// MARK: - Float Detail View (navigation page)
+// ═══════════════════════════════════════════════════════════════════
+
+struct FloatDetailView: View {
+    let float: FloatRequest
+    @EnvironmentObject var appState: POViewModel
+    @State private var selectedBatchId: String?
+
+    private var batches: [ClaimBatch] { appState.allClaims.filter { $0.floatRequestId == float.id } }
+    private var balance: Double { float.issuedFloat - float.receiptsAmount }
+
+    private func statusColor(_ s: String) -> (Color, Color) {
+        switch s.uppercased() {
+        case "APPROVED", "ACTIVE", "SPENDING": return (.green, Color.green.opacity(0.1))
+        case "AWAITING_APPROVAL": return (.goldDark, Color.gold.opacity(0.15))
+        case "REJECTED": return (.red, Color.red.opacity(0.1))
+        case "CLOSED": return (.gray, Color.gray.opacity(0.1))
+        default: return (.goldDark, Color.gold.opacity(0.15))
+        }
+    }
+
+    private func batchColor(_ s: String) -> (Color, Color) {
+        switch s.uppercased() {
+        case "CODING", "CODED": return (.purple, Color.purple.opacity(0.1))
+        case "POSTED": return (.green, Color.green.opacity(0.1))
+        case "REJECTED": return (.red, Color.red.opacity(0.1))
+        case "ESCALATED": return (.orange, Color.orange.opacity(0.1))
+        default: return (.goldDark, Color.gold.opacity(0.15))
+        }
+    }
+
+    private func detailRow(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label).font(.system(size: 11)).foregroundColor(.secondary)
+            Spacer()
+            Text(value).font(.system(size: 11, weight: .medium))
+        }.padding(.horizontal, 14).padding(.vertical, 6)
+    }
+
+    @ViewBuilder
+    private func batchStatusFlow(_ batch: ClaimBatch) -> some View {
+        let steps: [(key: String, label: String, sub: String)] = [
+            ("CODING", "Submitted", "Batch #\(batch.batchReference)"),
+            ("CODED", "Coordinator Coding", "Budget coding done"),
+            ("IN_AUDIT", "Accounts Audit", "Audited & verified"),
+            ("AWAITING_APPROVAL", "Approval", "Approved"),
+            ("READY_TO_POST", "Post & Ledger", "Ready to post"),
+            ("POSTED", "Settlement", batch.settlementType.isEmpty ? "Complete" : batch.settlementType.replacingOccurrences(of: "_", with: " ").capitalized),
+        ]
+        let current: Int = {
+            switch batch.status.uppercased() {
+            case "CODING": return 0
+            case "CODED": return 1
+            case "IN_AUDIT": return 2
+            case "AWAITING_APPROVAL", "ACCT_OVERRIDE": return 3
+            case "READY_TO_POST", "ESCALATED": return 4
+            case "POSTED": return 5
+            case "REJECTED": return -1
+            default: return 0
+            }
+        }()
+        VStack(alignment: .leading, spacing: 0) {
+            Text("STATUS").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
+                .padding(.horizontal, 14).padding(.top, 8).padding(.bottom, 6)
+            ForEach(Array(steps.enumerated()), id: \.offset) { idx, step in
+                HStack(alignment: .top, spacing: 10) {
+                    VStack(spacing: 0) {
+                        Circle()
+                            .fill(idx < current ? Color.green : idx == current ? Color.goldDark : Color.gray.opacity(0.25))
+                            .frame(width: 12, height: 12)
+                        if idx < steps.count - 1 {
+                            Rectangle()
+                                .fill(idx < current ? Color.green.opacity(0.4) : Color.gray.opacity(0.2))
+                                .frame(width: 2, height: 24)
+                        }
+                    }.frame(width: 12)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(step.label)
+                            .font(.system(size: 12, weight: idx == current ? .bold : .medium))
+                            .foregroundColor(idx < current ? .green : idx == current ? .goldDark : .secondary)
+                        Text(step.sub).font(.system(size: 10)).foregroundColor(.gray)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 14)
+            }
+            if batch.status.uppercased() == "REJECTED" {
+                HStack(spacing: 8) {
+                    Circle().fill(Color.red).frame(width: 12, height: 12)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Rejected").font(.system(size: 12, weight: .bold)).foregroundColor(.red)
+                        Text("Resubmit required").font(.system(size: 10)).foregroundColor(.red.opacity(0.7))
+                    }
+                }.padding(.horizontal, 14).padding(.top, 4)
+            }
+        }
+        .padding(.bottom, 10).background(Color.bgRaised.opacity(0.5))
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                // ── Summary card ──
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 8) {
+                        Text(float.reqNumber).font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundColor(.secondary)
+                        Spacer()
+                        let (fg, bg) = statusColor(float.status)
+                        Text(float.statusDisplay.uppercased()).font(.system(size: 9, weight: .bold)).foregroundColor(fg)
+                            .padding(.horizontal, 8).padding(.vertical, 3).background(bg).cornerRadius(4)
+                    }
+
+                    HStack(spacing: 0) {
+                        VStack(spacing: 2) {
+                            Text("ISSUED").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.3)
+                            Text(FormatUtils.formatGBP(float.issuedFloat)).font(.system(size: 15, weight: .bold, design: .monospaced))
+                        }.frame(maxWidth: .infinity)
+                        VStack(spacing: 2) {
+                            Text("SPENT").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.3)
+                            Text(FormatUtils.formatGBP(float.receiptsAmount)).font(.system(size: 15, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
+                        }.frame(maxWidth: .infinity)
+                        VStack(spacing: 2) {
+                            Text("BALANCE").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.3)
+                            Text(FormatUtils.formatGBP(balance)).font(.system(size: 15, weight: .bold, design: .monospaced)).foregroundColor(.green)
+                        }.frame(maxWidth: .infinity)
+                    }
+                    .padding(.vertical, 10).background(Color.bgRaised).cornerRadius(8)
+
+                    Divider()
+
+                    VStack(spacing: 0) {
+                        detailRow("Submitted", FormatUtils.formatTimestamp(float.createdAt))
+                        if !float.costCode.isEmpty { detailRow("Cost Code", float.costCode.uppercased()) }
+                        if !float.purpose.isEmpty { detailRow("Purpose", float.purpose) }
+                        if !float.duration.isEmpty { detailRow("Duration", "\(float.duration) days") }
+                        if !float.collectionMethod.isEmpty { detailRow("Collection", float.collectionMethod.replacingOccurrences(of: "_", with: " ").capitalized) }
+                        if let start = float.startDate, start > 0 { detailRow("Start Date", FormatUtils.formatTimestamp(start)) }
+                        if !float.department.isEmpty { detailRow("Department", float.department) }
+                    }
+                }
+                .padding(14)
+                .background(Color.white).cornerRadius(12)
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
+                .padding(.horizontal, 16)
+
+                // ── Approvals card ──
+                if !float.approvals.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("APPROVALS (\(float.approvals.count))").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
+                        ForEach(float.approvals, id: \.tierNumber) { a in
+                            HStack(spacing: 6) {
+                                Image(systemName: "checkmark.circle.fill").font(.system(size: 11)).foregroundColor(.green)
+                                Text(UsersData.byId[a.userId]?.fullName ?? a.userId).font(.system(size: 11, weight: .medium))
+                                Spacer()
+                                Text("Tier \(a.tierNumber)").font(.system(size: 10)).foregroundColor(.secondary)
+                                Text(FormatUtils.formatTimestamp(a.approvedAt)).font(.system(size: 9)).foregroundColor(.gray)
+                            }
+                        }
+                    }
+                    .padding(14)
+                    .background(Color.white).cornerRadius(12)
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
+                    .padding(.horizontal, 16)
+                }
+
+                // ── Batches card ──
+                if !batches.isEmpty {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("\(batches.count) BATCHES").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
+                            .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 6)
+                        ForEach(batches) { batch in
+                            let isSelected = selectedBatchId == batch.id
+                            VStack(spacing: 0) {
+                                Button(action: { selectedBatchId = isSelected ? nil : batch.id }) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "doc.text").font(.system(size: 11))
+                                            .foregroundColor(isSelected ? .goldDark : .gray)
+                                        VStack(alignment: .leading, spacing: 1) {
+                                            Text("#\(batch.batchReference)").font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundColor(.goldDark)
+                                            Text("\(batch.claimCount) receipt\(batch.claimCount == 1 ? "" : "s") · \(FormatUtils.formatTimestamp(batch.createdAt))").font(.system(size: 10)).foregroundColor(.gray)
+                                        }
+                                        Spacer()
+                                        VStack(alignment: .trailing, spacing: 2) {
+                                            Text(FormatUtils.formatGBP(batch.totalGross)).font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundColor(.primary)
+                                            let (bfg, bbg) = batchColor(batch.status)
+                                            Text(batch.statusDisplay).font(.system(size: 8, weight: .bold)).foregroundColor(bfg)
+                                                .padding(.horizontal, 6).padding(.vertical, 2).background(bbg).cornerRadius(3)
+                                        }
+                                    }
+                                    .padding(.horizontal, 14).padding(.vertical, 8)
+                                    .background(isSelected ? Color.gold.opacity(0.04) : Color.clear)
+                                    .contentShape(Rectangle())
+                                }.buttonStyle(PlainButtonStyle())
+
+                                if isSelected { batchStatusFlow(batch) }
+                                Divider().padding(.horizontal, 14)
+                            }
+                        }
+                    }
+                    .padding(.bottom, 8)
+                    .background(Color.white).cornerRadius(12)
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
+                    .padding(.horizontal, 16)
+                }
+
+                // ── Rejection ──
+                if let reason = float.rejectionReason, !reason.isEmpty {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 11)).foregroundColor(.red)
+                        Text(reason).font(.system(size: 11)).foregroundColor(.red)
+                    }
+                    .padding(12)
+                    .background(Color.red.opacity(0.06)).cornerRadius(10)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.red.opacity(0.3), lineWidth: 1))
+                    .padding(.horizontal, 16)
+                }
+            }
+            .padding(.vertical, 12)
+        }
+        .background(Color.bgBase)
+        .navigationBarTitle(Text("Float \(float.reqNumber)"), displayMode: .inline)
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MARK: - Float Request List (inline details cards)
+// ═══════════════════════════════════════════════════════════════════
+
+struct FloatRequestListView: View {
+    @EnvironmentObject var appState: POViewModel
+
+    private var floats: [FloatRequest] {
+        appState.myFloats.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                if floats.isEmpty {
+                    VStack(spacing: 8) {
+                        Image(systemName: "banknote").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
+                        Text("No float requests yet").font(.system(size: 13)).foregroundColor(.secondary)
+                        Text("Tap + New Float to submit your first request.").font(.system(size: 11)).foregroundColor(.gray)
+                    }.frame(maxWidth: .infinity).padding(.vertical, 50)
+                    .background(Color.white).cornerRadius(10)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                    .padding(.horizontal, 16)
+                } else {
+                    ForEach(floats) { f in
+                        NavigationLink(destination: FloatRequestDetailPage(float: f)) {
+                            FloatRequestRow(float: f).padding(.horizontal, 16)
+                        }.buttonStyle(PlainButtonStyle())
+                    }
+                }
+            }.padding(.top, 12).padding(.bottom, 100)
+        }
+        .background(Color.bgBase)
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MARK: - Claim Detail Page (Receipt Details)
+// ═══════════════════════════════════════════════════════════════════
+
+struct ClaimDetailPage: View {
+    let claim: ClaimBatch
+
+    private var currentStep: Int {
+        switch claim.status.uppercased() {
+        case "CODING": return 0
+        case "CODED": return 1
+        case "IN_AUDIT": return 2
+        case "AWAITING_APPROVAL", "ACCT_OVERRIDE", "APPROVED": return 3
+        case "READY_TO_POST", "ESCALATED": return 3
+        case "POSTED": return 4
+        case "REJECTED": return -1
+        default: return 0
+        }
+    }
+
+    private var statusColors: (Color, Color) {
+        switch claim.status.uppercased() {
+        case "CODING", "CODED": return (.blue, Color.blue.opacity(0.12))
+        case "IN_AUDIT": return (.purple, Color.purple.opacity(0.12))
+        case "AWAITING_APPROVAL": return (.goldDark, Color.gold.opacity(0.15))
+        case "APPROVED", "ACCT_OVERRIDE": return (.green, Color.green.opacity(0.12))
+        case "READY_TO_POST": return (.blue, Color.blue.opacity(0.12))
+        case "POSTED": return (.green, Color.green.opacity(0.12))
+        case "REJECTED": return (.red, Color.red.opacity(0.12))
+        case "ESCALATED": return (.orange, Color.orange.opacity(0.12))
+        default: return (.goldDark, Color.gold.opacity(0.15))
+        }
+    }
+
+    private func settlementDisplay(_ s: String) -> String {
+        switch s.uppercased() {
+        case "REIMBURSE": return "Reimburse"
+        case "PAYROLL": return "Payroll"
+        case "FLOAT": return "Float"
+        default: return s.isEmpty ? "—" : s.capitalized
+        }
+    }
+
+    private func categoryDisplay(_ c: String) -> String {
+        if c.isEmpty { return "—" }
+        if let match = claimCategories.first(where: { $0.0 == c }) { return match.1 }
+        return c.capitalized
+    }
+
+    private func costCodeLabel(_ c: String) -> String {
+        if c.isEmpty { return "—" }
+        if let match = costCodeOptions.first(where: { $0.0 == c }) { return match.1 }
+        return c.uppercased()
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                // Header title bar
+                HStack {
+                    Text("Receipt Details").font(.system(size: 15, weight: .bold))
+                    Spacer()
+                }
+                .padding(14)
+
+                Divider()
+
+                // Progress flow (5 steps)
+                HStack(spacing: 0) {
+                    stepDot(index: 0, label: "Submitted", sub: "Receipts sent")
+                    stepDot(index: 1, label: "Coordinator", sub: "Budget coding")
+                    stepDot(index: 2, label: "Accounts", sub: "Audit & verify")
+                    stepDot(index: 3, label: "Approval", sub: "Sign-off")
+                    stepDot(index: 4, label: "Posted", sub: "Ledger / payment")
+                }
+                .padding(.horizontal, 10).padding(.vertical, 14)
+
+                Divider()
+
+                // Summary title row
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "shippingbox.fill")
+                        .font(.system(size: 16)).foregroundColor(.goldDark)
+                        .frame(width: 32, height: 32).background(Color.gold.opacity(0.15)).cornerRadius(6)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(claim.notes.isEmpty ? claim.batchReference : claim.notes)
+                            .font(.system(size: 15, weight: .bold))
+                        HStack(spacing: 6) {
+                            Text(FormatUtils.formatTimestamp(claim.createdAt)).font(.system(size: 11)).foregroundColor(.secondary)
+                            Text("·").foregroundColor(.secondary)
+                            Text(claim.isPettyCash ? "Petty Cash" : "Out of Pocket")
+                                .font(.system(size: 11)).foregroundColor(.secondary)
+                        }
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 6) {
+                        let (fg, bg) = statusColors
+                        Text(claim.statusDisplay).font(.system(size: 9, weight: .bold)).foregroundColor(fg)
+                            .padding(.horizontal, 8).padding(.vertical, 3).background(bg).cornerRadius(4)
+                        Text(FormatUtils.formatGBP(claim.totalGross))
+                            .font(.system(size: 16, weight: .bold, design: .monospaced))
+                    }
+                }
+                .padding(14)
+
+                Divider()
+
+                // Details grid
+                VStack(spacing: 14) {
+                    HStack(alignment: .top, spacing: 12) {
+                        infoCell(label: "BATCH", value: claim.batchReference.isEmpty ? "—" : "#\(claim.batchReference)", mono: true)
+                        infoCell(label: "CATEGORY", value: categoryDisplay(claim.category))
+                        infoCell(label: "SETTLEMENT", value: settlementDisplay(claim.settlementType))
+                    }
+                    HStack(alignment: .top, spacing: 12) {
+                        infoCell(label: "COST CODE", value: costCodeLabel(claim.costCode))
+                        infoCell(label: "CODING DESCRIPTION", value: (claim.codingDescription.isEmpty ? claim.notes : claim.codingDescription).isEmpty ? "—" : (claim.codingDescription.isEmpty ? claim.notes : claim.codingDescription))
+                        Spacer().frame(maxWidth: .infinity)
+                    }
+                    if let reason = claim.rejectionReason, !reason.isEmpty {
+                        HStack(alignment: .top, spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 11)).foregroundColor(.red)
+                            Text(reason).font(.system(size: 11)).foregroundColor(.red)
+                            Spacer()
+                        }
+                    }
+                }
+                .padding(14)
+            }
+            .background(Color.white).cornerRadius(12)
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
+            .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 20)
+        }
+        .background(Color.bgBase)
+        .navigationBarTitle(Text("Receipt Details"), displayMode: .inline)
+    }
+
+    private func stepDot(index: Int, label: String, sub: String) -> some View {
+        let isDone = index < currentStep
+        let isActive = index == currentStep
+        let color: Color = isDone ? .green : isActive ? .goldDark : Color.gray.opacity(0.4)
+        let labelColor: Color = isDone ? .green : isActive ? .goldDark : .secondary
+        return VStack(spacing: 4) {
+            Circle().fill(color).frame(width: 10, height: 10)
+            Text(label).font(.system(size: 11, weight: isActive ? .bold : .semibold)).foregroundColor(labelColor).lineLimit(1).minimumScaleFactor(0.7)
+            Text(sub).font(.system(size: 9)).foregroundColor(.gray).lineLimit(1).minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func infoCell(label: String, value: String, mono: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
+            Text(value).font(mono ? .system(size: 13, weight: .semibold, design: .monospaced) : .system(size: 13))
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct FloatRequestRow: View {
+    let float: FloatRequest
+
+    private var statusColors: (Color, Color) {
+        switch float.status.uppercased() {
+        case "APPROVED", "ACTIVE", "SPENDING", "ISSUED", "IN_USE": return (.green, Color.green.opacity(0.12))
+        case "AWAITING_APPROVAL": return (.orange, Color.orange.opacity(0.15))
+        case "REJECTED": return (.red, Color.red.opacity(0.12))
+        case "CLOSED", "RETURNED": return (.gray, Color.gray.opacity(0.15))
+        default: return (.goldDark, Color.gold.opacity(0.15))
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text("#\(float.reqNumber)").font(.system(size: 13, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
+                    let (fg, bg) = statusColors
+                    Text(float.statusDisplay.uppercased())
+                        .font(.system(size: 8, weight: .bold)).foregroundColor(fg)
+                        .padding(.horizontal, 6).padding(.vertical, 2).background(bg).cornerRadius(3)
+                }
+                Text("Submitted \(FormatUtils.formatTimestamp(float.createdAt))")
+                    .font(.system(size: 10)).foregroundColor(.gray)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(FormatUtils.formatGBP(float.reqAmount))
+                    .font(.system(size: 15, weight: .bold, design: .monospaced))
+                if !float.duration.isEmpty {
+                    Text("\(float.duration) days").font(.system(size: 10)).foregroundColor(.secondary)
+                }
+            }
+            Image(systemName: "chevron.right").font(.system(size: 11)).foregroundColor(.gray)
+        }
+        .padding(14)
+        .background(Color.white).cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+    }
+}
+
+struct FloatRequestDetailPage: View {
+    let float: FloatRequest
+    var body: some View {
+        ScrollView {
+            VStack {
+                FloatDetailsCard(float: float).padding(.horizontal, 16).padding(.top, 12)
+            }
+        }
+        .background(Color.bgBase)
+        .navigationBarTitle(Text("Float \(float.reqNumber)"), displayMode: .inline)
+    }
+}
+
+struct FloatDetailsCard: View {
+    let float: FloatRequest
+
+    private var statusColors: (Color, Color) {
+        switch float.status.uppercased() {
+        case "APPROVED", "ACTIVE", "SPENDING", "ISSUED", "IN_USE": return (.green, Color.green.opacity(0.12))
+        case "AWAITING_APPROVAL": return (Color.orange, Color.orange.opacity(0.15))
+        case "REJECTED": return (.red, Color.red.opacity(0.12))
+        case "CLOSED", "RETURNED": return (.gray, Color.gray.opacity(0.15))
+        default: return (.goldDark, Color.gold.opacity(0.15))
+        }
+    }
+
+    private var footer: (String, Color, String) {
+        switch float.status.uppercased() {
+        case "AWAITING_APPROVAL":
+            return ("Float request submitted — awaiting approval", .green, "checkmark.circle.fill")
+        case "APPROVED", "ISSUED":
+            return ("Float approved — ready to collect", .green, "checkmark.circle.fill")
+        case "IN_USE", "SPENDING", "ACTIVE":
+            return ("Float active — submit receipts against this float", .goldDark, "creditcard.fill")
+        case "CLAIMABLE":
+            return ("Float ready to close — submit final batch", .goldDark, "doc.text.fill")
+        case "RETURNED", "CLOSED":
+            return ("Float closed", .gray, "checkmark.seal.fill")
+        case "REJECTED":
+            return ("Float rejected — see notes below", .red, "xmark.circle.fill")
+        default:
+            return (float.statusDisplay, .secondary, "info.circle.fill")
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
+            HStack {
+                Text("Float Details").font(.system(size: 14, weight: .bold))
+                Spacer()
+                let (fg, bg) = statusColors
+                Text(float.statusDisplay.uppercased())
+                    .font(.system(size: 9, weight: .bold)).foregroundColor(fg)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(bg).cornerRadius(4)
+            }
+            .padding(14)
+
+            Divider()
+
+            // Two-column grid of details
+            VStack(spacing: 14) {
+                detailRow(leftLabel: "REF.", leftValue: "#\(float.reqNumber)",
+                          rightLabel: "SUBMITTED ON", rightValue: FormatUtils.formatTimestamp(float.createdAt),
+                          leftMono: true)
+                detailRow(leftLabel: "USER", leftValue: UsersData.byId[float.userId]?.fullName ?? "—",
+                          rightLabel: "DEPARTMENT", rightValue: float.department.isEmpty ? "—" : float.department)
+                detailRow(leftLabel: "REQUESTED AMOUNT", leftValue: FormatUtils.formatGBP(float.reqAmount),
+                          rightLabel: "DURATION", rightValue: float.duration.isEmpty ? "—" : "\(float.duration) days",
+                          leftMono: true)
+                detailRow(leftLabel: "COST CODE", leftValue: costCodeDisplay(float.costCode),
+                          rightLabel: "START DATE", rightValue: (float.startDate ?? 0) > 0 ? FormatUtils.formatTimestamp(float.startDate!) : "—")
+                if !float.collectionMethod.isEmpty {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("PREFERRED COLLECTION METHOD").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
+                            Text(collectionDisplay(float.collectionMethod)).font(.system(size: 13))
+                        }
+                        Spacer()
+                    }
+                }
+                if !float.purpose.isEmpty {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("PURPOSE").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
+                            Text(float.purpose).font(.system(size: 13))
+                        }
+                        Spacer()
+                    }
+                }
+            }
+            .padding(14)
+
+            Divider()
+
+            // Footer status line
+            let (text, color, icon) = footer
+            HStack(spacing: 6) {
+                Image(systemName: icon).font(.system(size: 11)).foregroundColor(color)
+                Text(text).font(.system(size: 12, weight: .semibold)).foregroundColor(color)
+            }.padding(14)
+
+            // Rejection reason if present
+            if let reason = float.rejectionReason, !reason.isEmpty {
+                Divider()
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 11)).foregroundColor(.red)
+                    Text(reason).font(.system(size: 11)).foregroundColor(.red)
+                    Spacer()
+                }.padding(14).background(Color.red.opacity(0.06))
+            }
+        }
+        .background(Color.white).cornerRadius(12)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
+    }
+
+    private func detailRow(leftLabel: String, leftValue: String, rightLabel: String, rightValue: String, leftMono: Bool = false) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(leftLabel).font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
+                Text(leftValue).font(leftMono ? .system(size: 14, weight: .bold, design: .monospaced) : .system(size: 13))
+            }.frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(rightLabel).font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
+                Text(rightValue).font(.system(size: 13))
+            }.frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func costCodeDisplay(_ code: String) -> String {
+        if code.isEmpty { return "—" }
+        if let match = costCodeOptions.first(where: { $0.0 == code }) { return match.1 }
+        return code.uppercased()
+    }
+
+    private func collectionDisplay(_ method: String) -> String {
+        if let match = collectionOptions.first(where: { $0.0 == method }) { return match.1 }
+        return method.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+}
+
 let claimCategories = [
     ("materials", "Materials"), ("equipment", "Props / Equipment"),
     ("stationery", "Consumables / Stationery"), ("catering", "Catering"),
@@ -1046,28 +1710,38 @@ struct SubmitClaimFormView: View {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Date of Purchase *").font(.system(size: 10, weight: .semibold)).foregroundColor(.secondary)
-                    Button(action: { receiptDatePickerId = receiptDatePickerId == itemId ? nil : itemId }) {
+                    if receiptDates[itemId] != nil {
                         HStack {
-                            Text(item.date.isEmpty ? "Select date" : item.date)
-                                .font(.system(size: 13)).foregroundColor(item.date.isEmpty ? .gray : .primary)
-                            Spacer()
-                            Image(systemName: "calendar").font(.system(size: 12)).foregroundColor(.goldDark)
+                            DatePicker("", selection: Binding(
+                                get: { receiptDates[itemId] ?? Date() },
+                                set: { newDate in
+                                    receiptDates[itemId] = newDate
+                                    let df = DateFormatter(); df.dateFormat = "dd/MM/yyyy"
+                                    if let idx = receipts.firstIndex(where: { $0.id == itemId }) { receipts[idx].date = df.string(from: newDate) }
+                                }
+                            ), in: ...Date(), displayedComponents: .date)
+                            .labelsHidden()
+                            Button(action: {
+                                receiptDates[itemId] = nil
+                                if let idx = receipts.firstIndex(where: { $0.id == itemId }) { receipts[idx].date = "" }
+                            }) {
+                                Image(systemName: "xmark.circle.fill").font(.system(size: 14)).foregroundColor(.gray)
+                            }.buttonStyle(BorderlessButtonStyle())
                         }
-                        .padding(8).background(Color.bgRaised).cornerRadius(6)
-                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
-                    }.buttonStyle(BorderlessButtonStyle())
-                    if receiptDatePickerId == itemId {
-                        DatePicker("", selection: Binding(
-                            get: { receiptDates[itemId] ?? Date() },
-                            set: { newDate in
-                                receiptDates[itemId] = newDate
-                                let df = DateFormatter(); df.dateFormat = "dd/MM/yyyy"
-                                if let idx = receipts.firstIndex(where: { $0.id == itemId }) { receipts[idx].date = df.string(from: newDate) }
-                                receiptDatePickerId = nil
+                    } else {
+                        Button(action: {
+                            receiptDates[itemId] = Date()
+                            let df = DateFormatter(); df.dateFormat = "dd/MM/yyyy"
+                            if let idx = receipts.firstIndex(where: { $0.id == itemId }) { receipts[idx].date = df.string(from: Date()) }
+                        }) {
+                            HStack {
+                                Text("dd/mm/yyyy").font(.system(size: 13)).foregroundColor(.gray)
+                                Spacer()
+                                Image(systemName: "calendar").font(.system(size: 12)).foregroundColor(.goldDark)
                             }
-                        ), in: ...Date(), displayedComponents: .date)
-                        .datePickerStyle(WheelDatePickerStyle())
-                        .labelsHidden()
+                            .padding(8).background(Color.bgRaised).cornerRadius(6)
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
+                        }.buttonStyle(BorderlessButtonStyle())
                     }
                 }
                 VStack(alignment: .leading, spacing: 4) {
@@ -1322,12 +1996,17 @@ struct SubmitClaimFormView: View {
             settlementDetails["close_float_option"] = "CASH_TO_ACCOUNTANT"
         }
 
+        // Promote first receipt's coding info to batch level so the detail view can display it
+        let first = validReceipts.first
         var body: [String: Any] = [
             "expense_type": expenseType,
             "department_id": user.departmentId,
             "settlement_type": settleType,
             "settlement_details": settlementDetails,
             "notes": notes,
+            "category": first?.category ?? "",
+            "cost_code": first?.costCode ?? "",
+            "coding_description": first?.codedDescription ?? "",
             "claims": receiptItems,
         ]
 
@@ -1525,6 +2204,7 @@ struct SignOffListView: View {
                     statCard(label: "TOTAL VALUE", value: FormatUtils.formatGBP(totalValue), sub: "\(queue.count) batches")
                     statCard(label: "ESCALATED", value: "\(escalatedCount)", sub: "Requires your attention")
                 }
+                .frame(height: 86)
 
                 // Sign-off Queue header
                 Text("Sign-off Queue").font(.system(size: 15, weight: .bold))
@@ -1547,11 +2227,11 @@ struct SignOffListView: View {
 
     private func statCard(label: String, value: String, sub: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(.system(size: 8, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
-            Text(value).font(.system(size: 18, weight: .bold, design: .monospaced)).foregroundColor(.primary)
-            Text(sub).font(.system(size: 9)).foregroundColor(.gray)
+            Text(label).font(.system(size: 8, weight: .bold)).foregroundColor(.secondary).tracking(0.4).lineLimit(1).minimumScaleFactor(0.8)
+            Text(value).font(.system(size: 18, weight: .bold, design: .monospaced)).foregroundColor(.primary).lineLimit(1).minimumScaleFactor(0.7)
+            Text(sub).font(.system(size: 9)).foregroundColor(.gray).lineLimit(2)
         }
-        .frame(maxWidth: .infinity, alignment: .leading).padding(10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(10)
         .background(Color.white).cornerRadius(8)
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
     }
@@ -2029,6 +2709,185 @@ struct ReconciliationView: View {
 // MARK: - OOP Sign-off List View
 // ═══════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════
+// MARK: - Payment Routing View (BACS + Payroll)
+// ═══════════════════════════════════════════════════════════════════
+
+struct PaymentRoutingView: View {
+    @EnvironmentObject var appState: POViewModel
+    @State private var bacsGenerated = false
+    @State private var showBacsAlert = false
+
+    private var approvedOOP: [ClaimBatch] {
+        appState.allOOPClaims.filter { ["APPROVED", "READY_TO_POST"].contains($0.status.uppercased()) }
+    }
+    private var bacsClaims: [ClaimBatch] { approvedOOP.filter { $0.settlementType.uppercased() != "PAYROLL" } }
+    private var payrollClaims: [ClaimBatch] { approvedOOP.filter { $0.settlementType.uppercased() == "PAYROLL" } }
+    private var bacsTotal: Double { bacsClaims.reduce(0) { $0 + $1.totalGross } }
+    private var payrollTotal: Double { payrollClaims.reduce(0) { $0 + $1.totalGross } }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                // Header banner
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "arrow.down.circle.fill").font(.system(size: 14)).foregroundColor(.goldDark)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Payment Routing").font(.system(size: 13, weight: .bold))
+                        Text("Approved BACS claims batched for export. Payroll claims auto-add to the payroll run on approval.")
+                            .font(.system(size: 11)).foregroundColor(.secondary)
+                    }
+                    Spacer()
+                }
+                .padding(12).background(Color.gold.opacity(0.06)).cornerRadius(8)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gold.opacity(0.25), lineWidth: 1))
+
+                // Stat cards
+                HStack(spacing: 8) {
+                    statCard(label: "BACS READY", value: FormatUtils.formatGBP(bacsTotal),
+                             sub: "\(bacsClaims.count) claims · ready to generate",
+                             valueColor: .green, bg: Color.green.opacity(0.06), border: Color.green.opacity(0.3))
+                    statCard(label: "PAYROLL AUTO-ADDED", value: FormatUtils.formatGBP(payrollTotal),
+                             sub: "\(payrollClaims.count) claims",
+                             valueColor: Color(red: 0.2, green: 0.5, blue: 0.85),
+                             bg: Color.white, border: Color.borderColor)
+                    statCard(label: "BACS FILE",
+                             value: bacsGenerated ? "Generated" : "Not generated",
+                             sub: bacsGenerated ? "Ready to upload" : "Awaiting action",
+                             valueColor: bacsGenerated ? .green : .primary,
+                             valueFont: .system(size: 14, weight: .bold),
+                             bg: Color.white, border: Color.borderColor)
+                }
+                .frame(height: 86)
+
+                // BACS Payments card
+                sectionCard(
+                    icon: "building.columns.fill",
+                    title: "BACS Payments",
+                    subtitle: "\(bacsClaims.count) claims · \(FormatUtils.formatGBP(bacsTotal))",
+                    badge: bacsGenerated ? "Generated" : "Ready",
+                    badgeColor: .green,
+                    emptyText: "No BACS claims to process.",
+                    isEmpty: bacsClaims.isEmpty,
+                    footerValue: FormatUtils.formatGBP(bacsTotal),
+                    footerSub: "\(Set(bacsClaims.map { $0.userId }).count) payees",
+                    actionTitle: bacsGenerated ? "BACS File Ready" : "Generate BACS File",
+                    actionEnabled: !bacsGenerated,
+                    onAction: { generateBACS() }
+                )
+
+                // Payroll Additions card
+                sectionCard(
+                    icon: "calendar.badge.plus",
+                    title: "Payroll Additions",
+                    subtitle: "Auto-added to payroll run on approval",
+                    badge: "Auto-routed",
+                    badgeColor: .gray,
+                    emptyText: "No payroll claims.",
+                    isEmpty: payrollClaims.isEmpty,
+                    footerValue: FormatUtils.formatGBP(payrollTotal),
+                    footerSub: "\(payrollClaims.count) additions",
+                    actionTitle: nil,
+                    actionEnabled: false,
+                    onAction: {}
+                )
+
+                // Footer info
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "info.circle").font(.system(size: 12)).foregroundColor(.blue)
+                    (Text("Once BACS file is uploaded and payroll additions are confirmed, all claims will be marked ")
+                        + Text("Processed").bold()
+                        + Text(" and crew notified automatically."))
+                        .font(.system(size: 11)).foregroundColor(.secondary)
+                }
+                .padding(10)
+                .background(Color.blue.opacity(0.06)).cornerRadius(8)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.blue.opacity(0.2), lineWidth: 1))
+            }
+            .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 20)
+        }
+        .background(Color.bgBase)
+        .alert(isPresented: $showBacsAlert) {
+            Alert(
+                title: Text("BACS File Generated"),
+                message: Text("\(bacsClaims.count) claim\(bacsClaims.count == 1 ? "" : "s") totaling \(FormatUtils.formatGBP(bacsTotal)) have been batched and are ready to upload to your bank."),
+                dismissButton: .default(Text("OK"))
+            )
+        }
+    }
+
+    private func generateBACS() {
+        guard !bacsClaims.isEmpty else { return }
+        bacsGenerated = true
+        showBacsAlert = true
+    }
+
+    private func statCard(label: String, value: String, sub: String,
+                          valueColor: Color = .primary,
+                          valueFont: Font = .system(size: 18, weight: .bold, design: .monospaced),
+                          bg: Color = .white, border: Color = Color.borderColor) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.system(size: 8, weight: .bold)).foregroundColor(.secondary).tracking(0.4).lineLimit(1).minimumScaleFactor(0.7)
+            Text(value).font(valueFont).foregroundColor(valueColor).lineLimit(1).minimumScaleFactor(0.6)
+            Text(sub).font(.system(size: 9)).foregroundColor(.gray).lineLimit(2)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(10)
+        .background(bg).cornerRadius(8)
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(border, lineWidth: 1))
+    }
+
+    private func sectionCard(icon: String, title: String, subtitle: String,
+                             badge: String, badgeColor: Color,
+                             emptyText: String, isEmpty: Bool,
+                             footerValue: String, footerSub: String,
+                             actionTitle: String?, actionEnabled: Bool,
+                             onAction: @escaping () -> Void) -> some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack(spacing: 10) {
+                Image(systemName: icon).font(.system(size: 14)).foregroundColor(.goldDark)
+                    .frame(width: 28, height: 28).background(Color.gold.opacity(0.12)).cornerRadius(6)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title).font(.system(size: 13, weight: .bold))
+                    Text(subtitle).font(.system(size: 10)).foregroundColor(.secondary)
+                }
+                Spacer()
+                Text(badge).font(.system(size: 9, weight: .bold)).foregroundColor(badgeColor)
+                    .padding(.horizontal, 8).padding(.vertical, 3).background(badgeColor.opacity(0.12)).cornerRadius(4)
+            }.padding(12)
+
+            Divider()
+
+            // Body / empty state
+            if isEmpty {
+                Text(emptyText).font(.system(size: 11)).foregroundColor(.gray)
+                    .frame(maxWidth: .infinity).padding(.vertical, 28)
+            }
+
+            Divider()
+
+            // Footer
+            HStack {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(footerValue).font(.system(size: 13, weight: .bold, design: .monospaced))
+                    Text(footerSub).font(.system(size: 9)).foregroundColor(.gray)
+                }
+                Spacer()
+                if let actionTitle = actionTitle {
+                    Button(action: onAction) {
+                        Text(actionTitle).font(.system(size: 12, weight: .bold)).foregroundColor(.white)
+                            .padding(.horizontal, 14).padding(.vertical, 8)
+                            .background(actionEnabled ? Color.goldDark : Color.gray.opacity(0.4))
+                            .cornerRadius(6)
+                    }.disabled(!actionEnabled).buttonStyle(PlainButtonStyle())
+                }
+            }.padding(12)
+        }
+        .background(Color.white).cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+    }
+}
+
 struct OOPSignOffListView: View {
     @EnvironmentObject var appState: POViewModel
 
@@ -2178,11 +3037,11 @@ struct ApprovalQueuePage: View {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 6) {
                             Image(systemName: "clock.arrow.circlepath").font(.system(size: 14)).foregroundColor(.goldDark)
-                            Text("Float Requests").font(.system(size: 13, weight: .bold))
+                            Text("Float Requests").font(.system(size: 13, weight: .bold)).lineLimit(1)
                         }
-                        Text("\(pendingFloats.count) pending approval").font(.system(size: 11)).foregroundColor(.secondary)
+                        Text("\(pendingFloats.count) pending approval").font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading).padding(12)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(12)
                     .background(Color.white).cornerRadius(10)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(activeSection == "floats" ? Color.goldDark : Color.borderColor, lineWidth: activeSection == "floats" ? 2 : 1))
                 }.buttonStyle(PlainButtonStyle())
@@ -2191,15 +3050,16 @@ struct ApprovalQueuePage: View {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 6) {
                             Image(systemName: "doc.on.doc").font(.system(size: 14)).foregroundColor(.goldDark)
-                            Text("Receipt Batches & OOP").font(.system(size: 13, weight: .bold))
+                            Text("Receipt Batches & OOP").font(.system(size: 13, weight: .bold)).lineLimit(1).minimumScaleFactor(0.8)
                         }
-                        Text("\(pendingClaims.count) items").font(.system(size: 11)).foregroundColor(.secondary)
+                        Text("\(pendingClaims.count) items").font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading).padding(12)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(12)
                     .background(Color.white).cornerRadius(10)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(activeSection == "batches" ? Color.goldDark : Color.borderColor, lineWidth: activeSection == "batches" ? 2 : 1))
                 }.buttonStyle(PlainButtonStyle())
             }
+            .frame(height: 64)
             .padding(.horizontal, 16).padding(.top, 12)
 
             // Section content
@@ -2259,6 +3119,10 @@ struct ApprovalQueuePage: View {
         }
         .background(Color.bgBase)
         .navigationBarTitle(Text("Approval Queue"), displayMode: .inline)
+        .onAppear {
+            appState.loadApprovalQueueFloats()
+            appState.loadApprovalQueueClaims()
+        }
     }
 }
 
@@ -2266,11 +3130,10 @@ struct ApprovalQueuePage: View {
 // MARK: - Float Request Form
 // ═══════════════════════════════════════════════════════════════════
 
-let durationOptions = ["3 days", "5 days", "7 days", "14 days", "30 days"]
+let durationOptions = ["3 days", "7 days", "10 days", "2 weeks"]
 let collectionOptions = [
     ("production_office", "Collect from production office"),
-    ("delivered", "Delivered to set/location"),
-    ("bank_transfer", "Bank transfer"),
+    ("arrange_with_accountant", "Arrange with accountant"),
 ]
 let costCodeOptions = [
     ("art_4100", "ART-4100 · Art Dept Misc"),

@@ -160,6 +160,9 @@ struct ClaimBatch: Identifiable, Equatable {
     var totalVat: Double = 0
     var claimCount: Int = 0
     var notes: String = ""
+    var category: String = ""
+    var costCode: String = ""
+    var codingDescription: String = ""
     var department: String = ""
     var rejectionReason: String?
     var rejectedBy: String?
@@ -196,6 +199,7 @@ struct ClaimBatchRaw: Codable {
     var expense_type: String?; var float_request_id: String?; var settlement_type: String?
     var status: String?; var total_gross: String?; var total_net: String?; var total_vat: String?
     var claim_count: Int?; var notes: String?
+    var category: String?; var cost_code: String?; var coding_description: String?
     var rejection_reason: String?; var rejected_by: String?
     var escalation_reason: String?; var assigned_to: String?
     var posted_by: String?; var posted_at: String?
@@ -204,6 +208,7 @@ struct ClaimBatchRaw: Codable {
     enum CodingKeys: String, CodingKey {
         case id, batch_reference, user_id, department_id, expense_type, float_request_id
         case settlement_type, status, total_gross, total_net, total_vat, claim_count, notes
+        case category, cost_code, coding_description
         case rejection_reason, rejected_by, escalation_reason, assigned_to
         case posted_by, posted_at, created_at, updated_at
     }
@@ -223,6 +228,9 @@ struct ClaimBatchRaw: Codable {
         total_vat = try? c.decode(String.self, forKey: .total_vat)
         claim_count = try? c.decode(Int.self, forKey: .claim_count)
         notes = try? c.decode(String.self, forKey: .notes)
+        category = try? c.decode(String.self, forKey: .category)
+        cost_code = try? c.decode(String.self, forKey: .cost_code)
+        coding_description = try? c.decode(String.self, forKey: .coding_description)
         rejection_reason = try? c.decode(String.self, forKey: .rejection_reason)
         rejected_by = try? c.decode(String.self, forKey: .rejected_by)
         escalation_reason = try? c.decode(String.self, forKey: .escalation_reason)
@@ -244,6 +252,7 @@ struct ClaimBatchRaw: Codable {
         cb.totalNet = Double(total_net ?? "") ?? 0
         cb.totalVat = Double(total_vat ?? "") ?? 0
         cb.claimCount = claim_count ?? 0; cb.notes = notes ?? ""
+        cb.category = category ?? ""; cb.costCode = cost_code ?? ""; cb.codingDescription = coding_description ?? ""
         cb.department = dept?.displayName ?? ""
         cb.rejectionReason = rejection_reason; cb.rejectedBy = rejected_by
         cb.escalationReason = escalation_reason; cb.assignedTo = assigned_to

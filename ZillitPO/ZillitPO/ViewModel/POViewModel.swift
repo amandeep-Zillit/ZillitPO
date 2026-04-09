@@ -19,6 +19,8 @@ class POViewModel: ObservableObject {
     @Published var drafts: [PurchaseOrder] = []
     @Published var tierConfigRows: [ApprovalTierConfig] = []
     @Published var invoices: [Invoice] = []
+    @Published var invoiceHistory: [String: [InvoiceHistoryEntry]] = [:]
+    @Published var invoiceHistoryLoading: Bool = false
     @Published var invoiceTierConfigRows: [ApprovalTierConfig] = []
     @Published var formTemplate: FormTemplateResponse?
 
@@ -73,6 +75,12 @@ class POViewModel: ObservableObject {
 
     // Card Expenses / Receipts state
     @Published var receipts: [Receipt] = []
+    @Published var cardTransactions: [CardTransaction] = []
+    @Published var cardReceipts: [CardTransaction] = []
+    @Published var myCardReceipts: [CardTransaction] = []
+    @Published var topUpQueue: [TopUpItem] = []
+    @Published var smartAlerts: [SmartAlert] = []
+    @Published var cardHistory: [CardTransaction] = []
     @Published var userCards: [ExpenseCard] = []
     @Published var allCards: [ExpenseCard] = []
     @Published var cardTierConfigRows: [ApprovalTierConfig] = []
@@ -102,10 +110,10 @@ class POViewModel: ObservableObject {
     @Published var runDetailLoading = false
     @Published var approvingRunId: String?
 
-    init() { currentUser = UsersData.byId[userId]; configureAPI() }
+    init() { currentUser = UsersData.byId[userId]; configureAPI(); loadCashExpenseMetadata() }
 
     func switchUser(_ id: String) {
-        userId = id; currentUser = UsersData.byId[id]; configureAPI(); loadAllData()
+        userId = id; currentUser = UsersData.byId[id]; configureAPI(); loadAllData(); loadCashExpenseMetadata()
     }
 
     func configureAPI() {

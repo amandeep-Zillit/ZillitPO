@@ -40,6 +40,7 @@ enum POCodableTask {
     case deleteInvoice(String, (Result<Data?, Error>) -> Void)
     case approveInvoice(String, [String: Any], (Result<Data?, Error>) -> Void)
     case rejectInvoice(String, [String: Any], (Result<Data?, Error>) -> Void)
+    case fetchInvoiceHistory(String, (Result<APIResponse<[InvoiceHistoryEntry]>?, Error>) -> Void)
 
     // MARK: - Invoice Approval Tiers (typed response)
     case fetchInvoiceApprovalTiers((Result<APIResponse<[ApprovalTierConfig]>?, Error>) -> Void)
@@ -156,6 +157,10 @@ extension POCodableTask: PODataTaskProtocol {
         case .rejectInvoice(let id, let body, let completion):
             guard let urlRequest = PORequest.rejectInvoice(id, body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
+
+        case .fetchInvoiceHistory(let id, let completion):
+            guard let urlRequest = PORequest.fetchInvoiceHistory(id).urlRequest else { return nil }
+            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
 
         // MARK: Invoice Approval Tiers
         case .fetchInvoiceApprovalTiers(let completion):

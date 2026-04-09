@@ -210,6 +210,22 @@ extension POViewModel {
         }.urlDataTask?.resume()
     }
 
+    func loadInvoiceHistory(_ invoiceId: String) {
+        invoiceHistoryLoading = true
+        POCodableTask.fetchInvoiceHistory(invoiceId) { [weak self] result in
+            DispatchQueue.main.async {
+                self?.invoiceHistoryLoading = false
+                switch result {
+                case .success(let response):
+                    self?.invoiceHistory[invoiceId] = response?.data ?? []
+                    print("✅ Loaded invoice history for \(invoiceId): \(response?.data?.count ?? 0) entries")
+                case .failure(let error):
+                    print("❌ Fetch invoice history failed: \(error)")
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
     // MARK: - Actions
 
     func approvePO(_ po: PurchaseOrder) {

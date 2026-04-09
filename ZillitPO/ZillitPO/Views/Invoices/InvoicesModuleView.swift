@@ -149,8 +149,9 @@ struct InvoicesModuleView: View {
         }
         .navigationBarTitle(Text("Invoices"), displayMode: .inline)
         .onAppear {
-            if appState.paymentRuns.isEmpty { appState.loadPaymentRuns() }
-            if appState.invoiceRunAuth.isEmpty { appState.loadInvoiceSettings() }
+            appState.loadInvoices()
+            appState.loadPaymentRuns()
+            appState.loadInvoiceSettings()
         }
     }
 
@@ -562,6 +563,9 @@ struct InvoiceDetailContentView: View {
                             rejectionBanner(reason: reason)
                         }
 
+                        // History section (from API)
+                        historySection
+
                         // Audit footer
                         auditFooter
                     }
@@ -636,6 +640,59 @@ struct InvoiceDetailContentView: View {
                 }.padding(32)
             }
         }
+        .onAppear { appState.loadInvoiceHistory(invoice.id) }
+    }
+
+    // MARK: - History
+
+    private var historySection: some View {
+        let entries = appState.invoiceHistory[invoice.id] ?? []
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("HISTORY").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
+                if appState.invoiceHistoryLoading && entries.isEmpty {
+                    Spacer()
+                    Text("Loading…").font(.system(size: 10)).foregroundColor(.gray)
+                } else if !entries.isEmpty {
+                    Spacer()
+                    Text("\(entries.count)").font(.system(size: 9, weight: .semibold)).foregroundColor(.gray)
+                }
+            }
+            .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 8)
+
+            if entries.isEmpty && !appState.invoiceHistoryLoading {
+                Text("No history available").font(.system(size: 11)).foregroundColor(.gray)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14).padding(.bottom, 12)
+            } else {
+                ForEach(entries) { entry in
+                    HStack(alignment: .top, spacing: 10) {
+                        Circle().fill(Color.goldDark).frame(width: 8, height: 8).padding(.top, 5)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(entry.action ?? "—").font(.system(size: 12, weight: .semibold))
+                            if let d = entry.details, !d.isEmpty {
+                                Text(d).font(.system(size: 10)).foregroundColor(.secondary)
+                            }
+                            HStack(spacing: 6) {
+                                if let name = entry.userName, !name.isEmpty {
+                                    Text(name).font(.system(size: 9, weight: .medium)).foregroundColor(.goldDark)
+                                } else if let uid = entry.userId, !uid.isEmpty {
+                                    Text(UsersData.byId[uid]?.fullName ?? uid).font(.system(size: 9, weight: .medium)).foregroundColor(.goldDark)
+                                }
+                                if let ts = entry.timestamp, ts > 0 {
+                                    Text("·").font(.system(size: 9)).foregroundColor(.gray)
+                                    Text(FormatUtils.formatDateTime(ts)).font(.system(size: 9)).foregroundColor(.gray)
+                                }
+                            }
+                        }
+                        Spacer()
+                    }.padding(.horizontal, 14).padding(.vertical, 6)
+                }
+                .padding(.bottom, 6)
+            }
+        }
+        .background(Color.white).cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 
     /// Construct URL for viewing the uploaded invoice document
