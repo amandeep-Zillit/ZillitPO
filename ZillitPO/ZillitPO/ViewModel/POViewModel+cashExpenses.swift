@@ -21,109 +21,125 @@ extension POViewModel {
     }
 
     private func loadRoleSpecificCashData() {
-        if cashMeta?.is_coordinator == true {
-            loadCodingQueue()
-            loadApprovalQueueFloats()
-            loadApprovalQueueClaims()
-            loadActiveFloats()
-            loadAllClaims()
-        }
+        // Each tile/page now fetches its own data on appear; nothing to load here.
     }
 
     func loadMyFloats() {
+        isLoadingMyFloats = true
         CashExpenseCodableTask.fetchMyFloats { [weak self] result in
             DispatchQueue.main.async {
-                if case .success(let r) = result { self?.myFloats = (r?.data ?? []).map { $0.toFloatRequest() }; print("✅ \(self?.myFloats.count ?? 0) my floats") }
+                self?.isLoadingMyFloats = false
+                if case .success(let r) = result { self?.myFloats = (r?.data ?? []).map { $0.toFloatRequest() } }
                 else if case .failure(let e) = result { print("❌ My floats failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
 
     func loadAllFloats() {
+        isLoadingAllFloats = true
         CashExpenseCodableTask.fetchAllFloats { [weak self] result in
             DispatchQueue.main.async {
-                if case .success(let r) = result { self?.allFloats = (r?.data ?? []).map { $0.toFloatRequest() }; print("✅ \(self?.allFloats.count ?? 0) all floats") }
+                self?.isLoadingAllFloats = false
+                if case .success(let r) = result { self?.allFloats = (r?.data ?? []).map { $0.toFloatRequest() } }
                 else if case .failure(let e) = result { print("❌ All floats failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
 
     func loadActiveFloats() {
+        isLoadingActiveFloats = true
         CashExpenseCodableTask.fetchActiveFloats { [weak self] result in
             DispatchQueue.main.async {
-                if case .success(let r) = result { self?.activeFloats = (r?.data ?? []).map { $0.toFloatRequest() }; print("✅ \(self?.activeFloats.count ?? 0) active floats") }
+                self?.isLoadingActiveFloats = false
+                if case .success(let r) = result { self?.activeFloats = (r?.data ?? []).map { $0.toFloatRequest() } }
                 else if case .failure(let e) = result { print("❌ Active floats failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
 
     func loadApprovalQueueFloats() {
+        isLoadingApprovalFloats = true
         CashExpenseCodableTask.fetchApprovalQueue { [weak self] result in
             DispatchQueue.main.async {
-                if case .success(let r) = result { self?.approvalQueueFloats = (r?.data ?? []).map { $0.toFloatRequest() }; print("✅ \(self?.approvalQueueFloats.count ?? 0) approval queue floats") }
+                self?.isLoadingApprovalFloats = false
+                if case .success(let r) = result { self?.approvalQueueFloats = (r?.data ?? []).map { $0.toFloatRequest() } }
                 else if case .failure(let e) = result { print("❌ Approval queue failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
 
     func loadMyClaims() {
+        isLoadingMyClaims = true
         CashExpenseCodableTask.fetchMyClaims { [weak self] result in
             DispatchQueue.main.async {
-                if case .success(let r) = result { self?.myClaims = (r?.data ?? []).map { $0.toClaimBatch() }; print("✅ \(self?.myClaims.count ?? 0) my claims") }
+                self?.isLoadingMyClaims = false
+                if case .success(let r) = result { self?.myClaims = (r?.data ?? []).map { $0.toClaimBatch() } }
                 else if case .failure(let e) = result { print("❌ My claims failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
 
     func loadMyBatches() {
+        isLoadingMyBatches = true
         CashExpenseCodableTask.fetchMyBatches { [weak self] result in
             DispatchQueue.main.async {
-                if case .success(let r) = result { self?.myBatches = (r?.data ?? []).map { $0.toClaimBatch() }; print("✅ \(self?.myBatches.count ?? 0) my batches") }
+                self?.isLoadingMyBatches = false
+                if case .success(let r) = result { self?.myBatches = (r?.data ?? []).map { $0.toClaimBatch() } }
                 else if case .failure(let e) = result { print("❌ My batches failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
 
     func loadAllClaims() {
+        isLoadingAllClaims = true
         CashExpenseCodableTask.fetchAllClaims { [weak self] result in
             DispatchQueue.main.async {
-                if case .success(let r) = result { self?.allClaims = (r?.data ?? []).map { $0.toClaimBatch() }; print("✅ \(self?.allClaims.count ?? 0) all claims") }
+                self?.isLoadingAllClaims = false
+                if case .success(let r) = result { self?.allClaims = (r?.data ?? []).map { $0.toClaimBatch() } }
                 else if case .failure(let e) = result { print("❌ All claims failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
 
     func loadCodingQueue() {
+        isLoadingCodingQueue = true
         CashExpenseCodableTask.fetchCodingQueue { [weak self] result in
             DispatchQueue.main.async {
-                if case .success(let r) = result { self?.codingQueue = (r?.data ?? []).map { $0.toClaimBatch() }; print("✅ \(self?.codingQueue.count ?? 0) coding queue") }
+                self?.isLoadingCodingQueue = false
+                if case .success(let r) = result { self?.codingQueue = (r?.data ?? []).map { $0.toClaimBatch() } }
                 else if case .failure(let e) = result { print("❌ Coding queue failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
 
     func loadAuditQueue() {
+        isLoadingAuditQueue = true
         CashExpenseCodableTask.fetchAuditQueue { [weak self] result in
             DispatchQueue.main.async {
-                if case .success(let r) = result { self?.auditQueue = (r?.data ?? []).map { $0.toClaimBatch() }; print("✅ \(self?.auditQueue.count ?? 0) audit queue") }
+                self?.isLoadingAuditQueue = false
+                if case .success(let r) = result { self?.auditQueue = (r?.data ?? []).map { $0.toClaimBatch() } }
                 else if case .failure(let e) = result { print("❌ Audit queue failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
 
     func loadApprovalQueueClaims() {
+        isLoadingApprovalClaims = true
         CashExpenseCodableTask.fetchApprovalQueueClaims { [weak self] result in
             DispatchQueue.main.async {
-                if case .success(let r) = result { self?.approvalQueueClaims = (r?.data ?? []).map { $0.toClaimBatch() }; print("✅ \(self?.approvalQueueClaims.count ?? 0) approval queue claims") }
+                self?.isLoadingApprovalClaims = false
+                if case .success(let r) = result { self?.approvalQueueClaims = (r?.data ?? []).map { $0.toClaimBatch() } }
                 else if case .failure(let e) = result { print("❌ Approval queue claims failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
 
     func loadSignOffQueue() {
+        isLoadingSignOffQueue = true
         CashExpenseCodableTask.fetchSignOffQueue { [weak self] result in
             DispatchQueue.main.async {
-                if case .success(let r) = result { self?.signOffQueue = (r?.data ?? []).map { $0.toClaimBatch() }; print("✅ \(self?.signOffQueue.count ?? 0) sign-off queue") }
+                self?.isLoadingSignOffQueue = false
+                if case .success(let r) = result { self?.signOffQueue = (r?.data ?? []).map { $0.toClaimBatch() } }
                 else if case .failure(let e) = result { print("❌ Sign-off queue failed: \(e)") }
             }
         }.urlDataTask?.resume()
@@ -146,21 +162,22 @@ extension POViewModel {
         }.urlDataTask?.resume()
     }
 
+    func loadPaymentRouting() {
+        CashExpenseCodableTask.fetchPaymentRouting { [weak self] result in
+            DispatchQueue.main.async {
+                if case .success(let r) = result, let data = r?.data {
+                    self?.paymentRouting = data
+                    print("✅ Payment routing: \(data.bacsBatches.count) BACS, \(data.payrollBatches.count) payroll")
+                } else if case .failure(let e) = result {
+                    print("❌ Payment routing failed: \(e)")
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
     func loadAllCashExpenseData() {
+        // Lightweight hub loader — only metadata. Each tile/page loads its own data on appear.
         loadCashExpenseMetadata()
-        loadMyClaims()
-        loadMyBatches()
-        loadMyFloats()
-        if currentUser?.isAccountant == true {
-            loadAllClaims()
-            loadAllFloats()
-            loadActiveFloats()
-            loadApprovalQueueFloats()
-            loadAuditQueue()
-            loadApprovalQueueClaims()
-            loadSignOffQueue()
-        }
-        // Coordinator data is loaded in loadRoleSpecificCashData() after metadata returns
     }
 
     var myPettyCashClaims: [ClaimBatch] { myClaims.filter { $0.isPettyCash } }

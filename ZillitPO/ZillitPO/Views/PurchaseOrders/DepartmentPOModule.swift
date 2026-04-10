@@ -77,6 +77,12 @@ struct DepartmentPOModule: View {
             }.frame(width: 0, height: 0).hidden()
         )
         .navigationBarTitle(Text("Purchase Orders"), displayMode: .inline)
+        .onAppear {
+            appState.loadPOs()
+            if appState.vendors.isEmpty { appState.loadVendors() }
+            if appState.tierConfigRows.isEmpty { appState.loadApprovalTiers() }
+            if appState.formTemplate == nil { appState.loadFormTemplate() }
+        }
         .sheet(isPresented: $appState.showRejectSheet) { RejectSheetView().environmentObject(appState) }
         .alert(isPresented: .init(get: { activeDeleteAlert != nil }, set: { if !$0 { activeDeleteAlert = nil } })) {
             switch activeDeleteAlert {

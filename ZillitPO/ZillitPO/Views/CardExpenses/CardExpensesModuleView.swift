@@ -9,7 +9,7 @@ import WebKit
 // MARK: - Tabs
 
 enum CardExpenseTab: String, CaseIterable, Identifiable {
-    case receipts = "Receipts"
+    case receipts = "My Transactions"
     case card = "Card"
     case approval = "Approval Queue"
     case coding = "Coding Queue"
@@ -34,7 +34,7 @@ struct CardExpensesModuleView: View {
     @EnvironmentObject var appState: POViewModel
     @State private var activeTab: CardExpenseTab = .receipts
 
-    private var isCoordinator: Bool { appState.cashMeta?.is_coordinator == true }
+    private var isCoordinator: Bool { appState.cardExpenseMeta.isCoordinator }
 
     private var visibleTabs: [CardExpenseTab] {
         if isCoordinator {
@@ -52,29 +52,24 @@ struct CardExpensesModuleView: View {
                 CardExpensesAccountantHub().environmentObject(appState)
             } else {
                 VStack(spacing: 0) {
-                    // Tab bar
-                    HStack(spacing: 0) {
-                        ForEach(visibleTabs) { tab in
-                            let isActive = activeTab == tab
-                            Button(action: { activeTab = tab }) {
-                                HStack(spacing: 4) {
-                                    Text(tab.rawValue).font(.system(size: 12, weight: isActive ? .semibold : .regular)).lineLimit(1)
-                                    if tab == .approval {
-                                        let count = appState.cardsForApproval().count
-                                        if count > 0 {
-                                            Text("\(count)").font(.system(size: 9, design: .monospaced))
-                                                .foregroundColor(.white).padding(.horizontal, 5).padding(.vertical, 2)
-                                                .background(Color.goldDark).cornerRadius(8)
-                                        }
-                                    }
+                    // Tab bar — full width for user/approver, scrollable for coordinator
+                    if isCoordinator {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 0) {
+                                ForEach(visibleTabs) { tab in
+                                    cardTabButton(tab)
                                 }
-                                .foregroundColor(isActive ? .goldDark : .secondary)
-                                .frame(maxWidth: .infinity).padding(.vertical, 10).contentShape(Rectangle())
-                                .overlay(isActive ? Rectangle().fill(Color.goldDark).frame(height: 2) : nil, alignment: .bottom)
-                            }.buttonStyle(BorderlessButtonStyle())
+                            }
                         }
+                        .overlay(Rectangle().fill(Color.borderColor).frame(height: 1), alignment: .bottom)
+                    } else {
+                        HStack(spacing: 0) {
+                            ForEach(visibleTabs) { tab in
+                                cardTabButton(tab).frame(maxWidth: .infinity)
+                            }
+                        }
+                        .overlay(Rectangle().fill(Color.borderColor).frame(height: 1), alignment: .bottom)
                     }
-                    .overlay(Rectangle().fill(Color.borderColor).frame(height: 1), alignment: .bottom)
 
                     // Content
                     switch activeTab {
@@ -96,6 +91,32 @@ struct CardExpensesModuleView: View {
         .navigationBarTitle(Text("Card Expenses"), displayMode: .inline)
         .onAppear { appState.loadAllCardExpenseData() }
     }
+
+    @ViewBuilder
+    private func cardTabButton(_ tab: CardExpenseTab) -> some View {
+        let isActive = activeTab == tab
+        Button(action: { activeTab = tab }) {
+            HStack(spacing: 4) {
+                Text(tab.rawValue)
+                    .font(.system(size: 12, weight: isActive ? .semibold : .regular))
+                    .lineLimit(1)
+                if tab == .approval {
+                    let count = appState.cardsForApproval().count
+                    if count > 0 {
+                        Text("\(count)")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 5).padding(.vertical, 2)
+                            .background(Color.goldDark).cornerRadius(8)
+                    }
+                }
+            }
+            .foregroundColor(isActive ? .goldDark : .secondary)
+            .padding(.horizontal, 16).padding(.vertical, 10)
+            .contentShape(Rectangle())
+            .overlay(isActive ? Rectangle().fill(Color.goldDark).frame(height: 2) : nil, alignment: .bottom)
+        }.buttonStyle(BorderlessButtonStyle())
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -105,69 +126,55 @@ struct CardExpensesModuleView: View {
 struct CardExpensesAccountantHub: View {
     @EnvironmentObject var appState: POViewModel
 
-    private var inboxCount: Int {
-        appState.cardTransactions.filter { ["pending", "pending_receipt"].contains($0.status.lowercased()) && !$0.hasReceipt }.count
-    }
-    private var pendingCount: Int {
-        let txPending = appState.cardTransactions.filter {
-            ["pending_code", "pending_coding", "pending_receipt"].contains($0.status.lowercased())
-        }
-        let manualReceipts = appState.cardReceipts.filter {
-            ["pending_code", "pending_coding"].contains($0.status.lowercased())
-                && $0.linkedTransactionId.isEmpty
-        }
-        var seen = Set<String>()
-        var total = 0
-        for t in txPending where seen.insert(t.id).inserted { total += 1 }
-        for t in manualReceipts where seen.insert(t.id).inserted { total += 1 }
-        return total
-    }
-    private var approvalCount: Int {
-        appState.cardTransactions.filter { ["awaiting_approval", "escalated", "under_review"].contains($0.status.lowercased()) }.count
-    }
-    private var historyCount: Int {
-        let api = appState.cardHistory.count
-        return api > 0 ? api : appState.cardTransactions.filter { $0.status.lowercased() == "posted" }.count
-    }
+    private var meta: CardExpenseMeta { appState.cardExpenseMeta }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 12) {
                 hubTile(icon: "creditcard.fill", color: .goldDark, title: "Card Register",
-                        subtitle: "View & manage company cards", count: appState.userCards.count,
+                        subtitle: "View & manage company cards",
+                        count: meta.cardRegister > 0 ? meta.cardRegister : appState.userCards.count,
                         destination: AnyView(CardRegisterPage().environmentObject(appState)))
 
                 hubTile(icon: "tray.full.fill", color: .orange, title: "Receipt Inbox",
-                        subtitle: "Receipts awaiting transaction match", count: inboxCount,
+                        subtitle: "Receipts awaiting transaction match",
+                        count: meta.receiptInbox,
                         destination: AnyView(ReceiptInboxPage().environmentObject(appState)))
 
                 hubTile(icon: "list.bullet.rectangle.fill", color: .blue, title: "All Transactions",
-                        subtitle: "Every card transaction", count: appState.cardTransactions.count,
+                        subtitle: "Every card transaction",
+                        count: meta.allTransactions,
                         destination: AnyView(AllTransactionsPage().environmentObject(appState)))
 
                 hubTile(icon: "clock.badge.exclamationmark.fill", color: .purple, title: "Pending Coding",
-                        subtitle: "Receipts awaiting budget coding", count: pendingCount,
+                        subtitle: "Receipts awaiting budget coding",
+                        count: meta.pendingCoding,
                         destination: AnyView(PendingCodingPage().environmentObject(appState)))
 
                 hubTile(icon: "person.badge.shield.checkmark.fill", color: .goldDark, title: "Approval Queue",
-                        subtitle: "Awaiting your approval", count: approvalCount,
-                        destination: AnyView(CardListPage(title: "Approval Queue", source: .approval).environmentObject(appState)))
+                        subtitle: "Awaiting your approval",
+                        count: meta.approvalQueue,
+                        destination: AnyView(AccountantApprovalQueuePage().environmentObject(appState)))
 
                 hubTile(icon: "wallet.pass.fill", color: Color(red: 0, green: 0.6, blue: 0.5), title: "Top-Up To Do",
-                        subtitle: "Pending top-ups to action", count: appState.topUpQueue.count,
+                        subtitle: "Pending top-ups to action",
+                        count: meta.topUps,
                         destination: AnyView(TopUpToDoPage().environmentObject(appState)))
 
                 hubTile(icon: "clock.arrow.circlepath", color: .gray, title: "History",
-                        subtitle: "Posted & completed transactions", count: historyCount,
+                        subtitle: "Posted & completed transactions",
+                        count: meta.history,
                         destination: AnyView(CardListPage(title: "History", source: .history).environmentObject(appState)))
 
                 hubTile(icon: "exclamationmark.triangle.fill", color: .red, title: "Smart Alerts",
-                        subtitle: "Flagged or unusual activity", count: appState.smartAlerts.filter { $0.status.lowercased() == "active" }.count,
+                        subtitle: "Flagged or unusual activity",
+                        count: meta.smartAlerts,
                         destination: AnyView(SmartAlertsPage().environmentObject(appState)))
             }
             .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 24)
         }
         .background(Color.bgBase)
+        .onAppear { appState.loadCardExpenseMeta() }
     }
 
     private func hubTile(icon: String, color: Color, title: String, subtitle: String, count: Int, destination: AnyView) -> some View {
@@ -193,6 +200,173 @@ struct CardExpensesAccountantHub: View {
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(color.opacity(0.3), lineWidth: 1))
             .contentShape(Rectangle())
         }.buttonStyle(PlainButtonStyle())
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MARK: - Assign Physical Card Page
+// ═══════════════════════════════════════════════════════════════════
+
+struct AssignPhysicalCardPage: View {
+    let card: ExpenseCard
+    @EnvironmentObject var appState: POViewModel
+    @Environment(\.presentationMode) var presentationMode
+
+    @State private var rawDigits: String = ""
+    @State private var isSubmitting = false
+    @State private var showSuccess = false
+
+    private static let teal = Color(red: 0, green: 0.6, blue: 0.5)
+
+    // Format raw digits into grouped "XXXX XXXX XXXX XXXX"
+    private var formatted: String {
+        stride(from: 0, to: rawDigits.count, by: 4).map { i -> String in
+            let start = rawDigits.index(rawDigits.startIndex, offsetBy: i)
+            let end   = rawDigits.index(start, offsetBy: min(4, rawDigits.count - i))
+            return String(rawDigits[start..<end])
+        }.joined(separator: " ")
+    }
+
+    private var canSubmit: Bool { rawDigits.count == 16 && !isSubmitting }
+
+    private var maskedDigital: String {
+        guard let num = card.digitalCardNumber, !num.isEmpty else { return "No digital card" }
+        let digits = num.filter { $0.isNumber }
+        guard digits.count >= 4 else { return num }
+        let last4 = String(digits.suffix(4))
+        let groups = Int(ceil(Double(digits.count) / 4.0))
+        let masked = Array(repeating: "••••", count: groups - 1).joined(separator: " ")
+        return masked + " " + last4
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+
+                // ── Card Holder / Department ──
+                HStack(alignment: .top, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("CARD HOLDER")
+                            .font(.system(size: 9, weight: .semibold)).foregroundColor(.secondary).tracking(0.5)
+                        Text(card.holderFullName.isEmpty ? "—" : card.holderFullName)
+                            .font(.system(size: 15, weight: .bold))
+                        if !card.holderDesignation.isEmpty {
+                            Text(card.holderDesignation)
+                                .font(.system(size: 12)).foregroundColor(.secondary)
+                        }
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("DEPARTMENT")
+                            .font(.system(size: 9, weight: .semibold)).foregroundColor(.secondary).tracking(0.5)
+                        Text(card.department.isEmpty ? "—" : card.department)
+                            .font(.system(size: 15, weight: .bold))
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(16)
+                .background(Color.white).cornerRadius(12)
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
+
+                // ── Current Digital Card preview ──
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("CURRENT DIGITAL CARD")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(AssignPhysicalCardPage.teal).tracking(0.5)
+                    Text(maskedDigital)
+                        .font(.system(size: 20, weight: .semibold, design: .monospaced))
+                        .foregroundColor(.primary)
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(AssignPhysicalCardPage.teal.opacity(0.05))
+                .cornerRadius(12)
+                .overlay(RoundedRectangle(cornerRadius: 12)
+                    .stroke(AssignPhysicalCardPage.teal, lineWidth: 1.5))
+
+                // ── Physical Card Number input ──
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("PHYSICAL CARD NUMBER (16 DIGITS)")
+                        .font(.system(size: 10, weight: .semibold)).foregroundColor(.secondary).tracking(0.3)
+
+                    ZStack(alignment: .leading) {
+                        if rawDigits.isEmpty {
+                            Text("0000  0000  0000  0000")
+                                .font(.system(size: 16, design: .monospaced))
+                                .foregroundColor(Color(.systemGray3))
+                                .padding(.horizontal, 14).padding(.vertical, 14)
+                        }
+                        TextField("", text: Binding(
+                            get: { formatted },
+                            set: { new in rawDigits = String(new.filter { $0.isNumber }.prefix(16)) }
+                        ))
+                        .keyboardType(.numberPad)
+                        .font(.system(size: 16, weight: .medium, design: .monospaced))
+                        .padding(14)
+                    }
+                    .background(Color.white).cornerRadius(10)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                }
+
+                // ── Warning banner ──
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 14)).foregroundColor(.orange)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("Assigning a physical card will replace the digital card. The digital card should be ")
+                            .font(.system(size: 12))
+                        + Text("dismissed or deactivated")
+                            .font(.system(size: 12, weight: .bold))
+                        + Text(" through the card issuer portal.")
+                            .font(.system(size: 12))
+                    }
+                    .foregroundColor(Color(red: 0.55, green: 0.30, blue: 0))
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.orange.opacity(0.08))
+                .cornerRadius(10)
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.orange.opacity(0.35), lineWidth: 1))
+
+                Spacer(minLength: 24)
+
+                // ── Assign button ──
+                Button(action: assignCard) {
+                    HStack(spacing: 8) {
+                        if isSubmitting { ActivityIndicator(isAnimating: true) }
+                        Text(isSubmitting ? "Assigning…" : "Assign Physical Card")
+                            .font(.system(size: 15, weight: .bold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(canSubmit ? Color.gold : Color(.systemGray4))
+                    .foregroundColor(canSubmit ? .black : Color(.systemGray2))
+                    .cornerRadius(12)
+                }
+                .disabled(!canSubmit)
+            }
+            .padding(20)
+        }
+        .background(Color.bgBase)
+        .navigationBarTitle("Assign Physical Card", displayMode: .inline)
+        .alert(isPresented: $showSuccess) {
+            Alert(
+                title: Text("Card Assigned"),
+                message: Text("Physical card has been assigned successfully."),
+                dismissButton: .default(Text("Done")) { presentationMode.wrappedValue.dismiss() }
+            )
+        }
+    }
+
+    private func assignCard() {
+        guard canSubmit else { return }
+        isSubmitting = true
+        if let idx = appState.userCards.firstIndex(where: { $0.id == card.id }) {
+            appState.userCards[idx].physicalCardNumber = rawDigits
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            isSubmitting = false
+            showSuccess = true
+        }
     }
 }
 
@@ -233,17 +407,27 @@ struct CardListPage: View {
         }
     }
 
+    private var isLoadingForSource: Bool {
+        switch source {
+        case .history:                        return appState.isLoadingCardHistory
+        case .inbox, .all, .pending, .approval: return appState.isLoadingCardTxns
+        default:                              return false
+        }
+    }
+
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             ScrollView {
                 VStack(spacing: 10) {
-                    if items.isEmpty {
-                        VStack(spacing: 8) {
+                    if isLoadingForSource && items.isEmpty {
+                        LoaderView()
+                    } else if items.isEmpty {
+                        VStack(spacing: 12) {
+                            Spacer(minLength: 0)
                             Image(systemName: "tray").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
                             Text("Nothing here yet").font(.system(size: 13)).foregroundColor(.secondary)
-                        }.frame(maxWidth: .infinity).padding(.vertical, 50)
-                        .background(Color.white).cornerRadius(10)
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                            Spacer(minLength: 0)
+                        }.frame(maxWidth: .infinity, minHeight: 480)
                     } else {
                         ForEach(items) { tx in
                             NavigationLink(destination: CardTransactionDetailPage(transaction: tx).environmentObject(appState)) {
@@ -275,12 +459,12 @@ struct CardListPage: View {
         )
         .navigationBarTitle(Text(title), displayMode: .inline)
         .onAppear {
-            appState.loadCardTransactions()
+            // Each tile page only loads its own API
             switch source {
             case .topUps: appState.loadTopUpQueue()
             case .alerts: appState.loadSmartAlerts()
             case .history: appState.loadCardHistory()
-            default: break
+            case .approval, .all, .pending, .inbox: appState.loadCardTransactions()
             }
         }
     }
@@ -302,9 +486,7 @@ struct CoordinatorApprovalQueueView: View {
     @State private var showRejectSheet = false
 
     private var cards: [ExpenseCard] { appState.cardsForApproval() }
-    private var transactions: [CardTransaction] {
-        appState.cardTransactions.filter { ["awaiting_approval", "escalated", "under_review"].contains($0.status.lowercased()) }
-    }
+    private var transactions: [CardTransaction] { appState.cardApprovalQueueItems }
 
     var body: some View {
         VStack(spacing: 12) {
@@ -321,9 +503,12 @@ struct CoordinatorApprovalQueueView: View {
                 ScrollView {
                     VStack(spacing: 12) {
                         if cards.isEmpty {
-                            VStack(spacing: 8) {
+                            VStack(spacing: 12) {
+                                Spacer(minLength: 0)
+                                Image(systemName: "creditcard").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
                                 Text("No cards pending your approval.").font(.system(size: 13)).foregroundColor(.secondary)
-                            }.frame(maxWidth: .infinity).padding(.vertical, 50)
+                                Spacer(minLength: 0)
+                            }.frame(maxWidth: .infinity, minHeight: 400)
                         } else {
                             ForEach(cards) { card in
                                 ApprovalCardRow(card: card, tierConfigs: appState.cardTierConfigRows, onApprove: {
@@ -338,10 +523,15 @@ struct CoordinatorApprovalQueueView: View {
             } else {
                 ScrollView {
                     VStack(spacing: 10) {
-                        if transactions.isEmpty {
-                            VStack(spacing: 8) {
+                        if appState.isLoadingCardApprovals && appState.cardApprovalQueueItems.isEmpty {
+                            LoaderView()
+                        } else if transactions.isEmpty {
+                            VStack(spacing: 12) {
+                                Spacer(minLength: 0)
+                                Image(systemName: "doc.text").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
                                 Text("No receipts or transactions awaiting approval.").font(.system(size: 13)).foregroundColor(.secondary)
-                            }.frame(maxWidth: .infinity).padding(.vertical, 50)
+                                Spacer(minLength: 0)
+                            }.frame(maxWidth: .infinity, minHeight: 400)
                         } else {
                             ForEach(transactions) { tx in
                                 NavigationLink(destination: CardTransactionDetailPage(transaction: tx).environmentObject(appState)) {
@@ -355,8 +545,8 @@ struct CoordinatorApprovalQueueView: View {
         }
         .background(Color.bgBase)
         .onAppear {
-            appState.loadAllRequestedCards()
-            appState.loadCardTransactions()
+            appState.loadAllRequestedCards()    // GET /card-expenses/cards?status=pending&for_approval=true
+            appState.loadCardApprovalQueue()    // GET /card-expenses/approvals
         }
         .sheet(isPresented: $showRejectSheet) {
             NavigationView {
@@ -429,35 +619,33 @@ struct CoordinatorApprovalQueueView: View {
 struct CardCodingQueuePage: View {
     @EnvironmentObject var appState: POViewModel
 
-    private var items: [CardTransaction] {
-        let pending = appState.cardTransactions.filter { ["pending_coding", "pending_code"].contains($0.status.lowercased()) }
-        // Coordinators only code receipts from cardholders in their own department(s)
-        let allowedDeptIds: Set<String> = Set(appState.cashMeta?.coordinator_department_ids ?? [])
-        let scoped: [CardTransaction] = {
-            if allowedDeptIds.isEmpty { return pending }
-            return pending.filter { tx in
-                if allowedDeptIds.contains(tx.department) { return true }
-                if let h = UsersData.byId[tx.holderId], allowedDeptIds.contains(h.departmentId) { return true }
-                return false
-            }
-        }()
-        return scoped.sorted { ($0.transactionDate > 0 ? $0.transactionDate : $0.createdAt) > ($1.transactionDate > 0 ? $1.transactionDate : $1.createdAt) }
+    private var items: [PendingCodingItem] {
+        let all = appState.pendingCodingItems
+        let allowedDeptIds: Set<String> = Set(appState.cardExpenseMeta.coordinatorDeptIds)
+        guard !allowedDeptIds.isEmpty else { return all }
+        return all.filter { item in
+            if let deptId = item.departmentId, allowedDeptIds.contains(deptId) { return true }
+            if let user = UsersData.byId[item.userId], allowedDeptIds.contains(user.departmentId) { return true }
+            return false
+        }
     }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 10) {
-                if items.isEmpty {
-                    VStack(spacing: 8) {
+                if appState.isLoadingPendingCoding && appState.pendingCodingItems.isEmpty {
+                    LoaderView()
+                } else if items.isEmpty {
+                    VStack(spacing: 12) {
+                        Spacer(minLength: 0)
                         Image(systemName: "doc.text.magnifyingglass").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
                         Text("Nothing in the coding queue").font(.system(size: 13)).foregroundColor(.secondary)
-                    }.frame(maxWidth: .infinity).padding(.vertical, 50)
-                    .background(Color.white).cornerRadius(10)
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                        Spacer(minLength: 0)
+                    }.frame(maxWidth: .infinity, minHeight: 480)
                 } else {
-                    ForEach(items) { tx in
-                        NavigationLink(destination: CardTransactionDetailPage(transaction: tx).environmentObject(appState)) {
-                            CardTransactionRow(transaction: tx)
+                    ForEach(items) { item in
+                        NavigationLink(destination: PendingCodingDetailPage(item: item).environmentObject(appState)) {
+                            codingRow(item)
                         }.buttonStyle(PlainButtonStyle())
                     }
                 }
@@ -465,7 +653,45 @@ struct CardCodingQueuePage: View {
             .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 24)
         }
         .background(Color.bgBase)
-        .onAppear { appState.loadCardTransactions() }
+        .onAppear { appState.loadPendingCoding() }   // GET /card-expenses/receipts/pending-coding
+    }
+
+    private func codingRow(_ item: PendingCodingItem) -> some View {
+        let dateText = item.date > 0
+            ? FormatUtils.formatTimestamp(item.date)
+            : (item.createdAt > 0 ? FormatUtils.formatTimestamp(item.createdAt) : "—")
+        let user = UsersData.byId[item.userId]
+        return HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.description.isEmpty ? "—" : item.description)
+                    .font(.system(size: 13, weight: .semibold)).foregroundColor(.primary).lineLimit(2)
+                HStack(spacing: 6) {
+                    Text(user?.fullName ?? item.userName)
+                        .font(.system(size: 11)).foregroundColor(.secondary)
+                    if !item.userDepartment.isEmpty {
+                        Text("· \(item.userDepartment)")
+                            .font(.system(size: 11)).foregroundColor(.secondary)
+                    }
+                }
+                Text(dateText).font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
+            }
+            Spacer(minLength: 8)
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(FormatUtils.formatGBP(item.amount))
+                    .font(.system(size: 13, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
+                Text(item.statusDisplay)
+                    .font(.system(size: 9, weight: .semibold)).foregroundColor(.orange)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Color.orange.opacity(0.12)).cornerRadius(4)
+                if item.isUrgent {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .font(.system(size: 10)).foregroundColor(.red)
+                }
+            }
+        }
+        .padding(12)
+        .background(Color.white).cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 }
 
@@ -479,195 +705,364 @@ struct ReceiptInboxPage: View {
     @State private var noMatchExpanded = true
     @State private var duplicateExpanded = true
     @State private var personalExpanded = true
+    @State private var selectedReceipt: Receipt? = nil
+    @State private var navigateToDetail = false
 
-    private var inboxItems: [CardTransaction] { appState.cardReceipts }
+    private var inboxItems: [Receipt] { appState.inboxReceipts }
 
-    private var systemMatched: [CardTransaction] {
-        inboxItems.filter { $0.matchStatus.lowercased() == "matched" }
+    // System Matched = status explicitly indicates a system-found match awaiting confirmation.
+    // "matched" is included: the web treats it as auto-matched pending user confirmation.
+    // linkedMerchant/linkedAmt on "unmatched" receipts is just transaction metadata — not a suggestion.
+    private static let suggestedStatuses: Set<String> = [
+        "suggested_match", "matched", "auto_matched", "system_matched",
+        "match_suggested", "pending_match", "pending_confirmation",
+        "auto_match", "suggestion"
+    ]
+
+    private func isSystemMatch(_ r: Receipt) -> Bool {
+        ReceiptInboxPage.suggestedStatuses.contains(r.matchStatus.lowercased())
     }
-    private var noMatch: [CardTransaction] {
-        // "No Match" = unmatched receipts that aren't tied to a card transaction
-        // (manually-uploaded receipts the system couldn't auto-link)
-        inboxItems.filter {
-            let m = $0.matchStatus.lowercased()
-            return (m == "unmatched" || m.isEmpty)
-                && $0.linkedTransactionId.isEmpty
-                && !($0.duplicateScore != nil && !$0.duplicateDismissed)
-                && !($0.personalScore != nil && !$0.personalDismissed)
+
+    private var systemMatched: [Receipt] {
+        inboxItems.filter { isSystemMatch($0) }
+    }
+    // No Match — match_status "unmatched" AND no transaction already linked.
+    // Records with a transaction_id set are either pending_receipt (awaiting file upload)
+    // or already manually matched — neither belongs in the No Match inbox section.
+    private var noMatch: [Receipt] {
+        inboxItems.filter { r in
+            r.matchStatus.lowercased() == "unmatched" &&
+            (r.transactionId == nil || r.transactionId!.isEmpty)
         }
     }
-    private var duplicates: [CardTransaction] {
+    private var duplicates: [Receipt] {
         inboxItems.filter { $0.duplicateScore != nil && !$0.duplicateDismissed }
     }
-    private var personals: [CardTransaction] {
+    private var personals: [Receipt] {
         inboxItems.filter { $0.personalScore != nil && !$0.personalDismissed }
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                section(
-                    icon: "link",
-                    title: "SYSTEM MATCHED — CONFIRM & ATTACH",
-                    color: .green,
-                    items: systemMatched,
-                    expanded: $systemMatchedExpanded,
-                    emptyText: "No system-matched receipts. Import a statement or upload receipts to trigger matching.",
-                    rightAccessory: AnyView(rerunButton)
-                )
-                section(
-                    icon: "link.badge.plus",
-                    title: "NO MATCH",
-                    color: .orange,
-                    items: noMatch,
-                    expanded: $noMatchExpanded,
-                    emptyText: "No unmatched receipts.",
-                    rightAccessory: AnyView(EmptyView())
-                )
-                section(
-                    icon: "doc.on.doc",
-                    title: "DUPLICATE",
-                    color: .purple,
-                    items: duplicates,
-                    expanded: $duplicateExpanded,
-                    emptyText: "No duplicate receipts detected.",
-                    rightAccessory: AnyView(EmptyView())
-                )
-                section(
-                    icon: "person.crop.circle",
-                    title: "PERSONAL",
-                    color: .blue,
-                    items: personals,
-                    expanded: $personalExpanded,
-                    emptyText: "No personal expense receipts flagged.",
-                    rightAccessory: AnyView(EmptyView())
+        Group {
+            if appState.isLoadingInboxReceipts && inboxItems.isEmpty {
+                VStack { Spacer(); LoaderView(); Spacer() }
+            } else {
+                ScrollView {
+                    VStack(spacing: 14) {
+                        section(
+                            icon: "sparkles",
+                            title: "System Matched",
+                            subtitle: "Confirm & Attach",
+                            color: Color(red: 0.1, green: 0.6, blue: 0.3),
+                            items: systemMatched,
+                            expanded: $systemMatchedExpanded,
+                            emptyText: "No system-matched receipts.",
+                            trailing: AnyView(rerunButton),
+                            sectionKind: .systemMatched,
+                            onTap: { r in selectedReceipt = r; navigateToDetail = true }
+                        )
+                        section(
+                            icon: "questionmark.circle",
+                            title: "No Match",
+                            subtitle: "Manual matching required",
+                            color: Color(red: 0.95, green: 0.55, blue: 0.15),
+                            items: noMatch,
+                            expanded: $noMatchExpanded,
+                            emptyText: "No unmatched receipts.",
+                            trailing: AnyView(EmptyView()),
+                            sectionKind: .noMatch,
+                            onTap: { r in selectedReceipt = r; navigateToDetail = true }
+                        )
+                        section(
+                            icon: "doc.on.doc.fill",
+                            title: "Duplicate",
+                            subtitle: "Review before posting",
+                            color: .purple,
+                            items: duplicates,
+                            expanded: $duplicateExpanded,
+                            emptyText: "No duplicate receipts detected.",
+                            trailing: AnyView(EmptyView()),
+                            sectionKind: .other,
+                            onTap: { r in selectedReceipt = r; navigateToDetail = true }
+                        )
+                        section(
+                            icon: "person.crop.circle.fill",
+                            title: "Personal",
+                            subtitle: "Flagged as personal expense",
+                            color: .blue,
+                            items: personals,
+                            expanded: $personalExpanded,
+                            emptyText: "No personal receipts flagged.",
+                            trailing: AnyView(EmptyView()),
+                            sectionKind: .other,
+                            onTap: { r in selectedReceipt = r; navigateToDetail = true }
+                        )
+                    }
+                    .padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 28)
+                }
+                .background(Color.bgBase)
+                .background(
+                    NavigationLink(
+                        destination: Group {
+                            if let r = selectedReceipt {
+                                ReceiptDetailPage(receipt: r).environmentObject(appState)
+                            } else { EmptyView() }
+                        },
+                        isActive: $navigateToDetail
+                    ) { EmptyView() }.frame(width: 0, height: 0).hidden()
                 )
             }
-            .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 24)
         }
-        .background(Color.bgBase)
         .navigationBarTitle(Text("Receipt Inbox"), displayMode: .inline)
-        .onAppear { appState.loadAllCardReceipts() }
+        .onAppear { appState.loadInboxReceipts() }
     }
 
     private var rerunButton: some View {
-        Button(action: { appState.loadCardTransactions() }) {
+        Button(action: { appState.loadInboxReceipts() }) {
             HStack(spacing: 4) {
-                Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 10))
-                Text("Re-run Match").font(.system(size: 11, weight: .semibold))
+                Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 10, weight: .semibold))
+                Text("Re-run").font(.system(size: 11, weight: .semibold))
             }
             .foregroundColor(.goldDark)
-            .padding(.horizontal, 10).padding(.vertical, 6)
+            .padding(.horizontal, 8).padding(.vertical, 5)
             .background(Color.gold.opacity(0.12)).cornerRadius(6)
         }.buttonStyle(BorderlessButtonStyle())
     }
 
+    private enum InboxSectionKind { case systemMatched, noMatch, other }
+
     @ViewBuilder
-    private func section(icon: String, title: String, color: Color, items: [CardTransaction], expanded: Binding<Bool>, emptyText: String, rightAccessory: AnyView) -> some View {
+    private func section(icon: String, title: String, subtitle: String, color: Color, items: [Receipt], expanded: Binding<Bool>, emptyText: String, trailing: AnyView, sectionKind: InboxSectionKind, onTap: @escaping (Receipt) -> Void) -> some View {
         VStack(spacing: 0) {
+            // ── Section heading ──────────────────────────────────
             Button(action: { expanded.wrappedValue.toggle() }) {
-                HStack(spacing: 8) {
-                    Image(systemName: expanded.wrappedValue ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 9, weight: .bold)).foregroundColor(.gray)
-                    Image(systemName: icon).font(.system(size: 12)).foregroundColor(color)
-                    Text(title).font(.system(size: 11, weight: .bold)).tracking(0.4)
-                    Spacer()
-                    rightAccessory
-                    Text("\(items.count) receipt\(items.count == 1 ? "" : "s")")
-                        .font(.system(size: 10)).foregroundColor(.gray)
+                HStack(spacing: 0) {
+                    // Colored left accent bar
+                    RoundedRectangle(cornerRadius: 2).fill(color)
+                        .frame(width: 4).padding(.vertical, 14)
+
+                    HStack(spacing: 10) {
+                        Image(systemName: icon)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(color)
+                            .frame(width: 20)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(title)
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundColor(.primary)
+                            Text(subtitle)
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                        }
+
+                        Spacer()
+
+                        trailing
+
+                        Text("\(items.count)")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(color)
+                            .padding(.horizontal, 9).padding(.vertical, 4)
+                            .background(color.opacity(0.1)).cornerRadius(10)
+
+                        Image(systemName: expanded.wrappedValue ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.secondary)
+                            .padding(.leading, 4)
+                    }
+                    .padding(.horizontal, 14).padding(.vertical, 14)
                 }
-                .padding(12).contentShape(Rectangle())
+                .background(Color(.systemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: expanded.wrappedValue ? 0 : 10))
+                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+                .contentShape(Rectangle())
             }.buttonStyle(PlainButtonStyle())
 
             if expanded.wrappedValue {
                 Divider()
                 if items.isEmpty {
                     VStack(spacing: 8) {
-                        Image(systemName: icon).font(.system(size: 22)).foregroundColor(.gray.opacity(0.3))
-                        Text(emptyText).font(.system(size: 11)).foregroundColor(.gray).multilineTextAlignment(.center)
+                        Image(systemName: icon).font(.system(size: 24)).foregroundColor(.gray.opacity(0.25))
+                        Text(emptyText).font(.system(size: 12)).foregroundColor(.secondary).multilineTextAlignment(.center)
                     }
-                    .frame(maxWidth: .infinity).padding(.vertical, 28).padding(.horizontal, 14)
+                    .frame(maxWidth: .infinity).padding(.vertical, 32).padding(.horizontal, 20)
                 } else {
-                    ForEach(items) { tx in
-                        NavigationLink(destination: CardTransactionDetailPage(transaction: tx, allowEdit: false).environmentObject(appState)) {
-                            inboxRow(tx)
-                        }.buttonStyle(PlainButtonStyle())
-                        Divider().padding(.leading, 14)
+                    ForEach(items) { r in
+                        inboxRow(r, sectionKind: sectionKind)
+                            .contentShape(Rectangle())
+                            .onTapGesture { onTap(r) }
                     }
                 }
             }
         }
-        .background(Color.white).cornerRadius(10)
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+        .background(Color.white).cornerRadius(12)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
     }
 
-    private func inboxRow(_ tx: CardTransaction) -> some View {
-        let date = tx.transactionDate > 0 ? FormatUtils.formatTimestamp(tx.transactionDate) : (tx.createdAt > 0 ? FormatUtils.formatTimestamp(tx.createdAt) : "—")
-        let user = UsersData.byId[tx.holderId]
+    private func inboxRow(_ r: Receipt, sectionKind: InboxSectionKind) -> some View {
+        let receiptDate = r.transactionDate > 0 ? FormatUtils.formatTimestamp(r.transactionDate)
+            : (r.createdAt > 0 ? FormatUtils.formatTimestamp(r.createdAt) : "—")
+        let user = UsersData.byId[r.uploaderId]
+        let holderName = user?.fullName ?? (r.uploaderName.isEmpty ? "—" : r.uploaderName)
+        let designation = user?.displayDesignation ?? ""
+        let nominalCode = r.nominalCode ?? ""
         let codeLabel: String = {
-            if tx.nominalCode.isEmpty { return "—" }
-            if let m = costCodeOptions.first(where: { $0.0 == tx.nominalCode }) { return m.1 }
-            return tx.nominalCode.uppercased()
+            if nominalCode.isEmpty { return "" }
+            if let m = costCodeOptions.first(where: { $0.0 == nominalCode }) {
+                return "\(nominalCode.uppercased().replacingOccurrences(of: "_", with: "-")) — \(m.1)"
+            }
+            return nominalCode.uppercased().replacingOccurrences(of: "_", with: "-")
         }()
-        return VStack(alignment: .leading, spacing: 8) {
-            // Top row — merchant + amount + status
-            HStack(alignment: .top, spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(tx.merchant.isEmpty ? "—" : tx.merchant)
-                        .font(.system(size: 13, weight: .bold)).lineLimit(2)
-                    Text(date).font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
+        let isSystemMatched = sectionKind == .systemMatched
+        let isNoMatch = sectionKind == .noMatch
+        let hasLinkedTxn = !r.linkedMerchant.isEmpty || r.linkedAmount != nil
+        let isPosted = r.workflowStatus.lowercased() == "posted"
+
+        return VStack(alignment: .leading, spacing: 0) {
+
+            // ── Main row ──────────────────────────────────────────
+            HStack(alignment: .top, spacing: 12) {
+                // Left: avatar
+                ZStack {
+                    Circle().fill(Color.gold.opacity(0.15)).frame(width: 36, height: 36)
+                    Text((user?.initials ?? String(holderName.prefix(2))).uppercased())
+                        .font(.system(size: 12, weight: .bold)).foregroundColor(.goldDark)
                 }
-                Spacer(minLength: 8)
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text(FormatUtils.formatGBP(tx.amount))
-                        .font(.system(size: 14, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
-                    statusBadge(tx)
+
+                // Centre: merchant + date + holder
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 5) {
+                        Text(r.displayMerchant.isEmpty ? "Receipt" : r.displayMerchant)
+                            .font(.system(size: 14, weight: .bold)).foregroundColor(.primary).lineLimit(1)
+                        if let score = r.matchScore {
+                            Text("\(Int(score * 100))%")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundColor(Color(red: 0.0, green: 0.55, blue: 0.35))
+                                .padding(.horizontal, 4).padding(.vertical, 2)
+                                .background(Color.green.opacity(0.1)).cornerRadius(3)
+                        }
+                        if r.isUrgent {
+                            Text("URGENT")
+                                .font(.system(size: 7, weight: .bold)).foregroundColor(.white)
+                                .padding(.horizontal, 5).padding(.vertical, 2)
+                                .background(Color.red).cornerRadius(3)
+                        }
+                    }
+                    Text(receiptDate)
+                        .font(.system(size: 11)).foregroundColor(.secondary)
+                    HStack(spacing: 4) {
+                        Text(holderName).font(.system(size: 11, weight: .medium)).foregroundColor(.secondary).lineLimit(1)
+                        if !designation.isEmpty {
+                            Text("· \(designation)").font(.system(size: 10)).foregroundColor(.secondary).lineLimit(1)
+                        }
+                    }
+                }
+
+                Spacer(minLength: 4)
+
+                // Right: amount + status
+                VStack(alignment: .trailing, spacing: 5) {
+                    Text(FormatUtils.formatGBP(r.displayAmount))
+                        .font(.system(size: 15, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
+                    inboxStatusBadge(r)
                 }
             }
+            .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, hasLinkedTxn || !codeLabel.isEmpty ? 6 : 10)
 
-            // Bottom row — holder + dept + code
-            HStack(spacing: 8) {
-                if let u = user {
-                    ZStack {
-                        Circle().fill(Color.gold.opacity(0.18)).frame(width: 22, height: 22)
-                        Text(u.initials).font(.system(size: 9, weight: .bold)).foregroundColor(.goldDark)
+            // ── Code pill ─────────────────────────────────────────
+            if !codeLabel.isEmpty {
+                HStack(spacing: 5) {
+                    Image(systemName: "tag.fill").font(.system(size: 9)).foregroundColor(.goldDark)
+                    Text(codeLabel).font(.system(size: 10, weight: .semibold)).foregroundColor(.goldDark).lineLimit(1)
+                }
+                .padding(.horizontal, 8).padding(.vertical, 4)
+                .background(Color.gold.opacity(0.1)).cornerRadius(5)
+                .padding(.horizontal, 14).padding(.bottom, hasLinkedTxn ? 6 : 10)
+            }
+
+            // ── Linked transaction strip ──────────────────────────
+            if hasLinkedTxn {
+                HStack(spacing: 6) {
+                    Image(systemName: "link").font(.system(size: 10, weight: .semibold)).foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: 1) {
+                        if !r.linkedMerchant.isEmpty {
+                            Text(r.linkedMerchant).font(.system(size: 11, weight: .semibold)).foregroundColor(.primary).lineLimit(1)
+                        }
+                        HStack(spacing: 6) {
+                            if let amt = r.linkedAmount {
+                                Text(FormatUtils.formatGBP(amt))
+                                    .font(.system(size: 10, weight: .semibold, design: .monospaced)).foregroundColor(.secondary)
+                            }
+                            if !r.linkedCardLast4.isEmpty {
+                                Text("···· \(r.linkedCardLast4)").font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary)
+                            }
+                            if let ld = r.linkedDate, ld > 0 {
+                                Text(FormatUtils.formatTimestamp(ld)).font(.system(size: 10)).foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .background(Color.gray.opacity(0.04))
+                .padding(.horizontal, 14).padding(.bottom, 8)
+            }
+
+            // ── Action buttons ────────────────────────────────────
+            if isSystemMatched || isNoMatch {
+                Divider()
+                HStack(spacing: 10) {
+                    Button(action: { }) {
+                        Text("Manual Match")
+                            .font(.system(size: 12, weight: .semibold)).foregroundColor(.primary)
+                            .frame(maxWidth: .infinity).padding(.vertical, 9)
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                    }.buttonStyle(BorderlessButtonStyle())
+
+                    if isSystemMatched && !isPosted {
+                        Button(action: { appState.attachInboxReceipt(r.id) }) {
+                            HStack(spacing: 5) {
+                                Image(systemName: "paperclip").font(.system(size: 11, weight: .semibold))
+                                Text("Attach").font(.system(size: 12, weight: .bold))
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity).padding(.vertical, 9)
+                            .background(Color.orange).cornerRadius(8)
+                        }.buttonStyle(BorderlessButtonStyle())
                     }
                 }
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(user?.fullName ?? (tx.holderName.isEmpty ? "—" : tx.holderName))
-                        .font(.system(size: 11, weight: .semibold)).lineLimit(1)
-                    if let d = user?.displayDesignation, !d.isEmpty {
-                        Text(d).font(.system(size: 9)).foregroundColor(.secondary).lineLimit(1)
-                    }
-                }
-                Spacer()
-                HStack(spacing: 4) {
-                    Image(systemName: "tag.fill").font(.system(size: 8)).foregroundColor(.goldDark)
-                    Text(codeLabel).font(.system(size: 9, weight: .semibold, design: .monospaced)).foregroundColor(.goldDark)
-                }
-                .padding(.horizontal, 6).padding(.vertical, 3)
-                .background(Color.gold.opacity(0.1)).cornerRadius(4)
+                .padding(.horizontal, 14).padding(.vertical, 10)
             }
         }
-        .padding(.horizontal, 12).padding(.vertical, 10)
     }
 
-    private func statusBadge(_ tx: CardTransaction) -> some View {
-        let teal = Color(red: 0.0, green: 0.6, blue: 0.5)
+    private func inboxStatusBadge(_ r: Receipt) -> some View {
+        let teal   = Color(red: 0.0,  green: 0.6,  blue: 0.5)
+        let navy   = Color(red: 0.05, green: 0.15, blue: 0.42)
         let orange = Color(red: 0.95, green: 0.55, blue: 0.15)
+        // Use workflowStatus for display; fall back to matchStatus
+        let s = r.workflowStatus.isEmpty ? r.matchStatus : r.workflowStatus
         let (label, fg, bg): (String, Color, Color) = {
-            switch tx.status.lowercased() {
-            case "approved", "matched", "coded": return ("Approved", teal, teal.opacity(0.12))
-            case "posted": return ("Posted", teal, teal.opacity(0.12))
-            case "pending", "pending_receipt": return ("Pending Receipt", orange, orange.opacity(0.12))
-            case "pending_coding", "pending_code": return ("Pending Code", orange, orange.opacity(0.12))
-            default: return (tx.statusDisplay, .goldDark, Color.gold.opacity(0.15))
+            switch s.lowercased() {
+            case "pending_coding", "pending_code", "pending code": return ("Pending Code",      navy, navy.opacity(0.12))
+            case "coded":                                       return ("Coded",             teal,   teal.opacity(0.12))
+            case "posted":                                      return ("Posted",            Color(red: 0.1, green: 0.6, blue: 0.3), Color.green.opacity(0.1))
+            case "approved":                                    return ("Approved",          teal,   teal.opacity(0.12))
+            case "awaiting_approval", "pending_approval",
+                 "submitted", "under_review":                   return ("Awaiting Approval", orange, orange.opacity(0.12))
+            case "matched", "suggested_match":                  return ("Matched",           teal,   teal.opacity(0.12))
+            case "unmatched":                                   return ("No Match",          orange, orange.opacity(0.12))
+            case "duplicate":                                   return ("Duplicate",         Color.purple, Color.purple.opacity(0.12))
+            case "personal":                                    return ("Personal",          Color.blue,   Color.blue.opacity(0.12))
+            case "pending", "pending_receipt", "":              return ("Pending",           orange, orange.opacity(0.12))
+            default:                                            return (s.replacingOccurrences(of: "_", with: " ").capitalized, Color.gray, Color.gray.opacity(0.1))
             }
         }()
         return Text(label)
-            .font(.system(size: 8, weight: .bold)).foregroundColor(fg)
-            .padding(.horizontal, 6).padding(.vertical, 3)
-            .background(bg).cornerRadius(4)
+            .font(.system(size: 9, weight: .bold)).foregroundColor(fg)
+            .padding(.horizontal, 7).padding(.vertical, 3)
+            .background(bg).cornerRadius(5)
     }
 }
 
@@ -679,31 +1074,19 @@ struct SmartAlertsPage: View {
     @EnvironmentObject var appState: POViewModel
     @State private var activeFilter = "All"
     @State private var showFilterSheet = false
+    @State private var navigateToAlertId: String? = nil
 
     private let filters = ["All", "Anomaly", "Duplicate Risk", "Velocity", "Merchant", "Resolved"]
-
-    private func count(for filter: String) -> Int {
-        switch filter {
-        case "Anomaly":        return alerts.filter { $0.type.lowercased() == "anomaly" }.count
-        case "Duplicate Risk": return alerts.filter { ["duplicate_risk", "duplicate"].contains($0.type.lowercased()) }.count
-        case "Velocity":       return alerts.filter { $0.type.lowercased() == "velocity" }.count
-        case "Merchant":       return alerts.filter { $0.type.lowercased() == "merchant" }.count
-        case "Resolved":       return alerts.filter { $0.status.lowercased() == "resolved" }.count
-        default:               return alerts.count
-        }
-    }
-
-    private func filterLabel(_ f: String) -> String {
-        let c = count(for: f)
-        return c > 0 ? "\(f) (\(c))" : f
-    }
+    private let pink   = Color(red: 0.91, green: 0.29, blue: 0.48)
+    private let teal   = Color(red: 0.0,  green: 0.6,  blue: 0.5)
+    private let orange = Color(red: 0.95, green: 0.55, blue: 0.15)
 
     private var alerts: [SmartAlert] { appState.smartAlerts }
 
     private var filtered: [SmartAlert] {
         switch activeFilter {
         case "Anomaly":        return alerts.filter { $0.type.lowercased() == "anomaly" }
-        case "Duplicate Risk": return alerts.filter { ["duplicate_risk", "duplicate"].contains($0.type.lowercased()) }
+        case "Duplicate Risk": return alerts.filter { ["duplicate_risk","duplicate"].contains($0.type.lowercased()) }
         case "Velocity":       return alerts.filter { $0.type.lowercased() == "velocity" }
         case "Merchant":       return alerts.filter { $0.type.lowercased() == "merchant" }
         case "Resolved":       return alerts.filter { $0.status.lowercased() == "resolved" }
@@ -711,204 +1094,440 @@ struct SmartAlertsPage: View {
         }
     }
 
-    private var activeCount: Int { alerts.filter { $0.status.lowercased() == "active" }.count }
-    private var resolvedThisWeek: Int {
-        let weekAgo = Int64(Date().timeIntervalSince1970 * 1000) - 7 * 86_400_000
-        return alerts.filter { $0.status.lowercased() == "resolved" && $0.resolvedAt >= weekAgo }.count
-    }
-    private var alertRate: Double {
-        // Web shows 100% as detection coverage when alerts are present
-        alerts.isEmpty ? 0 : 100
-    }
-    private var savingsFound: Double { alerts.reduce(0) { $0 + $1.savings } }
-
     var body: some View {
-        VStack(spacing: 12) {
-            // Stat cards 2x2 grid
-            VStack(spacing: 8) {
-                HStack(spacing: 8) {
-                    statCard(label: "ACTIVE ALERTS", value: "\(activeCount)", sub: "Needs review", color: Color(red: 0.91, green: 0.29, blue: 0.48))
-                    statCard(label: "RESOLVED (7D)", value: "\(resolvedThisWeek)", sub: "This session", color: Color(red: 0.0, green: 0.6, blue: 0.5))
-                }
-                .frame(height: 78)
-                HStack(spacing: 8) {
-                    statCard(label: "ALERT RATE", value: "\(String(format: "%.1f", alertRate))%", sub: "Of transactions", color: Color(red: 0.95, green: 0.55, blue: 0.15))
-                    statCard(label: "SAVINGS FOUND", value: FormatUtils.formatGBP(savingsFound), sub: "Caught this period", color: Color(red: 0.0, green: 0.6, blue: 0.5))
-                }
-                .frame(height: 78)
-            }
+        Group {
+            if appState.isLoadingSmartAlerts && alerts.isEmpty {
+                // Full-page loader — replaces stats row so user sees spinner immediately
+                VStack { Spacer(); LoaderView(); Spacer() }
+                    .background(Color.bgBase)
+            } else {
+                ScrollView {
+                    VStack(spacing: 14) {
 
-            // Filter dropdown
-            HStack(spacing: 8) {
-                Button(action: { showFilterSheet = true }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "line.3.horizontal.decrease").font(.system(size: 10, weight: .medium)).foregroundColor(.goldDark)
-                        Text(filterLabel(activeFilter)).font(.system(size: 12, weight: .semibold)).foregroundColor(.primary)
-                        Image(systemName: "chevron.down").font(.system(size: 8, weight: .medium)).foregroundColor(.gray)
-                    }
-                    .padding(.horizontal, 12).padding(.vertical, 8)
-                    .background(Color.white).cornerRadius(6)
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
-                }
-                .buttonStyle(BorderlessButtonStyle())
-                .compatActionSheet(title: "Filter", isPresented: $showFilterSheet, buttons:
-                    filters.map { f in
-                        let label = filterLabel(f)
-                        return CompatActionSheetButton.default(f == activeFilter ? "\(label) ✓" : label) { activeFilter = f }
-                    } + [.cancel()]
-                )
-                Spacer()
-            }
-
-            // Alert list
-            ScrollView {
-                if filtered.isEmpty {
-                    VStack(spacing: 8) {
-                        Image(systemName: "checkmark.shield").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
-                        Text("No alerts").font(.system(size: 13)).foregroundColor(.secondary)
-                    }.frame(maxWidth: .infinity).padding(.vertical, 50)
-                    .background(Color.white).cornerRadius(10)
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
-                } else {
-                    VStack(spacing: 12) {
-                        ForEach(filtered) { alert in
-                            alertCard(alert)
+                        // ── Filter ──
+                        HStack(spacing: 8) {
+                            Button(action: { showFilterSheet = true }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "line.3.horizontal.decrease")
+                                        .font(.system(size: 10, weight: .medium)).foregroundColor(.goldDark)
+                                    Text(activeFilter)
+                                        .font(.system(size: 12, weight: .semibold)).foregroundColor(.primary).lineLimit(1)
+                                    Image(systemName: "chevron.down")
+                                        .font(.system(size: 8, weight: .medium)).foregroundColor(.gray)
+                                }
+                                .padding(.horizontal, 12).padding(.vertical, 8)
+                                .background(Color.white).cornerRadius(6)
+                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+                            .compatActionSheet(
+                                title: "Filter Alerts",
+                                isPresented: $showFilterSheet,
+                                buttons: filters.map { f in
+                                    CompatActionSheetButton.default(f == activeFilter ? "\(f) ✓" : f) { activeFilter = f }
+                                } + [.cancel()]
+                            )
+                            Spacer()
                         }
-                    }.padding(.bottom, 12)
+
+                        // ── Alert list ──
+                        if filtered.isEmpty {
+                            VStack(spacing: 10) {
+                                Spacer(minLength: 0)
+                                Image(systemName: "checkmark.shield.fill").font(.system(size: 32)).foregroundColor(.gray.opacity(0.25))
+                                Text("No alerts").font(.system(size: 14, weight: .semibold)).foregroundColor(.secondary)
+                                Text("All clear for this filter").font(.system(size: 12)).foregroundColor(.gray)
+                                Spacer(minLength: 0)
+                            }.frame(maxWidth: .infinity, minHeight: 420)
+                        } else {
+                            VStack(spacing: 10) {
+                                ForEach(filtered) { alert in
+                                    alertCard(alert)
+                                }
+                            }
+                        }
+
+                        Spacer(minLength: 20)
+                    }
+                    .padding(.horizontal, 16).padding(.top, 14)
                 }
+                .background(Color.bgBase)
             }
         }
-        .padding(.horizontal, 16).padding(.top, 14)
-        .background(Color.bgBase)
         .navigationBarTitle(Text("Smart Alerts"), displayMode: .inline)
         .onAppear { appState.loadSmartAlerts() }
     }
 
-    private func statCard(label: String, value: String, sub: String, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.system(size: 8, weight: .bold)).foregroundColor(.secondary).tracking(0.4).lineLimit(1).minimumScaleFactor(0.8)
-            Text(value).font(.system(size: 18, weight: .bold)).foregroundColor(color).lineLimit(1).minimumScaleFactor(0.6)
-            Text(sub).font(.system(size: 8)).foregroundColor(.gray).lineLimit(1).minimumScaleFactor(0.8)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(8)
-        .background(Color.white).cornerRadius(8)
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+    // MARK: - Alert card
+    private func isTopUpAlert(_ alert: SmartAlert) -> Bool {
+        let s = alert.status.lowercased()
+        let t = alert.type.lowercased()
+        return s.contains("top_up") || s.contains("topup") || s.contains("top-up")
+            || t.contains("top_up") || t.contains("topup") || t.contains("top-up")
     }
 
-    @ViewBuilder
     private func alertCard(_ alert: SmartAlert) -> some View {
-        let isResolved = alert.status.lowercased() == "resolved"
-        let pink = Color(red: 0.91, green: 0.29, blue: 0.48)
-        VStack(alignment: .leading, spacing: 12) {
-            // Header — title + detected timestamp
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "exclamationmark.circle.fill")
-                    .font(.system(size: 14)).foregroundColor(pink)
-                Text(alert.title.isEmpty ? "Alert" : alert.title)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(pink)
-                    .lineLimit(2)
-                Spacer(minLength: 4)
-                if alert.detectedAt > 0 {
-                    Text(FormatUtils.formatTimestamp(alert.detectedAt))
-                        .font(.system(size: 9, design: .monospaced)).foregroundColor(.gray)
-                }
+        let pink   = self.pink
+        let orange = self.orange
+        let isActive = alert.status.lowercased() == "active"
+        let isPendingTopUp = isTopUpAlert(alert)
+        let headerColor: Color = isPendingTopUp ? .purple : pink
+        let barColor: Color = {
+            if isPendingTopUp { return .purple }
+            switch alert.priority.lowercased() {
+            case "high":   return pink
+            case "medium": return orange
+            case "low":    return Color(red: 0.3, green: 0.6, blue: 0.3)
+            default:       return Color(red: 0.4, green: 0.5, blue: 0.9)
             }
+        }()
+        let iconName = isPendingTopUp ? "arrow.up.circle.fill"
+            : ((alert.priority.lowercased() == "high" || alert.priority.lowercased() == "medium")
+                ? "exclamationmark.circle.fill" : "info.circle.fill")
 
-            // Badge row
-            HStack(spacing: 6) {
-                priorityBadge(alert.priority)
-                statusBadge(alert.status)
+        return VStack(alignment: .leading, spacing: 0) {
+
+                // ── Header ──
+                VStack(alignment: .leading, spacing: 6) {
+                    // Title row — colour driven by status
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: iconName)
+                            .font(.system(size: 13)).foregroundColor(headerColor)
+                        Text(alert.title.isEmpty ? "Alert" : alert.title)
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(headerColor)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    // Badges + detected time on same row
+                    HStack(spacing: 6) {
+                        priorityBadge(alert.priority)
+                        statusBadge(alert.status)
+                        Spacer()
+                        if alert.detectedAt > 0 {
+                            Text(FormatUtils.formatDateTime(alert.detectedAt))
+                                .font(.system(size: 10)).foregroundColor(.gray)
+                        }
+                    }
+                }
+                .padding(.leading, 16).padding(.trailing, 12).padding(.top, 12).padding(.bottom, 8)
+
+                Divider()
+
+                // ── Description ──
+                if !alert.alertDescription.isEmpty {
+                    Text(alert.alertDescription)
+                        .font(.system(size: 12)).foregroundColor(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.leading, 16).padding(.trailing, 12).padding(.top, 8).padding(.bottom, 6)
+                }
+
+                // ── Details strip (type · cardholder · department) ──
+                HStack(spacing: 0) {
+                    if !alert.typeDisplay.isEmpty {
+                        HStack(spacing: 4) {
+                            Image(systemName: "tag.fill")
+                                .font(.system(size: 9)).foregroundColor(.goldDark)
+                            Text(alert.typeDisplay)
+                                .font(.system(size: 10, weight: .semibold)).foregroundColor(.goldDark)
+                        }
+                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .background(Color.gold.opacity(0.12)).cornerRadius(4)
+                    }
+                    if !alert.holderName.isEmpty {
+                        Text("  ·  ").font(.system(size: 10)).foregroundColor(.secondary)
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 9)).foregroundColor(.secondary)
+                        Text(" \(alert.holderName)")
+                            .font(.system(size: 10)).foregroundColor(.secondary).lineLimit(1)
+                    }
+                    if !alert.department.isEmpty {
+                        Text("  ·  ").font(.system(size: 10)).foregroundColor(.secondary)
+                        Text(alert.department)
+                            .font(.system(size: 10)).foregroundColor(.secondary).lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.leading, 16).padding(.trailing, 12).padding(.bottom, 8)
+
+                // ── Transaction preview card ──
+                if alert.hasTransactionData {
+                    VStack(alignment: .leading, spacing: 4) {
+                        // Label line
+                        if !alert.transactionLabel.isEmpty {
+                            Text(alert.transactionLabel)
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.primary)
+                        }
+                        // Meta line: ••••7733 · Sophie Turner (Catering Manager) · £285.70
+                        HStack(spacing: 4) {
+                            Text(alert.holderDisplay)
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                            if alert.effectiveAmount > 0 {
+                                Text("·")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.secondary)
+                                Text(FormatUtils.formatGBP(alert.effectiveAmount))
+                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                    .foregroundColor(barColor)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(UIColor.secondarySystemBackground))
+                    .cornerRadius(6)
+                    .padding(.leading, 16).padding(.trailing, 12).padding(.bottom, 10)
+                }
+
+                // ── Action buttons ──
+                if isActive {
+                    HStack(spacing: 0) {
+                        NavigationLink(
+                            destination: SmartAlertDetailPage(alert: alert).environmentObject(appState),
+                            tag: alert.id,
+                            selection: $navigateToAlertId
+                        ) { EmptyView() }.frame(width: 0, height: 0).hidden()
+
+                        Button(action: { navigateToAlertId = alert.id }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "magnifyingglass").font(.system(size: 11, weight: .medium))
+                                Text("Investigate").font(.system(size: 12, weight: .semibold))
+                            }
+                            .foregroundColor(.primary)
+                            .padding(.horizontal, 12).padding(.vertical, 7)
+                            .background(Color.white)
+                            .cornerRadius(6)
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
+                        }.buttonStyle(BorderlessButtonStyle())
+
+                        Spacer().frame(width: 8)
+
+                        Button(action: { appState.resolveSmartAlert(alert.id) }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "checkmark.circle.fill").font(.system(size: 11, weight: .medium))
+                                Text("Resolve").font(.system(size: 12, weight: .semibold))
+                            }
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 12).padding(.vertical, 7)
+                            .background(teal).cornerRadius(6)
+                        }.buttonStyle(BorderlessButtonStyle())
+
+                        Spacer().frame(width: 12)
+
+                        Button(action: { appState.dismissSmartAlert(alert.id) }) {
+                            Text("Dismiss")
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                        }.buttonStyle(BorderlessButtonStyle())
+
+                        Spacer()
+                    }
+                    .padding(.leading, 16).padding(.trailing, 12).padding(.bottom, 12)
+                } else {
+                    Spacer().frame(height: 4)
+                }
+        }
+        .background(
+            HStack(spacing: 0) {
+                Rectangle().fill(barColor).frame(width: 4)
                 Spacer()
             }
+        )
+        .background(Color.white)
+        .cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(barColor.opacity(0.2), lineWidth: 1))
+    }
 
-            // Description
-            if !alert.description.isEmpty {
-                Text(alert.description)
-                    .font(.system(size: 12))
-                    .foregroundColor(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
+    // MARK: - Badges
+    private func priorityBadge(_ p: String) -> some View {
+        let (fg, bg): (Color, Color) = {
+            switch p.lowercased() {
+            case "high":   return (pink, pink.opacity(0.12))
+            case "medium": return (orange, orange.opacity(0.12))
+            case "low":    return (.gray, Color.gray.opacity(0.12))
+            default:       return (.goldDark, Color.gold.opacity(0.15))
             }
+        }()
+        let label: String = {
+            switch p.lowercased() {
+            case "high": return "High Priority"
+            case "medium": return "Medium Priority"
+            case "low": return "Low Priority"
+            default: return p.capitalized
+            }
+        }()
+        return Text(label).font(.system(size: 9, weight: .bold)).foregroundColor(fg)
+            .padding(.horizontal, 6).padding(.vertical, 3).background(bg).cornerRadius(4)
+    }
 
-            // Evidence box — well-formed details grid
-            VStack(alignment: .leading, spacing: 6) {
-                if !alert.bsControlCode.isEmpty {
+    private func statusBadge(_ s: String) -> some View {
+        let teal   = self.teal
+        let lower = s.lowercased()
+        let isTopUp = lower.contains("top_up") || lower.contains("topup") || lower.contains("top-up")
+        let (label, fg, bg): (String, Color, Color) = {
+            if isTopUp { return ("Pending Top-Up", Color.purple, Color.purple.opacity(0.12)) }
+            switch lower {
+            case "active":
+                return ("Active", Color(red: 0.0, green: 0.6, blue: 0.3), Color(red: 0.0, green: 0.6, blue: 0.3).opacity(0.12))
+            case "resolved":
+                return ("Resolved", teal, teal.opacity(0.12))
+            case "dismissed":
+                return ("Dismissed", .gray, Color.gray.opacity(0.12))
+            default:
+                return (s.capitalized, .goldDark, Color.gold.opacity(0.15))
+            }
+        }()
+        return Text(label).font(.system(size: 9, weight: .bold)).foregroundColor(fg)
+            .padding(.horizontal, 6).padding(.vertical, 3).background(bg).cornerRadius(4)
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MARK: - Smart Alert Detail Page
+// ═══════════════════════════════════════════════════════════════════
+
+struct SmartAlertDetailPage: View {
+    let alert: SmartAlert
+    @EnvironmentObject var appState: POViewModel
+    @Environment(\.presentationMode) var presentationMode
+
+    private var live: SmartAlert {
+        appState.smartAlerts.first(where: { $0.id == alert.id }) ?? alert
+    }
+
+    private var isResolved: Bool { live.status.lowercased() == "resolved" }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 14) {
+                // Summary card
+                VStack(alignment: .leading, spacing: 0) {
+                    // Header
                     HStack {
-                        Text("BS").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
+                        Text("Alert Details").font(.system(size: 15, weight: .bold))
                         Spacer()
-                        Text(alert.bsControlCode).font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        priorityBadge(live.priority)
+                        statusBadge(live.status)
                     }
-                }
-                if !alert.cardLastFour.isEmpty {
+                    .padding(14)
+
                     Divider()
-                    HStack {
-                        Text("CARD").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
-                        Spacer()
-                        Text("•••• \(alert.cardLastFour)").font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundColor(.blue)
+
+                    // Title + description
+                    VStack(alignment: .leading, spacing: 8) {
+                        let s = live.status.lowercased(); let t = live.type.lowercased()
+                        let isPendingTopUp = s.contains("top_up") || s.contains("topup") || s.contains("top-up")
+                            || t.contains("top_up") || t.contains("topup") || t.contains("top-up")
+                        let detailHeaderColor: Color = isPendingTopUp ? .purple : Color(red: 0.91, green: 0.29, blue: 0.48)
+                        let detailIconName = isPendingTopUp ? "arrow.up.circle.fill" : "exclamationmark.circle.fill"
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: detailIconName).font(.system(size: 16))
+                                .foregroundColor(detailHeaderColor)
+                            Text(live.title.isEmpty ? "Alert" : live.title)
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundColor(detailHeaderColor)
+                        }
+                        if !live.alertDescription.isEmpty {
+                            Text(live.alertDescription)
+                                .font(.system(size: 12))
+                                .foregroundColor(.primary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
-                }
-                if !alert.holderName.isEmpty {
+                    .padding(14)
+
                     Divider()
-                    HStack {
-                        Text("CARDHOLDER").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 1) {
-                            Text(alert.holderName).font(.system(size: 11, weight: .semibold))
-                            if !alert.department.isEmpty {
-                                Text(alert.department).font(.system(size: 9)).foregroundColor(.secondary)
+
+                    // Details grid
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack(alignment: .top, spacing: 12) {
+                            infoCell(label: "TYPE", value: live.typeDisplay)
+                            infoCell(label: "AMOUNT",
+                                     value: live.amount > 0 ? FormatUtils.formatGBP(live.amount) : "—",
+                                     valueColor: .goldDark, mono: true)
+                        }
+                        HStack(alignment: .top, spacing: 12) {
+                            infoCell(label: "CARD",
+                                     value: live.cardLastFour.isEmpty ? "—" : "•••• \(live.cardLastFour)",
+                                     mono: true)
+                            infoCell(label: "BS CONTROL CODE",
+                                     value: live.bsControlCode.isEmpty ? "—" : live.bsControlCode,
+                                     mono: true)
+                        }
+                        HStack(alignment: .top, spacing: 12) {
+                            infoCell(label: "CARDHOLDER",
+                                     value: live.holderName.isEmpty ? "—" : live.holderName)
+                            infoCell(label: "DEPARTMENT",
+                                     value: live.department.isEmpty ? "—" : live.department)
+                        }
+                        if live.detectedAt > 0 || live.resolvedAt > 0 {
+                            HStack(alignment: .top, spacing: 12) {
+                                infoCell(label: "DETECTED",
+                                         value: live.detectedAt > 0 ? FormatUtils.formatTimestamp(live.detectedAt) : "—")
+                                infoCell(label: "RESOLVED",
+                                         value: live.resolvedAt > 0 ? FormatUtils.formatTimestamp(live.resolvedAt) : "—")
+                            }
+                        }
+                        if live.savings > 0 {
+                            HStack(alignment: .top, spacing: 12) {
+                                infoCell(label: "SAVINGS",
+                                         value: FormatUtils.formatGBP(live.savings),
+                                         valueColor: Color(red: 0.0, green: 0.6, blue: 0.5), mono: true)
+                                Spacer()
                             }
                         }
                     }
+                    .padding(14)
                 }
-                if alert.amount > 0 {
-                    Divider()
-                    HStack {
-                        Text("AMOUNT").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
-                        Spacer()
-                        Text(FormatUtils.formatGBP(alert.amount))
-                            .font(.system(size: 12, weight: .bold, design: .monospaced))
-                            .foregroundColor(.goldDark)
+                .background(Color.white).cornerRadius(12)
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.91, green: 0.29, blue: 0.48).opacity(0.3), lineWidth: 1.5))
+
+                // Actions
+                if !isResolved {
+                    HStack(spacing: 10) {
+                        Button(action: {
+                            appState.resolveSmartAlert(live.id)
+                            presentationMode.wrappedValue.dismiss()
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "checkmark.circle.fill").font(.system(size: 12))
+                                Text("Resolve").font(.system(size: 13, weight: .bold))
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color(red: 0.0, green: 0.6, blue: 0.5)).cornerRadius(8)
+                        }.buttonStyle(BorderlessButtonStyle())
+                        Button(action: {
+                            appState.dismissSmartAlert(live.id)
+                            presentationMode.wrappedValue.dismiss()
+                        }) {
+                            Text("Dismiss").font(.system(size: 13, weight: .bold)).foregroundColor(.gray)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color.white)
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                                .cornerRadius(8)
+                        }.buttonStyle(BorderlessButtonStyle())
                     }
                 }
             }
-            .padding(10)
-            .background(pink.opacity(0.05)).cornerRadius(6)
-            .overlay(RoundedRectangle(cornerRadius: 6).stroke(pink.opacity(0.25), lineWidth: 1))
-
-            // Actions
-            if !isResolved {
-                HStack(spacing: 8) {
-                    Button(action: {}) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "magnifyingglass").font(.system(size: 10))
-                            Text("Investigate").font(.system(size: 11, weight: .semibold))
-                        }
-                        .foregroundColor(.primary)
-                        .padding(.horizontal, 12).padding(.vertical, 7)
-                        .background(Color.white)
-                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
-                        .cornerRadius(6)
-                    }.buttonStyle(BorderlessButtonStyle())
-                    Button(action: { appState.resolveSmartAlert(alert.id) }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "checkmark.circle.fill").font(.system(size: 10))
-                            Text("Resolve").font(.system(size: 11, weight: .semibold))
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 12).padding(.vertical, 7)
-                        .background(Color(red: 0.0, green: 0.6, blue: 0.5)).cornerRadius(6)
-                    }.buttonStyle(BorderlessButtonStyle())
-                    Button(action: { appState.dismissSmartAlert(alert.id) }) {
-                        Text("Dismiss").font(.system(size: 11, weight: .semibold)).foregroundColor(.gray)
-                            .padding(.horizontal, 8).padding(.vertical, 7)
-                    }.buttonStyle(BorderlessButtonStyle())
-                    Spacer()
-                }
-            }
+            .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 24)
         }
-        .padding(14)
-        .background(Color.white).cornerRadius(10)
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(pink.opacity(0.3), lineWidth: 1.5))
+        .background(Color.bgBase)
+        .navigationBarTitle(Text("Alert Details"), displayMode: .inline)
+    }
+
+    private func infoCell(label: String, value: String, valueColor: Color = .primary, mono: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
+            Text(value)
+                .font(mono ? .system(size: 14, weight: .bold, design: .monospaced) : .system(size: 13, weight: .semibold))
+                .foregroundColor(valueColor)
+        }.frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func priorityBadge(_ p: String) -> some View {
@@ -923,28 +1542,35 @@ struct SmartAlertsPage: View {
         }()
         let label: String = {
             switch p.lowercased() {
-            case "high":   return "High Priority"
-            case "medium": return "Medium Priority"
-            case "low":    return "Low Priority"
+            case "high":   return "High"
+            case "medium": return "Medium"
+            case "low":    return "Low"
             default:       return p.capitalized
             }
         }()
-        return Text(label).font(.system(size: 8, weight: .bold)).foregroundColor(fg)
-            .padding(.horizontal, 6).padding(.vertical, 2).background(bg).cornerRadius(3)
+        return Text(label).font(.system(size: 9, weight: .bold)).foregroundColor(fg)
+            .padding(.horizontal, 8).padding(.vertical, 3).background(bg).cornerRadius(4)
     }
 
     private func statusBadge(_ s: String) -> some View {
         let pink = Color(red: 0.91, green: 0.29, blue: 0.48)
-        let (fg, bg): (Color, Color) = {
-            switch s.lowercased() {
-            case "active":    return (pink, pink.opacity(0.12))
-            case "resolved":  return (Color(red: 0.0, green: 0.6, blue: 0.5), Color(red: 0.0, green: 0.6, blue: 0.5).opacity(0.12))
-            case "dismissed": return (.gray, Color.gray.opacity(0.15))
-            default:          return (.goldDark, Color.gold.opacity(0.15))
+        let lower = s.lowercased()
+        let isTopUp = lower.contains("top_up") || lower.contains("topup") || lower.contains("top-up")
+        let (label, fg, bg): (String, Color, Color) = {
+            if isTopUp { return ("Pending Top-Up", Color.purple, Color.purple.opacity(0.12)) }
+            switch lower {
+            case "active":
+                return ("Active", pink, pink.opacity(0.12))
+            case "resolved":
+                return ("Resolved", Color(red: 0.0, green: 0.6, blue: 0.5), Color(red: 0.0, green: 0.6, blue: 0.5).opacity(0.12))
+            case "dismissed":
+                return ("Dismissed", Color.gray, Color.gray.opacity(0.15))
+            default:
+                return (s.capitalized, .goldDark, Color.gold.opacity(0.15))
             }
         }()
-        return Text(s.capitalized).font(.system(size: 8, weight: .bold)).foregroundColor(fg)
-            .padding(.horizontal, 6).padding(.vertical, 2).background(bg).cornerRadius(3)
+        return Text(label).font(.system(size: 9, weight: .bold)).foregroundColor(fg)
+            .padding(.horizontal, 8).padding(.vertical, 3).background(bg).cornerRadius(4)
     }
 }
 
@@ -956,73 +1582,64 @@ struct PendingCodingPage: View {
     @EnvironmentObject var appState: POViewModel
     @State private var expandedHolders: Set<String> = []
 
-    private var pending: [CardTransaction] {
-        // Card transactions waiting for receipt upload OR coding
-        let txPending = appState.cardTransactions.filter {
-            ["pending_code", "pending_coding", "pending_receipt"].contains($0.status.lowercased())
-        }
-        // Manually uploaded receipts with no linked transaction, awaiting coding
-        let manualReceipts = appState.cardReceipts.filter {
-            ["pending_code", "pending_coding"].contains($0.status.lowercased())
-                && $0.linkedTransactionId.isEmpty
-        }
-        // Dedupe by id (txPending wins)
-        var seen = Set<String>()
-        var combined: [CardTransaction] = []
-        for t in txPending { if seen.insert(t.id).inserted { combined.append(t) } }
-        for t in manualReceipts { if seen.insert(t.id).inserted { combined.append(t) } }
-        return combined
-    }
+    private var items: [PendingCodingItem] { appState.pendingCodingItems }
 
-    private var groupedByHolder: [(holderId: String, holderName: String, department: String, items: [CardTransaction])] {
-        let groups = Dictionary(grouping: pending, by: { $0.holderId })
-        return groups.map { (holderId, items) in
+    private var groupedByHolder: [(userId: String, userName: String, department: String, items: [PendingCodingItem])] {
+        let groups = Dictionary(grouping: items, by: { $0.userId })
+        return groups.map { (userId, items) in
             let first = items.first
-            let name = UsersData.byId[holderId]?.fullName ?? first?.holderName ?? holderId
-            let dept = first?.department ?? UsersData.byId[holderId]?.displayDepartment ?? ""
-            return (holderId: holderId, holderName: name, department: dept, items: items.sorted { $0.createdAt > $1.createdAt })
-        }.sorted { $0.holderName < $1.holderName }
+            return (
+                userId: userId,
+                userName: first?.userName ?? userId,
+                department: first?.userDepartment ?? "",
+                items: items.sorted { $0.createdAt > $1.createdAt }
+            )
+        }.sorted { $0.userName < $1.userName }
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                if pending.isEmpty {
-                    VStack(spacing: 8) {
-                        Image(systemName: "doc.text.magnifyingglass").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
-                        Text("Nothing awaiting coding").font(.system(size: 13)).foregroundColor(.secondary)
-                    }.frame(maxWidth: .infinity).padding(.vertical, 50)
-                    .background(Color.white).cornerRadius(10)
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
-                } else {
-                    ForEach(groupedByHolder, id: \.holderId) { group in
-                        holderSection(group)
+        Group {
+            if appState.isLoadingPendingCoding && items.isEmpty {
+                VStack { Spacer(); LoaderView(); Spacer() }
+                    .background(Color.bgBase)
+            } else {
+                ScrollView {
+                    VStack(spacing: 12) {
+                        if items.isEmpty {
+                            VStack(spacing: 12) {
+                                Spacer(minLength: 0)
+                                Image(systemName: "doc.text.magnifyingglass").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
+                                Text("Nothing awaiting coding").font(.system(size: 13)).foregroundColor(.secondary)
+                                Spacer(minLength: 0)
+                            }.frame(maxWidth: .infinity, minHeight: 480)
+                        } else {
+                            ForEach(groupedByHolder, id: \.userId) { group in
+                                holderSection(group)
+                            }
+                        }
                     }
+                    .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 24)
                 }
+                .background(Color.bgBase)
             }
-            .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 24)
         }
-        .background(Color.bgBase)
         .navigationBarTitle(Text("Pending Coding"), displayMode: .inline)
         .onAppear {
-            appState.loadAllCardReceipts()
-            appState.loadCardTransactions()
-            // Default expand on first load
+            appState.loadPendingCoding()
             if expandedHolders.isEmpty, let first = groupedByHolder.first {
-                expandedHolders.insert(first.holderId)
+                expandedHolders.insert(first.userId)
             }
         }
     }
 
     @ViewBuilder
-    private func holderSection(_ group: (holderId: String, holderName: String, department: String, items: [CardTransaction])) -> some View {
-        let isExpanded = expandedHolders.contains(group.holderId)
+    private func holderSection(_ group: (userId: String, userName: String, department: String, items: [PendingCodingItem])) -> some View {
+        let isExpanded = expandedHolders.contains(group.userId)
         let total = group.items.reduce(0) { $0 + $1.amount }
-        let initials = group.holderName.split(separator: " ").compactMap { $0.first.map(String.init) }.prefix(2).joined()
+        let initials = group.userName.split(separator: " ").compactMap { $0.first.map(String.init) }.prefix(2).joined()
         VStack(spacing: 0) {
-            // Header
             Button(action: {
-                if isExpanded { expandedHolders.remove(group.holderId) } else { expandedHolders.insert(group.holderId) }
+                if isExpanded { expandedHolders.remove(group.userId) } else { expandedHolders.insert(group.userId) }
             }) {
                 HStack(spacing: 10) {
                     ZStack {
@@ -1031,7 +1648,7 @@ struct PendingCodingPage: View {
                     }
                     VStack(alignment: .leading, spacing: 1) {
                         HStack(spacing: 6) {
-                            Text(group.holderName).font(.system(size: 13, weight: .bold))
+                            Text(group.userName).font(.system(size: 13, weight: .bold))
                             if !group.department.isEmpty {
                                 Text("— \(group.department)").font(.system(size: 11)).foregroundColor(.secondary)
                             }
@@ -1052,7 +1669,7 @@ struct PendingCodingPage: View {
             if isExpanded {
                 Divider()
                 ForEach(group.items) { item in
-                    NavigationLink(destination: CardTransactionDetailPage(transaction: item, allowEdit: false).environmentObject(appState)) {
+                    NavigationLink(destination: PendingCodingDetailPage(item: item).environmentObject(appState)) {
                         pendingRow(item)
                     }.buttonStyle(PlainButtonStyle())
                     Divider().padding(.leading, 14)
@@ -1063,47 +1680,510 @@ struct PendingCodingPage: View {
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 
-    private func pendingRow(_ tx: CardTransaction) -> some View {
-        let date = (tx.transactionDate > 0 ? tx.transactionDate : tx.createdAt)
-        let dateText = date > 0 ? FormatUtils.formatTimestamp(date) : "—"
-        let user = UsersData.byId[tx.holderId]
+    private func pendingRow(_ item: PendingCodingItem) -> some View {
+        let dateText = item.date > 0 ? FormatUtils.formatTimestamp(item.date) : (item.createdAt > 0 ? FormatUtils.formatTimestamp(item.createdAt) : "—")
+        let user = UsersData.byId[item.userId]
         let ageDays: Int = {
-            guard date > 0 else { return 0 }
-            let secs = (Date().timeIntervalSince1970 * 1000 - Double(date)) / 1000
+            let ref = item.createdAt > 0 ? item.createdAt : item.date
+            guard ref > 0 else { return 0 }
+            let secs = (Date().timeIntervalSince1970 * 1000 - Double(ref)) / 1000
             return max(0, Int(secs / 86400))
         }()
         return VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(tx.merchant.isEmpty ? "—" : tx.merchant)
+                    Text(item.description.isEmpty ? "—" : item.description)
                         .font(.system(size: 13, weight: .semibold)).lineLimit(2)
                     Text(dateText).font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
                 }
                 Spacer(minLength: 6)
                 VStack(alignment: .trailing, spacing: 4) {
-                    Text(FormatUtils.formatGBP(tx.amount))
+                    Text(FormatUtils.formatGBP(item.amount))
                         .font(.system(size: 13, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
-                    Text("Pending Code")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundColor(Color(red: 0.95, green: 0.55, blue: 0.15))
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Color(red: 0.95, green: 0.55, blue: 0.15).opacity(0.12)).cornerRadius(3)
+                    pendingStatusBadge(item.status)
                 }
             }
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(user?.fullName ?? (tx.holderName.isEmpty ? "—" : tx.holderName))
+                    Text(user?.fullName ?? item.userName)
                         .font(.system(size: 11, weight: .semibold))
                     if let d = user?.displayDesignation, !d.isEmpty {
                         Text(d).font(.system(size: 9)).foregroundColor(.secondary)
                     }
                 }
                 Spacer()
+                if !item.processingFlags.isEmpty {
+                    Image(systemName: "flag.fill").font(.system(size: 9)).foregroundColor(.orange)
+                }
+                if item.isUrgent {
+                    Image(systemName: "exclamationmark.circle.fill").font(.system(size: 9)).foregroundColor(.red)
+                }
                 Text("\(ageDays)d").font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary)
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 10)
         .contentShape(Rectangle())
+    }
+
+    private func pendingStatusBadge(_ status: String) -> some View {
+        let (label, color): (String, Color) = {
+            switch status.lowercased() {
+            case "pending_code", "pending_coding", "pending code": return ("Needs Coding", Color(red: 0.05, green: 0.15, blue: 0.42))
+            case "pending_receipt": return ("No Receipt", Color.purple)
+            default:                return (status.replacingOccurrences(of: "_", with: " ").capitalized, Color.gray)
+            }
+        }()
+        return Text(label)
+            .font(.system(size: 8, weight: .bold))
+            .foregroundColor(color)
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(color.opacity(0.12)).cornerRadius(3)
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MARK: - Pending Coding Detail Page
+// ═══════════════════════════════════════════════════════════════════
+
+struct PendingCodingDetailPage: View {
+    let item: PendingCodingItem
+    @EnvironmentObject var appState: POViewModel
+    @Environment(\.presentationMode) var presentationMode
+
+    private var live: PendingCodingItem {
+        appState.pendingCodingItems.first(where: { $0.id == item.id }) ?? item
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+
+                // Header card
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(live.description.isEmpty ? "—" : live.description)
+                                .font(.system(size: 17, weight: .bold)).lineLimit(3)
+                            HStack(spacing: 6) {
+                                Text(live.statusDisplay)
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundColor({
+                                        let s = live.status.lowercased()
+                                        if s == "pending_receipt" { return Color.purple }
+                                        if ["pending_code","pending_coding","pending code"].contains(s) { return Color(red: 0.05, green: 0.15, blue: 0.42) }
+                                        return Color(red: 0.95, green: 0.55, blue: 0.15)
+                                    }())
+                                    .padding(.horizontal, 8).padding(.vertical, 3)
+                                    .background({
+                                        let s = live.status.lowercased()
+                                        if s == "pending_receipt" { return Color.purple.opacity(0.12) }
+                                        if ["pending_code","pending_coding","pending code"].contains(s) { return Color(red: 0.05, green: 0.15, blue: 0.42).opacity(0.12) }
+                                        return Color(red: 0.95, green: 0.55, blue: 0.15).opacity(0.12)
+                                    }())
+                                    .cornerRadius(4)
+                                if live.isUrgent {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "exclamationmark.circle.fill").font(.system(size: 10))
+                                        Text("Urgent").font(.system(size: 10, weight: .semibold))
+                                    }
+                                    .foregroundColor(.red)
+                                    .padding(.horizontal, 8).padding(.vertical, 3)
+                                    .background(Color.red.opacity(0.1)).cornerRadius(4)
+                                }
+                            }
+                        }
+                        Spacer()
+                        Text(FormatUtils.formatGBP(live.amount))
+                            .font(.system(size: 20, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
+                    }
+                    Divider()
+                    HStack(spacing: 8) {
+                        Image(systemName: "person.fill").font(.system(size: 11)).foregroundColor(.secondary)
+                        Text(live.userName).font(.system(size: 12, weight: .semibold))
+                        if !live.userDepartment.isEmpty {
+                            Text("· \(live.userDepartment)").font(.system(size: 12)).foregroundColor(.secondary)
+                        }
+                    }
+                }
+                .padding(14).background(Color.white).cornerRadius(10)
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+
+                // Processing flags
+                if !live.processingFlags.isEmpty {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("PROCESSING FLAGS").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
+                            .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 8)
+                        ForEach(Array(live.processingFlags.enumerated()), id: \.offset) { idx, flag in
+                            let flagColor: Color = {
+                                switch flag.flag?.lowercased() {
+                                case "review": return .purple
+                                case "query":  return .orange
+                                case "deduct": return .red
+                                default:       return .gray
+                                }
+                            }()
+                            HStack(alignment: .top, spacing: 10) {
+                                Image(systemName: "flag.fill").font(.system(size: 12)).foregroundColor(flagColor)
+                                    .frame(width: 20)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(flag.title ?? "Flag").font(.system(size: 13, weight: .semibold))
+                                    if let desc = flag.description, !desc.isEmpty {
+                                        Text(desc).font(.system(size: 11)).foregroundColor(.secondary)
+                                    }
+                                    HStack(spacing: 6) {
+                                        if let pt = flag.processType {
+                                            Text(pt.replacingOccurrences(of: "_", with: " ").capitalized)
+                                                .font(.system(size: 9, weight: .medium))
+                                                .foregroundColor(flagColor)
+                                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                                .background(flagColor.opacity(0.1)).cornerRadius(3)
+                                        }
+                                        if let tv = flag.thresholdValue, let tt = flag.thresholdType {
+                                            let label = tt == "percentage" ? "\(Int(tv))%" : FormatUtils.formatGBP(tv)
+                                            Text("Threshold: \(label)")
+                                                .font(.system(size: 9)).foregroundColor(.secondary)
+                                        }
+                                    }
+                                }
+                                Spacer()
+                            }
+                            .padding(.horizontal, 14).padding(.vertical, 10)
+                            if idx < live.processingFlags.count - 1 { Divider().padding(.leading, 44) }
+                        }
+                    }
+                    .background(Color.white).cornerRadius(10)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.orange.opacity(0.3), lineWidth: 1))
+                }
+
+                // Details
+                VStack(spacing: 0) {
+                    detailRow("Date", live.date > 0 ? FormatUtils.formatTimestamp(live.date) : "—")
+                    Divider().padding(.leading, 14)
+                    detailRow("Status", live.statusDisplay)
+                    if let code = live.nominalCode, !code.isEmpty {
+                        Divider().padding(.leading, 14)
+                        detailRow("Nominal Code", code)
+                    }
+                    if let ep = live.episode, !ep.isEmpty {
+                        Divider().padding(.leading, 14)
+                        detailRow("Episode", ep)
+                    }
+                    if let cd = live.codeDescription, !cd.isEmpty {
+                        Divider().padding(.leading, 14)
+                        detailRow("Code Notes", cd)
+                    }
+                    if let txId = live.transactionId {
+                        Divider().padding(.leading, 14)
+                        detailRow("Transaction ID", txId)
+                    }
+                    if !live.matchStatus.isEmpty {
+                        Divider().padding(.leading, 14)
+                        detailRow("Match Status", live.matchStatus.replacingOccurrences(of: "_", with: " ").capitalized)
+                    }
+                    Divider().padding(.leading, 14)
+                    detailRow("Submitted", live.createdAt > 0 ? FormatUtils.formatTimestamp(live.createdAt) : "—")
+                }
+                .background(Color.white).cornerRadius(10)
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+
+                // Receipt attachment
+                if let att = live.receiptAttachment, let name = att.name, !name.isEmpty {
+                    HStack(spacing: 10) {
+                        Image(systemName: "paperclip").font(.system(size: 14)).foregroundColor(.goldDark)
+                        Text(name).font(.system(size: 13)).lineLimit(1)
+                        Spacer()
+                        Text("Attached").font(.system(size: 10, weight: .semibold)).foregroundColor(.green)
+                    }
+                    .padding(14).background(Color.white).cornerRadius(10)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                }
+
+                // History
+                if !live.history.isEmpty {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("HISTORY").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
+                            .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 8)
+                        ForEach(Array(live.history.enumerated()), id: \.offset) { _, entry in
+                            HStack(alignment: .top, spacing: 10) {
+                                Circle().fill(Color.goldDark).frame(width: 8, height: 8).padding(.top, 4)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(entry.action ?? "").font(.system(size: 12, weight: .semibold))
+                                    Text(entry.actionByName).font(.system(size: 10)).foregroundColor(.secondary)
+                                    if let ts = entry.actionAt, ts > 0 {
+                                        Text(FormatUtils.formatDateTime(ts)).font(.system(size: 9)).foregroundColor(.gray)
+                                    }
+                                }
+                                Spacer()
+                            }.padding(.horizontal, 14).padding(.vertical, 6)
+                        }
+                    }
+                    .background(Color.white).cornerRadius(10)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                }
+            }
+            .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 24)
+        }
+        .background(Color.bgBase)
+        .navigationBarTitle(Text("Coding Detail"), displayMode: .inline)
+        .navigationBarBackButtonHidden(true)
+        .navigationBarItems(leading:
+            Button(action: { presentationMode.wrappedValue.dismiss() }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left").font(.system(size: 14, weight: .semibold))
+                    Text("Back").font(.system(size: 16))
+                }.foregroundColor(.goldDark)
+            }
+        )
+    }
+
+    private func detailRow(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label).font(.system(size: 12)).foregroundColor(.secondary).frame(width: 120, alignment: .leading)
+            Text(value).font(.system(size: 12, weight: .medium)).lineLimit(2)
+            Spacer()
+        }.padding(.horizontal, 14).padding(.vertical, 10)
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MARK: - Accountant Approval Queue Page
+// ═══════════════════════════════════════════════════════════════════
+
+struct AccountantApprovalQueuePage: View {
+    @EnvironmentObject var appState: POViewModel
+
+    @State private var overrideTarget: CardTransaction? = nil
+    @State private var overrideReason: String = ""
+    @State private var isOverriding: Bool = false
+    @State private var showOverrideSheet: Bool = false
+
+    private var items: [CardTransaction] { appState.cardApprovalQueueItems }
+
+    private var groupedByStatus: [(status: String, label: String, color: Color, items: [CardTransaction])] {
+        let order: [(String, String, Color)] = [
+            ("awaiting_approval", "Awaiting Approval", .goldDark),
+            ("escalated",         "Escalated",         .red),
+            ("under_review",      "Under Review",      .purple),
+        ]
+        return order.compactMap { (status, label, color) in
+            let group = items.filter { $0.status.lowercased() == status }
+            guard !group.isEmpty else { return nil }
+            return (status: status, label: label, color: color, items: group.sorted { $0.transactionDate > $1.transactionDate })
+        }
+    }
+
+    var body: some View {
+        Group {
+            if appState.isLoadingCardApprovals && items.isEmpty {
+                VStack { Spacer(); LoaderView(); Spacer() }
+                    .background(Color.bgBase)
+            } else {
+                ScrollView {
+                    VStack(spacing: 12) {
+                        if items.isEmpty {
+                            VStack(spacing: 12) {
+                                Spacer(minLength: 0)
+                                Image(systemName: "checkmark.shield").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
+                                Text("No items awaiting approval").font(.system(size: 13)).foregroundColor(.secondary)
+                                Spacer(minLength: 0)
+                            }.frame(maxWidth: .infinity, minHeight: 480)
+                        } else {
+                            ForEach(groupedByStatus, id: \.status) { group in
+                                approvalSection(group)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 24)
+                }
+                .background(Color.bgBase)
+            }
+        }
+        .navigationBarTitle(Text("Approval Queue"), displayMode: .inline)
+        .onAppear { appState.loadCardApprovalQueue() }
+        .sheet(isPresented: $showOverrideSheet) {
+            overrideSheet
+        }
+    }
+
+    @ViewBuilder
+    private func approvalSection(_ group: (status: String, label: String, color: Color, items: [CardTransaction])) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Circle().fill(group.color).frame(width: 8, height: 8)
+                Text(group.label.uppercased())
+                    .font(.system(size: 10, weight: .bold)).tracking(0.5)
+                Text("\(group.items.count)")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(group.color).cornerRadius(8)
+                Spacer()
+                Text(FormatUtils.formatGBP(group.items.reduce(0) { $0 + $1.amount }))
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced)).foregroundColor(group.color)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            .background(group.color.opacity(0.06))
+
+            Divider()
+            ForEach(group.items) { tx in
+                HStack(spacing: 0) {
+                    NavigationLink(destination: CardTransactionDetailPage(transaction: tx).environmentObject(appState)) {
+                        approvalRow(tx, color: group.color)
+                    }.buttonStyle(PlainButtonStyle())
+
+                    // Override button
+                    Button(action: {
+                        overrideTarget = tx
+                        overrideReason = ""
+                        showOverrideSheet = true
+                    }) {
+                        VStack(spacing: 3) {
+                            Image(systemName: "person.badge.shield.checkmark.fill")
+                                .font(.system(size: 13))
+                            Text("Override")
+                                .font(.system(size: 9, weight: .bold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(width: 64)
+                        .frame(maxHeight: .infinity)
+                        .background(Color(red: 0.95, green: 0.55, blue: 0.15))
+                    }.buttonStyle(BorderlessButtonStyle())
+                }
+                .frame(minHeight: 64)
+                if tx.id != group.items.last?.id { Divider().padding(.leading, 14) }
+            }
+        }
+        .background(Color.white).cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(group.color.opacity(0.25), lineWidth: 1))
+        .clipped()
+    }
+
+    private func approvalRow(_ tx: CardTransaction, color: Color) -> some View {
+        let dateText = tx.transactionDate > 0 ? FormatUtils.formatTimestamp(tx.transactionDate)
+                     : tx.createdAt > 0 ? FormatUtils.formatTimestamp(tx.createdAt) : "—"
+        let user = UsersData.byId[tx.holderId]
+        let ageDays: Int = {
+            let ref = tx.createdAt > 0 ? tx.createdAt : tx.transactionDate
+            guard ref > 0 else { return 0 }
+            let secs = (Date().timeIntervalSince1970 * 1000 - Double(ref)) / 1000
+            return max(0, Int(secs / 86400))
+        }()
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(tx.merchant.isEmpty ? (tx.description.isEmpty ? "—" : tx.description) : tx.merchant)
+                            .font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                        if tx.isUrgent {
+                            Text("Urgent")
+                                .font(.system(size: 8, weight: .bold)).foregroundColor(.red)
+                                .padding(.horizontal, 5).padding(.vertical, 2)
+                                .background(Color.red.opacity(0.1)).cornerRadius(3)
+                        }
+                    }
+                    Text(dateText).font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
+                }
+                Spacer(minLength: 6)
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(FormatUtils.formatGBP(tx.amount))
+                        .font(.system(size: 13, weight: .bold, design: .monospaced)).foregroundColor(color)
+                    if !tx.nominalCode.isEmpty {
+                        Text(tx.nominalCode)
+                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                            .foregroundColor(.blue)
+                            .padding(.horizontal, 5).padding(.vertical, 2)
+                            .background(Color.blue.opacity(0.08)).cornerRadius(3)
+                    }
+                }
+            }
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(user?.fullName ?? (tx.holderName.isEmpty ? "—" : tx.holderName))
+                        .font(.system(size: 11, weight: .semibold))
+                    if !tx.department.isEmpty {
+                        Text(tx.department).font(.system(size: 9)).foregroundColor(.secondary)
+                    }
+                }
+                Spacer()
+                if tx.hasReceipt {
+                    Image(systemName: "paperclip").font(.system(size: 10)).foregroundColor(.green)
+                }
+                Text("\(ageDays)d").font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary)
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .contentShape(Rectangle())
+    }
+
+    private var overrideSheet: some View {
+        NavigationView {
+            VStack(alignment: .leading, spacing: 20) {
+                if let tx = overrideTarget {
+                    // Item summary
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("ITEM").font(.system(size: 10, weight: .bold)).foregroundColor(.secondary).tracking(0.5)
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(tx.merchant.isEmpty ? tx.description : tx.merchant)
+                                    .font(.system(size: 14, weight: .semibold))
+                                Text(tx.holderName.isEmpty ? "—" : tx.holderName)
+                                    .font(.system(size: 12)).foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Text(FormatUtils.formatGBP(tx.amount))
+                                .font(.system(size: 15, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
+                        }
+                        .padding(14).background(Color(.systemGray6)).cornerRadius(10)
+                    }
+
+                    // Reason field
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("REASON FOR OVERRIDE").font(.system(size: 10, weight: .bold)).foregroundColor(.secondary).tracking(0.5)
+                        TextField("e.g. Approver unavailable, deadline critical…", text: $overrideReason)
+                            .font(.system(size: 13))
+                            .padding(12)
+                            .background(Color.white)
+                            .cornerRadius(10)
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                    }
+
+                    Spacer()
+
+                    // Confirm button
+                    Button(action: submitOverride) {
+                        HStack(spacing: 6) {
+                            if isOverriding {
+                                ActivityIndicator(isAnimating: true)
+                            }
+                            Text(isOverriding ? "Overriding…" : "Confirm Override")
+                                .font(.system(size: 15, weight: .bold))
+                        }
+                        .frame(maxWidth: .infinity).padding(.vertical, 14)
+                        .background(overrideReason.trimmingCharacters(in: .whitespaces).isEmpty || isOverriding
+                                    ? Color.gray.opacity(0.3) : Color(red: 0.95, green: 0.55, blue: 0.15))
+                        .foregroundColor(overrideReason.trimmingCharacters(in: .whitespaces).isEmpty || isOverriding
+                                         ? .gray : .white)
+                        .cornerRadius(12)
+                    }
+                    .disabled(overrideReason.trimmingCharacters(in: .whitespaces).isEmpty || isOverriding)
+                }
+            }
+            .padding(20)
+            .background(Color.bgBase.edgesIgnoringSafeArea(.all))
+            .navigationBarTitle("Override Approval", displayMode: .inline)
+            .navigationBarItems(leading: Button("Cancel") {
+                showOverrideSheet = false
+            }.foregroundColor(.goldDark))
+        }
+    }
+
+    private func submitOverride() {
+        guard let tx = overrideTarget, !overrideReason.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        isOverriding = true
+        appState.overrideApprovalItem(tx.id, reason: overrideReason) { success in
+            isOverriding = false
+            if success { showOverrideSheet = false }
+        }
     }
 }
 
@@ -1121,22 +2201,27 @@ struct TopUpToDoPage: View {
             .sorted { $0.createdAt < $1.createdAt }  // oldest first
     }
     private var history: [TopUpItem] {
-        appState.topUpQueue.filter { ["completed", "skipped"].contains($0.status.lowercased()) }
+        // Include partials alongside completed/skipped (partial renders with Skipped label)
+        appState.topUpQueue.filter { ["completed", "skipped", "partial"].contains($0.status.lowercased()) }
             .sorted { $0.createdAt > $1.createdAt }
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                // PENDING TOP-UPS section
-                pendingSection
-
-                // COMPLETED & SKIPPED section
-                historySection
+        Group {
+            if appState.isLoadingTopUps && appState.topUpQueue.isEmpty {
+                VStack { Spacer(); LoaderView(); Spacer() }
+                    .background(Color.bgBase)
+            } else {
+                ScrollView {
+                    VStack(spacing: 12) {
+                        pendingSection
+                        historySection
+                    }
+                    .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 24)
+                }
+                .background(Color.bgBase)
             }
-            .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 24)
         }
-        .background(Color.bgBase)
         .navigationBarTitle(Text("Top-Up To Do"), displayMode: .inline)
         .onAppear { appState.loadTopUpQueue() }
     }
@@ -1314,13 +2399,9 @@ struct TopUpToDoPage: View {
     private func historyRow(_ item: TopUpItem) -> some View {
         let user = UsersData.byId[item.userId]
         let teal = Color(red: 0.0, green: 0.6, blue: 0.5)
-        let statusColor: Color = {
-            switch item.status.lowercased() {
-            case "completed": return teal
-            case "partial": return Color(red: 0.95, green: 0.55, blue: 0.15)
-            default: return .gray
-            }
-        }()
+        let s = item.status.lowercased()
+        let statusColor: Color = s == "completed" ? teal : .gray
+        let statusLabel: String = s == "completed" ? "Completed" : "Skipped"
         let dateText = item.updatedAt > 0 ? FormatUtils.formatTimestamp(item.updatedAt)
                       : (item.createdAt > 0 ? FormatUtils.formatTimestamp(item.createdAt) : "—")
         return VStack(alignment: .leading, spacing: 8) {
@@ -1346,7 +2427,7 @@ struct TopUpToDoPage: View {
                 Spacer()
                 HStack(spacing: 3) {
                     Circle().fill(statusColor).frame(width: 6, height: 6)
-                    Text(item.statusDisplay).font(.system(size: 10, weight: .semibold)).foregroundColor(statusColor)
+                    Text(statusLabel).font(.system(size: 10, weight: .semibold)).foregroundColor(statusColor)
                 }
                 Text(dateText).font(.system(size: 9, design: .monospaced)).foregroundColor(.gray)
             }
@@ -1362,6 +2443,7 @@ struct TopUpToDoPage: View {
 struct AllTransactionsPage: View {
     @EnvironmentObject var appState: POViewModel
     @State private var searchText = ""
+    @State private var isSearching = false
     @State private var activeFilter: String = "All"
     @State private var activeCard: String = "All Cards"
     @State private var activeDept: String = "All Dept"
@@ -1419,40 +2501,69 @@ struct AllTransactionsPage: View {
                 statCard(label: "TOTAL VALUE", value: FormatUtils.formatGBP(totalGross))
             }.frame(height: 64)
 
-            // Filter + search
-            VStack(spacing: 10) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        dropdown(label: activeFilter, icon: "line.3.horizontal.decrease", action: { showFilterSheet = true })
-                            .compatActionSheet(title: "Status", isPresented: $showFilterSheet, buttons:
-                                filters.map { f in CompatActionSheetButton.default(f == activeFilter ? "\(f) ✓" : f) { activeFilter = f } } + [.cancel()]
-                            )
-                        dropdown(label: activeCard, icon: "creditcard", action: { showCardSheet = true })
-                            .compatActionSheet(title: "Card", isPresented: $showCardSheet, buttons:
-                                cardOptions.map { c in CompatActionSheetButton.default(c == activeCard ? "\(c) ✓" : c) { activeCard = c } } + [.cancel()]
-                            )
-                        dropdown(label: activeDept, icon: "building.2", action: { showDeptSheet = true })
-                            .compatActionSheet(title: "Department", isPresented: $showDeptSheet, buttons:
-                                deptOptions.map { d in CompatActionSheetButton.default(d == activeDept ? "\(d) ✓" : d) { activeDept = d } } + [.cancel()]
-                            )
-                    }
-                }
+            // Filters / Search row — search icon expands into full search field, hiding chips
+            if isSearching {
                 HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass").foregroundColor(.gray).font(.system(size: 14))
-                    TextField("Search merchant, holder, code…", text: $searchText).font(.system(size: 13))
-                }.padding(10).background(Color.white).cornerRadius(8)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 13)).foregroundColor(.gray)
+                    TextField("Search merchant, holder, code…", text: $searchText)
+                        .font(.system(size: 13))
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                    if !searchText.isEmpty {
+                        Button(action: { searchText = "" }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 15)).foregroundColor(Color(.systemGray3))
+                        }.buttonStyle(BorderlessButtonStyle())
+                    }
+                    Button(action: { withAnimation(.easeInOut(duration: 0.22)) { isSearching = false; searchText = "" } }) {
+                        Text("Cancel")
+                            .font(.system(size: 13, weight: .semibold)).foregroundColor(.goldDark)
+                    }.buttonStyle(BorderlessButtonStyle())
+                }
+                .padding(.horizontal, 12).padding(.vertical, 9)
+                .background(Color.white).cornerRadius(8)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.goldDark, lineWidth: 1.5))
+            } else {
+                HStack(spacing: 8) {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            dropdown(label: activeFilter, icon: "line.3.horizontal.decrease", action: { showFilterSheet = true })
+                                .compatActionSheet(title: "Status", isPresented: $showFilterSheet, buttons:
+                                    filters.map { f in CompatActionSheetButton.default(f == activeFilter ? "\(f) ✓" : f) { activeFilter = f } } + [.cancel()]
+                                )
+                            dropdown(label: activeCard, icon: "creditcard", action: { showCardSheet = true })
+                                .compatActionSheet(title: "Card", isPresented: $showCardSheet, buttons:
+                                    cardOptions.map { c in CompatActionSheetButton.default(c == activeCard ? "\(c) ✓" : c) { activeCard = c } } + [.cancel()]
+                                )
+                            dropdown(label: activeDept, icon: "building.2", action: { showDeptSheet = true })
+                                .compatActionSheet(title: "Department", isPresented: $showDeptSheet, buttons:
+                                    deptOptions.map { d in CompatActionSheetButton.default(d == activeDept ? "\(d) ✓" : d) { activeDept = d } } + [.cancel()]
+                                )
+                        }
+                    }
+                    // Search icon — always pinned at trailing edge
+                    Button(action: { withAnimation(.easeInOut(duration: 0.22)) { isSearching = true } }) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 13, weight: .medium)).foregroundColor(.goldDark)
+                            .padding(.horizontal, 10).padding(.vertical, 8)
+                            .background(Color.white).cornerRadius(6)
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
+                    }.buttonStyle(BorderlessButtonStyle())
+                }
             }
 
             // Scrollable rows section
             ScrollView {
-                if filtered.isEmpty {
-                    VStack(spacing: 8) {
+                if appState.isLoadingCardTxns && appState.cardTransactions.isEmpty {
+                    LoaderView()
+                } else if filtered.isEmpty {
+                    VStack(spacing: 12) {
+                        Spacer(minLength: 0)
                         Image(systemName: "tray").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
                         Text("No transactions").font(.system(size: 13)).foregroundColor(.secondary)
-                    }.frame(maxWidth: .infinity).padding(.vertical, 40)
-                    .background(Color.white).cornerRadius(10)
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                        Spacer(minLength: 0)
+                    }.frame(maxWidth: .infinity, minHeight: 480)
                 } else {
                     VStack(spacing: 10) {
                         ForEach(filtered) { tx in
@@ -1721,11 +2832,12 @@ struct AllTransactionsRow: View {
     private var statusColors: (Color, Color) {
         let teal = Color(red: 0.0, green: 0.6, blue: 0.5)
         let orange = Color(red: 0.95, green: 0.55, blue: 0.15)
+        let navy  = Color(red: 0.05, green: 0.15, blue: 0.42)
         switch tx.status.lowercased() {
         case "approved", "matched", "coded": return (teal, teal.opacity(0.12))
         case "posted": return (teal, teal.opacity(0.12))
         case "pending", "pending_receipt": return (orange, orange.opacity(0.12))
-        case "pending_coding", "pending_code": return (orange, orange.opacity(0.12))
+        case "pending_coding", "pending_code", "pending code": return (navy, navy.opacity(0.12))
         case "escalated": return (.red, Color.red.opacity(0.12))
         default: return (.goldDark, Color.gold.opacity(0.15))
         }
@@ -1805,27 +2917,71 @@ struct AllTransactionsRow: View {
 
 struct CardRegisterPage: View {
     @EnvironmentObject var appState: POViewModel
-    @State private var selectedCard: ExpenseCard?
-    @State private var navigateToCardDetail = false
+    @State private var navigateToCardId: String? = nil
     @State private var navigateToRequestCard = false
+    @State private var cardToAssign: ExpenseCard? = nil
+    @State private var navigateToAssign = false
+    @State private var rejectTargetCard: ExpenseCard? = nil
+    @State private var rejectCardReason: String = ""
+    @State private var showInlineRejectSheet = false
+
+    private var tierCount: Int { appState.cardTierConfigRows.count }
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             ScrollView {
                 VStack(spacing: 12) {
-                    if appState.userCards.isEmpty {
+
+                    // MARK: Cards Section
+                    if appState.isLoadingCards && appState.userCards.isEmpty {
+                        LoaderView()
+                    } else if appState.userCards.isEmpty {
                         VStack(spacing: 12) {
+                            Spacer(minLength: 0)
                             Image(systemName: "creditcard").font(.system(size: 32)).foregroundColor(.gray.opacity(0.3))
                             Text("No cards yet").font(.system(size: 14, weight: .semibold)).foregroundColor(.secondary)
                             Text("Tap Request Card to add one").font(.system(size: 12)).foregroundColor(.gray)
-                        }.frame(maxWidth: .infinity).padding(.vertical, 40)
-                        .background(Color.white).cornerRadius(10)
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                            Spacer(minLength: 0)
+                        }.frame(maxWidth: .infinity, minHeight: 480)
                     } else {
+                        // Hidden NavigationLink for Assign Physical Card
+                        NavigationLink(
+                            destination: Group {
+                                if let c = cardToAssign {
+                                    AssignPhysicalCardPage(card: c).environmentObject(appState)
+                                } else { EmptyView() }
+                            },
+                            isActive: $navigateToAssign
+                        ) { EmptyView() }
+                        .frame(width: 0, height: 0).hidden()
+
                         ForEach(appState.userCards) { card in
-                            Button(action: { selectedCard = card; navigateToCardDetail = true }) {
-                                CardRow(card: card, isAccountant: true)
-                            }.buttonStyle(PlainButtonStyle())
+                            ZStack(alignment: .topLeading) {
+                                NavigationLink(
+                                    destination: CardDetailPage(card: card).environmentObject(appState),
+                                    tag: card.id,
+                                    selection: $navigateToCardId
+                                ) { EmptyView() }
+                                .frame(width: 0, height: 0).hidden()
+
+                                CardRow(
+                                    card: card,
+                                    isAccountant: true,
+                                    tierCount: tierCount,
+                                    resolvedBankName: {
+                                        if let bankId = card.bankAccount?.id, !bankId.isEmpty {
+                                            return appState.bankAccounts.first { $0.id == bankId }?.name
+                                        }
+                                        return nil
+                                    }(),
+                                    onAssignPhysical: nil,
+                                    onApprove: nil,
+                                    onReject: nil,
+                                    onOverride: nil
+                                )
+                                .contentShape(Rectangle())
+                                .onTapGesture { navigateToCardId = card.id }
+                            }
                         }
                     }
                 }
@@ -1845,18 +3001,137 @@ struct CardRegisterPage: View {
         }
         .background(Color.bgBase)
         .navigationBarTitle(Text("Card Register"), displayMode: .inline)
-        .background(
-            Group {
-                NavigationLink(destination: Group {
-                    if let c = selectedCard { CardDetailPage(card: c).environmentObject(appState) }
-                    else { EmptyView() }
-                }, isActive: $navigateToCardDetail) { EmptyView() }.frame(width: 0, height: 0).hidden()
-
-                NavigationLink(destination: RequestCardPage().environmentObject(appState),
-                               isActive: $navigateToRequestCard) { EmptyView() }.frame(width: 0, height: 0).hidden()
+        .sheet(isPresented: $showInlineRejectSheet, onDismiss: { rejectCardReason = "" }) {
+            NavigationView {
+                ZStack {
+                    Color.bgBase.edgesIgnoringSafeArea(.all)
+                    VStack(alignment: .leading, spacing: 16) {
+                        if let c = rejectTargetCard {
+                            Text("Reject card request from \(c.holderFullName)")
+                                .font(.system(size: 15, weight: .semibold))
+                        }
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Reason").font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
+                            TextField("Enter reason…", text: $rejectCardReason)
+                                .font(.system(size: 14)).padding(10)
+                                .background(Color.white).cornerRadius(8)
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                        }
+                        Spacer()
+                    }.padding()
+                }
+                .navigationBarTitle(Text("Reject Card"), displayMode: .inline)
+                .navigationBarItems(
+                    leading: Button("Cancel") { showInlineRejectSheet = false }.foregroundColor(.goldDark),
+                    trailing: Button("Reject") {
+                        let reason = rejectCardReason.trimmingCharacters(in: .whitespaces)
+                        guard !reason.isEmpty, let c = rejectTargetCard else { return }
+                        appState.rejectCard(c, reason: reason)
+                        showInlineRejectSheet = false
+                    }.foregroundColor(.red).font(.system(size: 16, weight: .bold))
+                )
             }
+        }
+        .background(
+            NavigationLink(destination: RequestCardPage().environmentObject(appState),
+                           isActive: $navigateToRequestCard) { EmptyView() }.frame(width: 0, height: 0).hidden()
         )
-        .onAppear { appState.loadUserCards() }
+        .onAppear {
+            appState.loadUserCards()
+            if appState.bankAccounts.isEmpty { appState.loadBankAccounts() }
+        }
+    }
+}
+
+struct BankAccountRow: View {
+    let account: ProductionBankAccount
+    let isExpanded: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button(action: onTap) {
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(Color(red: 0.13, green: 0.37, blue: 0.8).opacity(0.1))
+                            .frame(width: 36, height: 36)
+                        Image(systemName: "building.columns.fill")
+                            .font(.system(size: 15))
+                            .foregroundColor(Color(red: 0.13, green: 0.37, blue: 0.8))
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(account.name)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.primary)
+                        Text(account.accountHolderName)
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("••\(String(account.accountNumber.suffix(4)))")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.primary)
+                        if let sc = account.sortCode {
+                            Text(sc)
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+            }
+            .buttonStyle(PlainButtonStyle())
+
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 0) {
+                    Divider()
+                    VStack(spacing: 0) {
+                        if let iban = account.ibanNumber, !iban.isEmpty {
+                            bankDetailRow(label: "IBAN", value: iban)
+                        }
+                        if let swift = account.swiftCode, !swift.isEmpty {
+                            bankDetailRow(label: "SWIFT / BIC", value: swift)
+                        }
+                        if let nominal = account.nominalCode, !nominal.isEmpty {
+                            bankDetailRow(label: "Nominal Code", value: nominal)
+                        }
+                        if let ap = account.accPayableCode, !ap.isEmpty {
+                            bankDetailRow(label: "A/P Code", value: ap)
+                        }
+                        if let prefix = account.paymentPrefix, !prefix.isEmpty {
+                            bankDetailRow(label: "Payment Prefix", value: prefix)
+                        }
+                        ForEach(account.additionalDetails, id: \.field) { detail in
+                            bankDetailRow(label: detail.field, value: detail.value)
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(Color(UIColor.secondarySystemBackground))
+                }
+            }
+        }
+    }
+
+    private func bankDetailRow(label: String, value: String) -> some View {
+        HStack(alignment: .top) {
+            Text(label)
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+                .frame(width: 110, alignment: .leading)
+            Text(value)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.primary)
+                .multilineTextAlignment(.leading)
+            Spacer()
+        }
+        .padding(.vertical, 5)
     }
 }
 
@@ -1930,50 +3205,50 @@ struct ReceiptsTabView: View {
         ZStack(alignment: .bottomTrailing) {
             Color.bgBase.edgesIgnoringSafeArea(.all)
             VStack(spacing: 0) {
-                // Filter + Search bar
-                VStack(spacing: 10) {
-                    HStack(spacing: 8) {
-                        Button(action: { showFilterSheet = true }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "line.3.horizontal.decrease")
-                                    .font(.system(size: 10, weight: .medium)).foregroundColor(.goldDark)
-                                Text(activeFilter.rawValue)
-                                    .font(.system(size: 12, weight: .semibold)).foregroundColor(.primary).lineLimit(1)
-                                Image(systemName: "chevron.down")
-                                    .font(.system(size: 8, weight: .medium)).foregroundColor(.gray)
-                            }
-                            .padding(.horizontal, 12).padding(.vertical, 8)
-                            .background(Color.white).cornerRadius(6)
-                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(BorderlessButtonStyle())
-                        .compatActionSheet(title: "Filter by Status", isPresented: $showFilterSheet, buttons:
-                            ReceiptFilter.allCases.map { filter in
-                                let label = filter == activeFilter ? "\(filter.rawValue) ✓" : filter.rawValue
-                                return CompatActionSheetButton.default(label) { activeFilter = filter }
-                            } + [.cancel()]
-                        )
-                        Spacer()
-                    }
-
+                // Search + Filter in one line
+                HStack(spacing: 8) {
                     HStack(spacing: 8) {
                         Image(systemName: "magnifyingglass").foregroundColor(.gray).font(.system(size: 14))
                         TextField("Search receipts…", text: $searchText).font(.system(size: 14))
-                    }.padding(10).background(Color.white).cornerRadius(8)
+                    }
+                    .padding(10).background(Color.white).cornerRadius(8)
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+
+                    Button(action: { showFilterSheet = true }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "line.3.horizontal.decrease")
+                                .font(.system(size: 10, weight: .medium)).foregroundColor(.goldDark)
+                            Text(activeFilter.rawValue)
+                                .font(.system(size: 12, weight: .semibold)).foregroundColor(.primary).lineLimit(1)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 8, weight: .medium)).foregroundColor(.gray)
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 10)
+                        .background(Color.white).cornerRadius(8)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
+                    .compatActionSheet(title: "Filter by Status", isPresented: $showFilterSheet, buttons:
+                        ReceiptFilter.allCases.map { filter in
+                            let label = filter == activeFilter ? "\(filter.rawValue) ✓" : filter.rawValue
+                            return CompatActionSheetButton.default(label) { activeFilter = filter }
+                        } + [.cancel()]
+                    )
                 }
                 .padding(.horizontal, 16).padding(.top, 12)
 
                 ScrollView {
                     VStack(spacing: 10) {
-                        if filtered.isEmpty {
-                            VStack(spacing: 8) {
+                        if appState.isLoadingReceipts && appState.myCardReceipts.isEmpty {
+                            LoaderView()
+                        } else if filtered.isEmpty {
+                            VStack(spacing: 12) {
+                                Spacer(minLength: 0)
                                 Image(systemName: "doc.text").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
                                 Text("No transactions found").font(.system(size: 13)).foregroundColor(.secondary)
-                            }.frame(maxWidth: .infinity).padding(.vertical, 40)
-                            .background(Color.white).cornerRadius(10)
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                                Spacer(minLength: 0)
+                            }.frame(maxWidth: .infinity, minHeight: 480)
                         } else {
                             ForEach(filtered) { tx in
                                 CardTransactionRow(
@@ -2042,6 +3317,10 @@ struct ReceiptsTabView: View {
                 secondaryButton: .cancel { deleteTarget = nil }
             )
         }
+        .onAppear {
+            // Receipts tab loads its own data only
+            appState.loadMyCardReceipts()
+        }
     }
 }
 
@@ -2060,14 +3339,16 @@ struct CardTabView: View {
             Color.bgBase.edgesIgnoringSafeArea(.all)
             ScrollView {
                 VStack(spacing: 12) {
-                    if appState.userCards.isEmpty {
+                    if appState.isLoadingCards && appState.userCards.isEmpty {
+                        LoaderView()
+                    } else if appState.userCards.isEmpty {
                         VStack(spacing: 12) {
+                            Spacer(minLength: 0)
                             Image(systemName: "creditcard").font(.system(size: 32)).foregroundColor(.gray.opacity(0.3))
                             Text("No cards yet").font(.system(size: 14, weight: .semibold)).foregroundColor(.secondary)
                             Text("Request a new card to get started").font(.system(size: 12)).foregroundColor(.gray)
-                        }.frame(maxWidth: .infinity).padding(.vertical, 40)
-                        .background(Color.white).cornerRadius(10)
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                            Spacer(minLength: 0)
+                        }.frame(maxWidth: .infinity, minHeight: 480)
                     } else {
                         ForEach(appState.userCards) { card in
                             Button(action: {
@@ -2101,6 +3382,7 @@ struct CardTabView: View {
                 }, isActive: $navigateToCardDetail) { EmptyView() }.frame(width: 0, height: 0).hidden()
             }
         )
+        .onAppear { appState.loadUserCards() }
     }
 }
 
@@ -2111,120 +3393,475 @@ struct CardTabView: View {
 struct CardDetailPage: View {
     let card: ExpenseCard
     @EnvironmentObject var appState: POViewModel
+    @Environment(\.presentationMode) var presentationMode
 
-    private var statusColors: (Color, Color) {
-        switch card.status {
-        case "active": return (.green, Color.green.opacity(0.12))
-        case "suspended": return (.red, Color.red.opacity(0.12))
-        case "pending", "approved", "override": return (.goldDark, Color.gold.opacity(0.15))
-        case "rejected": return (.red, Color.red.opacity(0.12))
-        default: return (.gray, Color.gray.opacity(0.12))
+    @State private var liveCard: ExpenseCard? = nil
+    @State private var showRejectSheet = false
+    @State private var rejectReason = ""
+    @State private var showCardNumber = false
+    @State private var navigateToAssign = false
+
+    private var displayCard: ExpenseCard { liveCard ?? card }
+    private var isAccountant: Bool { appState.currentUser?.isAccountant ?? false }
+    private var isPendingApproval: Bool { ["pending", "approved"].contains(displayCard.status) }
+
+    private var totalTiers: Int {
+        let cfg = ApprovalHelpers.resolveConfig(appState.cardTierConfigRows, deptId: displayCard.departmentId, amount: displayCard.monthlyLimit)
+            ?? ApprovalHelpers.resolveConfig(appState.cardTierConfigRows, deptId: nil, amount: displayCard.monthlyLimit)
+            ?? ApprovalHelpers.resolveConfig(appState.cardTierConfigRows, deptId: nil)
+        let fromConfig = ApprovalHelpers.getTotalTiers(cfg)
+        if fromConfig > 0 { return fromConfig }
+        let maxApproved = displayCard.approvals.map { $0.tierNumber }.max() ?? 0
+        return max(maxApproved + 1, 2)
+    }
+
+    private var approverName: String {
+        guard let id = displayCard.approvedBy, !id.isEmpty else { return "" }
+        return UsersData.byId[id]?.fullName ?? id
+    }
+
+    private var resolvedBankAccount: ProductionBankAccount? {
+        if let bankId = displayCard.bankAccount?.id, !bankId.isEmpty {
+            return appState.bankAccounts.first { $0.id == bankId }
         }
+        return nil
+    }
+
+    private var resolvedBankName: String {
+        resolvedBankAccount?.name ?? displayCard.bankName
+    }
+
+    private var resolvedSortCode: String {
+        resolvedBankAccount?.sortCode ?? ""
+    }
+
+    private var resolvedAccountNumber: String {
+        let num = resolvedBankAccount?.accountNumber ?? ""
+        guard !num.isEmpty else { return "—" }
+        if num.count > 4 {
+            let masked = String(repeating: "•", count: num.count - 4)
+            return masked + num.suffix(4)
+        }
+        return num
     }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                // Header card
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Image(systemName: "creditcard.fill").font(.system(size: 22)).foregroundColor(.goldDark)
-                            .frame(width: 44, height: 44).background(Color.gold.opacity(0.15)).cornerRadius(8)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(card.holderName.isEmpty ? "Card" : card.holderName)
-                                .font(.system(size: 16, weight: .bold))
-                            if !card.department.isEmpty {
-                                Text(card.department).font(.system(size: 12)).foregroundColor(.secondary)
+            VStack(alignment: .leading, spacing: 0) {
+
+                    // ── Card number + holder subtitle ──
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(alignment: .center, spacing: 10) {
+                            let fullNumber = displayCard.digitalCardNumber ?? displayCard.physicalCardNumber
+                            if showCardNumber, let num = fullNumber, !num.isEmpty {
+                                Text(formatCardNum(num))
+                                    .font(.system(size: 20, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.goldDark)
+                            } else {
+                                HStack(spacing: 4) {
+                                    Text("•••• •••• ••••").font(.system(size: 20, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
+                                    Text(displayCard.lastFour.isEmpty ? "——" : displayCard.lastFour)
+                                        .font(.system(size: 20, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
+                                }
+                            }
+                            Button(action: { showCardNumber.toggle() }) {
+                                Image(systemName: showCardNumber ? "eye.slash.fill" : "eye.fill")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(showCardNumber ? .secondary : .goldDark)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                        let subtitle = [displayCard.holderFullName, displayCard.holderDesignation, resolvedBankName]
+                            .filter { !$0.isEmpty }.joined(separator: " · ")
+                        if !subtitle.isEmpty {
+                            Text(subtitle).font(.system(size: 13)).foregroundColor(.secondary)
+                        }
+                    }
+                    .padding(.horizontal, 20).padding(.top, 20).padding(.bottom, 18)
+
+                    // ── Stats: Card Limit | Available | Total Spent ──
+                    HStack(spacing: 0) {
+                        statCol("CARD LIMIT",   FormatUtils.formatGBP(displayCard.monthlyLimit),   .goldDark)
+                        statCol("AVAILABLE",    FormatUtils.formatGBP(displayCard.currentBalance), Color(red: 0, green: 0.6, blue: 0.5))
+                        statCol("TOTAL SPENT",  FormatUtils.formatGBP(displayCard.spentAmount),    .primary)
+                    }
+                    .padding(.horizontal, 20).padding(.bottom, 14)
+
+                    // ── Utilisation bar (only when a limit is set) ──
+                    if displayCard.monthlyLimit > 0 {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text("UTILISATION").font(.system(size: 10, weight: .semibold)).foregroundColor(.secondary).tracking(0.5)
+                                Spacer()
+                                Text("\(Int(displayCard.spendPercent * 100))%").font(.system(size: 10, weight: .semibold)).foregroundColor(.secondary)
+                            }
+                            GeometryReader { geo in
+                                ZStack(alignment: .leading) {
+                                    RoundedRectangle(cornerRadius: 3).fill(Color(.systemGray5)).frame(height: 6)
+                                    RoundedRectangle(cornerRadius: 3)
+                                        .fill(displayCard.spendPercent > 0.8 ? Color.red : Color.goldDark)
+                                        .frame(width: max(geo.size.width * CGFloat(min(displayCard.spendPercent, 1.0)), 0), height: 6)
+                                }
+                            }.frame(height: 6)
+                            HStack {
+                                Text("Spent: \(FormatUtils.formatGBP(displayCard.spentAmount))").font(.system(size: 10)).foregroundColor(.secondary)
+                                Spacer()
+                                Text("Limit: \(FormatUtils.formatGBP(displayCard.monthlyLimit))").font(.system(size: 10)).foregroundColor(.secondary)
                             }
                         }
-                        Spacer()
-                        let (fg, bg) = statusColors
-                        Text(card.statusDisplay(isAccountant: appState.currentUser?.isAccountant ?? false))
-                            .font(.system(size: 10, weight: .bold)).foregroundColor(fg)
-                            .padding(.horizontal, 8).padding(.vertical, 4)
-                            .background(bg).cornerRadius(4)
+                        .padding(.horizontal, 20).padding(.bottom, 20)
                     }
-                    if !card.lastFour.isEmpty {
-                        Text("•••• •••• •••• \(card.lastFour)")
-                            .font(.system(size: 18, weight: .bold, design: .monospaced))
-                            .foregroundColor(.primary)
-                    }
-                    if !card.cardIssuer.isEmpty {
-                        Text(card.cardIssuer.uppercased()).font(.system(size: 10, weight: .semibold)).foregroundColor(.gray).tracking(0.5)
-                    }
-                }
-                .padding(14).frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.white).cornerRadius(12)
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
 
-                // Limits & balance
-                VStack(spacing: 0) {
-                    detailRow("Monthly Limit", FormatUtils.formatGBP(card.monthlyLimit))
-                    Divider().padding(.leading, 14)
-                    detailRow("Current Balance", FormatUtils.formatGBP(card.currentBalance))
-                    if card.proposedLimit > 0 {
-                        Divider().padding(.leading, 14)
-                        detailRow("Proposed Limit", FormatUtils.formatGBP(card.proposedLimit))
+                    // ── Detail grid (only visible rows) ──
+                    let hasHolder  = !displayCard.holderFullName.isEmpty
+                    let hasDept    = !displayCard.department.isEmpty
+                    let hasBSCode  = !displayCard.bsControlCode.isEmpty
+                    let hasIssuer  = !resolvedBankName.isEmpty
+                    let hasAccNum  = resolvedAccountNumber != "—"
+                    let hasDigital = !(displayCard.digitalCardNumber  ?? "").isEmpty
+                    let hasPhysical = !(displayCard.physicalCardNumber ?? "").isEmpty
+
+                    if hasHolder || hasDept || hasBSCode || hasIssuer {
+                        Divider()
+                        VStack(spacing: 0) {
+
+                            // Row: CARD HOLDER / DEPARTMENT
+                            if hasHolder || hasDept {
+                                HStack(alignment: .top, spacing: 16) {
+                                    if hasHolder {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text("CARD HOLDER")
+                                                .font(.system(size: 9, weight: .semibold)).foregroundColor(.secondary).tracking(0.5)
+                                            Text(displayCard.holderFullName).font(.system(size: 14, weight: .semibold))
+                                        }.frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                    if hasDept {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text("DEPARTMENT")
+                                                .font(.system(size: 9, weight: .semibold)).foregroundColor(.secondary).tracking(0.5)
+                                            Text(displayCard.department).font(.system(size: 14, weight: .semibold))
+                                        }.frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                }
+                                .padding(.horizontal, 20).padding(.vertical, 12)
+                            }
+
+                            // Row: BS CONTROL CODE / CARD ISSUER
+                            if hasBSCode || hasIssuer {
+                                if hasHolder || hasDept { Divider().padding(.horizontal, 20) }
+                                HStack(alignment: .top, spacing: 16) {
+                                    if hasBSCode {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text("BS CONTROL CODE")
+                                                .font(.system(size: 9, weight: .semibold)).foregroundColor(.secondary).tracking(0.5)
+                                            Text(displayCard.bsControlCode).font(.system(size: 14, weight: .semibold))
+                                        }.frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                    if hasIssuer {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text("CARD ISSUER")
+                                                .font(.system(size: 9, weight: .semibold)).foregroundColor(.secondary).tracking(0.5)
+                                            Text(resolvedBankName).font(.system(size: 14, weight: .semibold))
+                                            if !resolvedSortCode.isEmpty {
+                                                HStack(spacing: 4) {
+                                                    Text("Sort:").font(.system(size: 10)).foregroundColor(.secondary)
+                                                    Text(resolvedSortCode).font(.system(size: 10, weight: .medium, design: .monospaced))
+                                                }
+                                            }
+                                            if hasAccNum {
+                                                HStack(spacing: 4) {
+                                                    Text("Acc:").font(.system(size: 10)).foregroundColor(.secondary)
+                                                    Text(resolvedAccountNumber).font(.system(size: 10, weight: .medium, design: .monospaced))
+                                                }
+                                            }
+                                        }.frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                }
+                                .padding(.horizontal, 20).padding(.vertical, 12)
+                            }
+                        }
+                        .padding(.vertical, 4)
                     }
-                    Divider().padding(.leading, 14)
-                    detailRow("Status", card.statusDisplay(isAccountant: appState.currentUser?.isAccountant ?? false))
-                    if !card.holderName.isEmpty {
-                        Divider().padding(.leading, 14)
-                        detailRow("Cardholder", card.holderName)
+
+                    // ── Digital / Physical card numbers (only if present) ──
+                    if hasDigital || hasPhysical {
+                        Divider()
+                        HStack(alignment: .top, spacing: 0) {
+                            if hasDigital {
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text("DIGITAL CARD")
+                                        .font(.system(size: 10, weight: .semibold)).foregroundColor(.secondary).tracking(0.5)
+                                    Text(showCardNumber ? formatCardNum(displayCard.digitalCardNumber) : maskedCardNum(displayCard.digitalCardNumber))
+                                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                }.frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            if hasPhysical {
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text("PHYSICAL CARD")
+                                        .font(.system(size: 10, weight: .semibold)).foregroundColor(.secondary).tracking(0.5)
+                                    Text(showCardNumber ? formatCardNum(displayCard.physicalCardNumber) : maskedCardNum(displayCard.physicalCardNumber))
+                                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                }.frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                        .padding(.horizontal, 20).padding(.vertical, 16)
                     }
-                    if !card.department.isEmpty {
-                        Divider().padding(.leading, 14)
-                        detailRow("Department", card.department)
+
+                    // ── Assign Physical Card (digital-only cards) ──
+                    if displayCard.isDigitalOnly {
+                        NavigationLink(
+                            destination: AssignPhysicalCardPage(card: displayCard).environmentObject(appState),
+                            isActive: $navigateToAssign
+                        ) { EmptyView() }
+                        .frame(width: 0, height: 0).hidden()
+
+                        Divider()
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("PHYSICAL CARD").font(.system(size: 10, weight: .semibold)).foregroundColor(.secondary).tracking(0.5)
+                                Text("No physical card assigned yet").font(.system(size: 13)).foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Button(action: { navigateToAssign = true }) {
+                                HStack(spacing: 5) {
+                                    Image(systemName: "creditcard.and.123").font(.system(size: 11, weight: .semibold))
+                                    Text("Assign Physical Card").font(.system(size: 13, weight: .semibold))
+                                }
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 14).padding(.vertical, 9)
+                                .background(Color.orange).cornerRadius(8)
+                            }.buttonStyle(BorderlessButtonStyle())
+                        }
+                        .padding(.horizontal, 20).padding(.vertical, 16)
                     }
-                }
-                .background(Color.white).cornerRadius(12)
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
+
+                    // ── Justification ──
+                    if !displayCard.justification.isEmpty {
+                        Divider()
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("JUSTIFICATION").font(.system(size: 10, weight: .semibold)).foregroundColor(.secondary).tracking(0.5)
+                            Text(displayCard.justification).font(.system(size: 14))
+                        }
+                        .padding(.horizontal, 20).padding(.vertical, 16)
+                    }
+
+                    // ── Pending approval chain + action buttons (accountant only) ──
+                    if isPendingApproval && isAccountant {
+                        Divider()
+                        VStack(alignment: .leading, spacing: 14) {
+                            Text("Pending Approval")
+                                .font(.system(size: 13, weight: .semibold)).foregroundColor(.orange)
+
+                            if totalTiers > 0 {
+                                HStack(spacing: 0) {
+                                    ForEach(1...totalTiers, id: \.self) { tier in
+                                        let isApproved = displayCard.approvals.contains { $0.tierNumber == tier }
+                                        let isCurrent  = !isApproved && (tier == 1 || displayCard.approvals.contains { $0.tierNumber == tier - 1 })
+                                        if tier > 1 {
+                                            Rectangle()
+                                                .fill(displayCard.approvals.contains { $0.tierNumber == tier - 1 } ? Color.green.opacity(0.4) : Color.gray.opacity(0.3))
+                                                .frame(width: 20, height: 2)
+                                        }
+                                        VStack(spacing: 4) {
+                                            ZStack {
+                                                Circle()
+                                                    .fill(isApproved ? Color.green : isCurrent ? Color.gold : Color.gray.opacity(0.25))
+                                                    .frame(width: 28, height: 28)
+                                                if isApproved {
+                                                    Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundColor(.white)
+                                                } else if isCurrent {
+                                                    Circle().fill(Color.white).frame(width: 10, height: 10)
+                                                }
+                                            }
+                                            Text("Level \(tier)").font(.system(size: 9, weight: .semibold))
+                                                .foregroundColor(isApproved ? .green : isCurrent ? .goldDark : .gray)
+                                            if isApproved {
+                                                let u = displayCard.approvals.first(where: { $0.tierNumber == tier }).flatMap { UsersData.byId[$0.userId] }
+                                                if let user = u {
+                                                    Text(user.fullName).font(.system(size: 8, weight: .medium)).foregroundColor(.green).lineLimit(1)
+                                                    if !user.displayDesignation.isEmpty {
+                                                        Text(user.displayDesignation).font(.system(size: 7)).foregroundColor(.green.opacity(0.8)).lineLimit(1)
+                                                    }
+                                                }
+                                            } else {
+                                                Text("Awaiting").font(.system(size: 8)).foregroundColor(isCurrent ? .goldDark : .gray)
+                                            }
+                                        }.frame(minWidth: 60)
+                                    }
+                                }
+                                .padding(.vertical, 4)
+                            }
+
+                            HStack(spacing: 10) {
+                                Spacer()
+                                Button(action: { appState.overrideCard(displayCard); presentationMode.wrappedValue.dismiss() }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "bolt.fill").font(.system(size: 10, weight: .bold))
+                                        Text("Override").font(.system(size: 13, weight: .bold))
+                                    }
+                                    .foregroundColor(.white).padding(.horizontal, 16).padding(.vertical, 10)
+                                    .background(Color.orange).cornerRadius(8)
+                                }.buttonStyle(BorderlessButtonStyle())
+                                Button(action: { showRejectSheet = true }) {
+                                    Text("Reject").font(.system(size: 13, weight: .bold))
+                                        .foregroundColor(.white).padding(.horizontal, 16).padding(.vertical, 10)
+                                        .background(Color.red).cornerRadius(8)
+                                }.buttonStyle(BorderlessButtonStyle())
+                                Button(action: { appState.approveCard(displayCard); presentationMode.wrappedValue.dismiss() }) {
+                                    Text("Approve").font(.system(size: 13, weight: .bold))
+                                        .foregroundColor(.white).padding(.horizontal, 16).padding(.vertical, 10)
+                                        .background(Color.green).cornerRadius(8)
+                                }.buttonStyle(BorderlessButtonStyle())
+                            }
+                        }
+                        .padding(.horizontal, 20).padding(.vertical, 16)
+                    }
+
+                    if !approverName.isEmpty {
+                        Text("Approved by \(approverName)")
+                            .font(.system(size: 12)).foregroundColor(.secondary)
+                            .padding(.horizontal, 20).padding(.vertical, 12)
+                    }
+
+                Spacer(minLength: 20)
             }
-            .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 24)
         }
-        .background(Color.bgBase)
+        .background(Color.white)
         .navigationBarTitle(Text("Card Details"), displayMode: .inline)
+        .onAppear {
+            appState.loadCard(card.id) { fetched in liveCard = fetched }
+            if appState.bankAccounts.isEmpty { appState.loadBankAccounts() }
+        }
+        .sheet(isPresented: $showRejectSheet) {
+            NavigationView {
+                ZStack {
+                    Color.bgBase.edgesIgnoringSafeArea(.all)
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Reject card request from \(displayCard.holderName)")
+                            .font(.system(size: 15, weight: .semibold))
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Reason").font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
+                            TextField("Enter reason…", text: $rejectReason)
+                                .font(.system(size: 14)).padding(10)
+                                .background(Color.white).cornerRadius(8)
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                        }
+                        Spacer()
+                    }.padding()
+                }
+                .navigationBarTitle(Text("Reject Card"), displayMode: .inline)
+                .navigationBarItems(
+                    leading: Button("Cancel") { showRejectSheet = false; rejectReason = "" }.foregroundColor(.goldDark),
+                    trailing: Button("Reject") {
+                        guard !rejectReason.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+                        appState.rejectCard(displayCard, reason: rejectReason.trimmingCharacters(in: .whitespaces))
+                        showRejectSheet = false; rejectReason = ""
+                        presentationMode.wrappedValue.dismiss()
+                    }.foregroundColor(.red).font(.system(size: 16, weight: .bold))
+                )
+            }
+        }
     }
 
-    private func detailRow(_ label: String, _ value: String) -> some View {
-        HStack {
-            Text(label).font(.system(size: 12)).foregroundColor(.secondary)
-            Spacer()
-            Text(value).font(.system(size: 13, weight: .semibold)).multilineTextAlignment(.trailing)
-        }.padding(.horizontal, 14).padding(.vertical, 12)
+    private func statCol(_ label: String, _ value: String, _ color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.system(size: 9, weight: .semibold)).foregroundColor(.secondary).tracking(0.5)
+            Text(value).font(.system(size: 15, weight: .bold)).foregroundColor(color)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func detailGrid(_ l1: String, _ v1: String, _ l2: String, _ v2: String) -> some View {
+        HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(l1).font(.system(size: 9, weight: .semibold)).foregroundColor(.secondary).tracking(0.5)
+                Text(v1.isEmpty ? "—" : v1).font(.system(size: 14, weight: .semibold))
+            }.frame(maxWidth: .infinity, alignment: .leading)
+            if !l2.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(l2).font(.system(size: 9, weight: .semibold)).foregroundColor(.secondary).tracking(0.5)
+                    Text(v2.isEmpty ? "—" : v2).font(.system(size: 14, weight: .semibold))
+                }.frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.horizontal, 20).padding(.vertical, 12)
+    }
+
+    private func formatCardNum(_ raw: String?) -> String {
+        guard let s = raw, !s.isEmpty else { return "—" }
+        let digits = s.filter { $0.isNumber }
+        guard !digits.isEmpty else { return s }
+        return stride(from: 0, to: digits.count, by: 4).map { i -> String in
+            let start = digits.index(digits.startIndex, offsetBy: i)
+            let end   = digits.index(start, offsetBy: min(4, digits.count - i))
+            return String(digits[start..<end])
+        }.joined(separator: " ")
+    }
+
+    private func maskedCardNum(_ raw: String?) -> String {
+        guard let s = raw, !s.isEmpty else { return "—" }
+        let digits = s.filter { $0.isNumber }
+        guard digits.count >= 4 else { return "••••" }
+        let last4 = String(digits.suffix(4))
+        let groupCount = Int(ceil(Double(digits.count) / 4.0))
+        let masked = Array(repeating: "••••", count: groupCount - 1).joined(separator: " ")
+        return masked + " " + last4
     }
 }
 
 struct CardRow: View {
     let card: ExpenseCard
     var isAccountant: Bool = false
+    var tierCount: Int = 0
+    var resolvedBankName: String? = nil
+    var onAssignPhysical: (() -> Void)? = nil
+    var onApprove: (() -> Void)? = nil
+    var onReject: (() -> Void)? = nil
+    var onOverride: (() -> Void)? = nil
+
+    private var displayBankName: String { resolvedBankName ?? card.bankName }
+    private var totalTiers: Int { max(tierCount, card.approvals.count + (card.status == "pending" ? 1 : 0)) }
+    private var approvedCount: Int { card.approvals.count }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Top: card icon + status
-            HStack {
-                Image(systemName: "creditcard.fill").font(.system(size: 18)).foregroundColor(.goldDark)
+        VStack(alignment: .leading, spacing: 10) {
+
+            // ── Top row: icon + badges ──
+            HStack(spacing: 6) {
+                Image(systemName: "creditcard.fill").font(.system(size: 16)).foregroundColor(.goldDark)
                 Spacer()
+                if card.isDigitalOnly, let action = onAssignPhysical {
+                    Button(action: action) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "creditcard.and.123").font(.system(size: 9, weight: .semibold))
+                            Text("Assign Physical Card").font(.system(size: 10, weight: .semibold))
+                        }
+                        .foregroundColor(.white).padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Color.orange).cornerRadius(4)
+                    }.buttonStyle(BorderlessButtonStyle())
+                }
                 let (fg, bg) = cardStatusColor(card.status)
-                Text(card.statusDisplay(isAccountant: isAccountant)).font(.system(size: 10, weight: .semibold)).foregroundColor(fg)
+                let badgeLabel: String = {
+                    if (card.status == "pending" || card.status == "approved") && totalTiers > 0 {
+                        return "\(card.statusDisplay(isAccountant: isAccountant)) (\(approvedCount)/\(totalTiers))"
+                    }
+                    return card.statusDisplay(isAccountant: isAccountant)
+                }()
+                Text(badgeLabel).font(.system(size: 10, weight: .semibold)).foregroundColor(fg)
                     .padding(.horizontal, 8).padding(.vertical, 3).background(bg).cornerRadius(4)
             }
 
             if card.status == "active" || card.status == "suspended" {
-                // ── Active / Suspended Card ──
-                // Card number
-                HStack(spacing: 2) {
-                    Text("•••• •••• ••••").font(.system(size: 15, design: .monospaced)).foregroundColor(.gray)
+                // ── Active / Suspended ──
+                HStack(spacing: 4) {
+                    Text("•••• •••• ••••").font(.system(size: 14, design: .monospaced)).foregroundColor(.gray)
                     Text(card.lastFour.isEmpty ? "0000" : card.lastFour)
-                        .font(.system(size: 15, weight: .bold, design: .monospaced))
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
                 }
-                // Holder + designation
                 Text(card.holderFullName).font(.system(size: 14, weight: .bold))
-                if !card.bankName.isEmpty {
-                    Text(card.bankName).font(.system(size: 11)).foregroundColor(.secondary)
+                if !displayBankName.isEmpty {
+                    Text(displayBankName).font(.system(size: 12)).foregroundColor(.secondary)
                 }
-
-                // BS Control
                 if !card.bsControlCode.isEmpty {
                     HStack {
                         Text("BS Control").font(.system(size: 10)).foregroundColor(.secondary)
@@ -2234,8 +3871,6 @@ struct CardRow: View {
                     .padding(.horizontal, 10).padding(.vertical, 6)
                     .background(Color.bgRaised).cornerRadius(6)
                 }
-
-                // Limit / Spent
                 HStack {
                     VStack(alignment: .leading, spacing: 1) {
                         Text("Limit").font(.system(size: 10)).foregroundColor(.secondary)
@@ -2244,48 +3879,49 @@ struct CardRow: View {
                     }
                     Spacer()
                     VStack(alignment: .trailing, spacing: 1) {
-                        Text("Spent").font(.system(size: 10)).foregroundColor(.secondary)
-                        Text(FormatUtils.formatGBP(card.spentAmount))
+                        Text("Balance").font(.system(size: 10)).foregroundColor(.secondary)
+                        Text(FormatUtils.formatGBP(card.currentBalance))
                             .font(.system(size: 13, weight: .semibold, design: .monospaced))
                     }
                 }
-                // Progress bar
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 3).fill(Color.bgRaised).frame(height: 6)
+                        RoundedRectangle(cornerRadius: 3).fill(Color.bgRaised).frame(height: 5)
                         RoundedRectangle(cornerRadius: 3)
                             .fill(card.spendPercent > 0.8 ? Color(red: 0.91, green: 0.29, blue: 0.48) : Color.gold)
-                            .frame(width: geo.size.width * CGFloat(min(card.spendPercent, 1.0)), height: 6)
+                            .frame(width: geo.size.width * CGFloat(min(card.spendPercent, 1.0)), height: 5)
                     }
-                }.frame(height: 6)
+                }.frame(height: 5)
 
             } else if card.status == "requested" {
                 // ── Requested ──
-                Text("Awaiting Review").font(.system(size: 13, design: .monospaced)).foregroundColor(.gray)
                 Text(card.holderFullName).font(.system(size: 14, weight: .bold))
                 if !card.holderDesignation.isEmpty {
-                    Text(card.holderDesignation).font(.system(size: 11)).foregroundColor(.secondary)
+                    Text(card.holderDesignation).font(.system(size: 12)).foregroundColor(.secondary)
                 }
-                if card.monthlyLimit > 0 {
+                if card.proposedLimit > 0 || card.monthlyLimit > 0 {
                     HStack {
                         Text("Proposed Limit").font(.system(size: 10)).foregroundColor(.secondary)
                         Spacer()
-                        Text("\(FormatUtils.formatGBP(card.monthlyLimit))/mo")
+                        Text("\(FormatUtils.formatGBP(max(card.proposedLimit, card.monthlyLimit)))/mo")
                             .font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundColor(.goldDark)
                     }
                 }
 
             } else if card.status == "pending" || card.status == "approved" || card.status == "override" {
-                // ── Pending Approval / Approved / In-Progress ──
-                let displayLabel = card.statusDisplay(isAccountant: isAccountant)
-                let color: Color = (card.status == "pending") ? .orange : isAccountant ? .green : .goldDark
-                Text(displayLabel).font(.system(size: 13, design: .monospaced)).foregroundColor(color)
+                // ── Pending / Approved ──
+                Text("Pending Approval")
+                    .font(.system(size: 12, weight: .medium)).italic().foregroundColor(.orange)
                 Text(card.holderFullName).font(.system(size: 14, weight: .bold))
                 HStack(spacing: 4) {
-                    if !card.holderDesignation.isEmpty { Text(card.holderDesignation).font(.system(size: 11)).foregroundColor(.secondary) }
-                    if !card.bankName.isEmpty { Text("· \(card.bankName)").font(.system(size: 11)).foregroundColor(.secondary) }
+                    if !card.holderDesignation.isEmpty {
+                        Text(card.holderDesignation).font(.system(size: 11)).foregroundColor(.secondary)
+                    }
+                    if !displayBankName.isEmpty {
+                        Text(card.holderDesignation.isEmpty ? displayBankName : "· \(displayBankName)")
+                            .font(.system(size: 11)).foregroundColor(.secondary)
+                    }
                 }
-                // BS Control
                 if !card.bsControlCode.isEmpty {
                     HStack {
                         Text("BS Control").font(.system(size: 10)).foregroundColor(.secondary)
@@ -2295,39 +3931,113 @@ struct CardRow: View {
                     .padding(.horizontal, 10).padding(.vertical, 6)
                     .background(Color.bgRaised).cornerRadius(6)
                 }
-                if card.monthlyLimit > 0 {
+                if card.proposedLimit > 0 || card.monthlyLimit > 0 {
                     HStack {
                         Text("Proposed Limit").font(.system(size: 10)).foregroundColor(.secondary)
                         Spacer()
-                        Text("\(FormatUtils.formatGBP(card.monthlyLimit))/mo")
+                        Text("\(FormatUtils.formatGBP(max(card.proposedLimit, card.monthlyLimit)))/mo")
                             .font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundColor(.goldDark)
+                    }
+                }
+
+                // Approval progress circles — only in detail page (when action callbacks are set)
+                if totalTiers > 0 && onApprove != nil {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 16) {
+                            ForEach(1...totalTiers, id: \.self) { tier in
+                                let isApproved = card.approvals.contains { $0.tierNumber == tier }
+                                let isCurrent = !isApproved && tier == approvedCount + 1
+                                VStack(spacing: 4) {
+                                    ZStack {
+                                        Circle()
+                                            .stroke(isApproved ? Color.green : isCurrent ? Color.orange : Color.gray.opacity(0.3), lineWidth: 2)
+                                            .frame(width: 34, height: 34)
+                                        if isApproved {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 12, weight: .bold)).foregroundColor(.green)
+                                        } else {
+                                            Circle()
+                                                .fill(isCurrent ? Color.orange.opacity(0.15) : Color.clear)
+                                                .frame(width: 28, height: 28)
+                                        }
+                                    }
+                                    Text("Level \(tier)").font(.system(size: 9, weight: .semibold))
+                                        .foregroundColor(isApproved ? .green : isCurrent ? .orange : .gray)
+                                    if isApproved, let approverEntry = card.approvals.first(where: { $0.tierNumber == tier }),
+                                       let user = UsersData.byId[approverEntry.userId] {
+                                        Text(user.fullName).font(.system(size: 8, weight: .medium)).foregroundColor(.green).lineLimit(1)
+                                        if !user.displayDesignation.isEmpty {
+                                            Text(user.displayDesignation).font(.system(size: 7)).foregroundColor(.green.opacity(0.8)).lineLimit(1)
+                                        }
+                                    } else {
+                                        Text("Awaiting").font(.system(size: 8))
+                                            .foregroundColor(isCurrent ? .orange : .gray)
+                                    }
+                                }
+                                .frame(minWidth: 64)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+
+                // Inline action buttons (accountant only)
+                if isAccountant, onApprove != nil {
+                    HStack(spacing: 8) {
+                        Spacer()
+                        if let ov = onOverride {
+                            Button(action: ov) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "bolt.fill").font(.system(size: 10, weight: .bold))
+                                    Text("Override").font(.system(size: 12, weight: .bold))
+                                }
+                                .foregroundColor(.white).padding(.horizontal, 12).padding(.vertical, 8)
+                                .background(Color.orange).cornerRadius(7)
+                            }.buttonStyle(BorderlessButtonStyle())
+                        }
+                        if let rj = onReject {
+                            Button(action: rj) {
+                                Text("Reject").font(.system(size: 12, weight: .bold))
+                                    .foregroundColor(.white).padding(.horizontal, 12).padding(.vertical, 8)
+                                    .background(Color.red).cornerRadius(7)
+                            }.buttonStyle(BorderlessButtonStyle())
+                        }
+                        if let ap = onApprove {
+                            Button(action: ap) {
+                                Text("Approve").font(.system(size: 12, weight: .bold))
+                                    .foregroundColor(.white).padding(.horizontal, 12).padding(.vertical, 8)
+                                    .background(Color.green).cornerRadius(7)
+                            }.buttonStyle(BorderlessButtonStyle())
+                        }
                     }
                 }
 
             } else if card.status == "rejected" {
                 // ── Rejected ──
-                Text("Rejected").font(.system(size: 13, design: .monospaced)).foregroundColor(.red)
                 Text(card.holderFullName).font(.system(size: 14, weight: .bold))
                 if !card.holderDesignation.isEmpty {
-                    Text(card.holderDesignation).font(.system(size: 11)).foregroundColor(.secondary)
+                    Text(card.holderDesignation).font(.system(size: 12)).foregroundColor(.secondary)
                 }
-                if card.monthlyLimit > 0 {
+                if card.proposedLimit > 0 || card.monthlyLimit > 0 {
                     HStack {
                         Text("Proposed Limit").font(.system(size: 10)).foregroundColor(.secondary)
                         Spacer()
-                        Text("\(FormatUtils.formatGBP(card.monthlyLimit))/mo")
+                        Text("\(FormatUtils.formatGBP(max(card.proposedLimit, card.monthlyLimit)))/mo")
                             .font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundColor(.goldDark)
                     }
                 }
                 if let reason = card.rejectionReason, !reason.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("REJECTION REASON").font(.system(size: 8, weight: .bold)).foregroundColor(Color(red: 0.91, green: 0.29, blue: 0.48)).tracking(0.4)
+                        Text("REJECTION REASON").font(.system(size: 8, weight: .bold))
+                            .foregroundColor(Color(red: 0.91, green: 0.29, blue: 0.48)).tracking(0.4)
                         Text(reason).font(.system(size: 12)).foregroundColor(.primary)
                         if let rejBy = card.rejectedBy, !rejBy.isEmpty {
                             HStack(spacing: 4) {
-                                Text("By \(UsersData.byId[rejBy]?.fullName ?? rejBy)").font(.system(size: 10)).foregroundColor(.secondary)
+                                Text("By \(UsersData.byId[rejBy]?.fullName ?? rejBy)")
+                                    .font(.system(size: 10)).foregroundColor(.secondary)
                                 if let rejAt = card.rejectedAt, rejAt > 0 {
-                                    Text("· \(FormatUtils.formatDateTime(rejAt))").font(.system(size: 10)).foregroundColor(.secondary)
+                                    Text("· \(FormatUtils.formatDateTime(rejAt))")
+                                        .font(.system(size: 10)).foregroundColor(.secondary)
                                 }
                             }
                         }
@@ -2338,11 +4048,7 @@ struct CardRow: View {
                 }
 
             } else {
-                // ── Other status ──
                 Text(card.holderFullName).font(.system(size: 14, weight: .bold))
-                if !card.holderDesignation.isEmpty {
-                    Text(card.holderDesignation).font(.system(size: 11)).foregroundColor(.secondary)
-                }
             }
         }
         .padding(14).background(Color.white).cornerRadius(12)
@@ -2351,12 +4057,14 @@ struct CardRow: View {
 
     private func cardStatusColor(_ s: String) -> (Color, Color) {
         switch s {
-        case "active": return (.green, Color.green.opacity(0.1))
+        case "active":
+            return card.isDigitalOnly ? (Color(red: 0.0, green: 0.6, blue: 0.7), Color(red: 0.0, green: 0.6, blue: 0.7).opacity(0.1))
+                                      : (.green, Color.green.opacity(0.1))
         case "requested": return (.orange, Color.orange.opacity(0.1))
-        case "pending": return (.goldDark, Color.gold.opacity(0.15))
+        case "pending":   return (.orange, Color.orange.opacity(0.1))
         case "approved", "override": return isAccountant ? (.green, Color.green.opacity(0.1)) : (.goldDark, Color.gold.opacity(0.15))
-        case "rejected": return (.red, Color.red.opacity(0.1))
-        case "suspended": return (.gray, Color.gray.opacity(0.1))
+        case "rejected":  return (.red, Color.red.opacity(0.1))
+        case "suspended": return (Color(red: 0.5, green: 0.1, blue: 0.8), Color(red: 0.5, green: 0.1, blue: 0.8).opacity(0.1))
         default: return (.goldDark, Color.gold.opacity(0.15))
         }
     }
@@ -2365,13 +4073,64 @@ struct CardRow: View {
 struct RequestCardPage: View {
     @EnvironmentObject var appState: POViewModel
     @Environment(\.presentationMode) var presentationMode
-    @State private var proposedLimit = ""
+
+    private var isAccountant: Bool { appState.currentUser?.isAccountant == true }
+
+    // Card holder (accountant picks any user; non-accountant locked to self)
+    @State private var selectedUserId: String = ""
+    @State private var userSearch: String = ""
+    @State private var showUserDropdown = false
+
+    // Bank account
+    @State private var selectedBankId: String = ""
+    @State private var bankSearch: String = ""
+    @State private var showBankDropdown = false
+
+    // Other fields
+    @State private var proposedLimit: String = ""
+    @State private var bsControlCode: String = ""
+    @State private var justification: String = ""
     @State private var submitting = false
 
+    private var effectiveUser: AppUser? {
+        if isAccountant { return UsersData.byId[selectedUserId] }
+        return appState.currentUser
+    }
+    private var departmentDisplay: String { effectiveUser?.displayDepartment ?? "" }
+
+    private var filteredUsers: [AppUser] {
+        let all = UsersData.allUsers.filter { !$0.isAccountant }
+        let q = userSearch.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !q.isEmpty else { return all }
+        return all.filter {
+            $0.fullName.lowercased().contains(q) ||
+            $0.displayDepartment.lowercased().contains(q) ||
+            $0.displayDesignation.lowercased().contains(q)
+        }
+    }
+    private var filteredBanks: [ProductionBankAccount] {
+        let q = bankSearch.lowercased()
+        guard !q.isEmpty else { return appState.bankAccounts }
+        return appState.bankAccounts.filter { $0.name.lowercased().contains(q) || $0.accountNumber.lowercased().contains(q) }
+    }
+
+    private var isValid: Bool {
+        let hasHolder = isAccountant ? !selectedUserId.isEmpty : true
+        return hasHolder && (Double(proposedLimit) ?? 0) > 0
+    }
+
     var body: some View {
+        if isAccountant {
+            accountantForm
+        } else {
+            userForm
+        }
+    }
+
+    // ── Non-accountant: original simple form ─────────────────────────
+    private var userForm: some View {
         ZStack(alignment: .bottom) {
             Color.bgBase.edgesIgnoringSafeArea(.all)
-
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     // Icon header
@@ -2385,16 +4144,14 @@ struct RequestCardPage: View {
                     .background(Color.white).cornerRadius(12)
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
 
-                    // Form card
+                    // Read-only info + limit input
                     VStack(spacing: 0) {
-                        formRow(label: "Card Holder", value: appState.currentUser?.fullName ?? "—")
+                        simpleRow(label: "Card Holder",  value: appState.currentUser?.fullName ?? "—")
                         Divider().padding(.leading, 14)
-                        formRow(label: "Department", value: appState.currentUser?.displayDepartment ?? "—")
+                        simpleRow(label: "Department",   value: appState.currentUser?.displayDepartment ?? "—")
                         Divider().padding(.leading, 14)
-                        formRow(label: "Designation", value: appState.currentUser?.displayDesignation ?? "—")
+                        simpleRow(label: "Designation",  value: appState.currentUser?.displayDesignation ?? "—")
                         Divider().padding(.leading, 14)
-
-                        // Proposed limit input
                         HStack {
                             Text("Proposed Limit").font(.system(size: 12)).foregroundColor(.secondary)
                             Spacer()
@@ -2415,7 +4172,6 @@ struct RequestCardPage: View {
                     .background(Color.white).cornerRadius(10)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
 
-                    // Info note
                     HStack(spacing: 10) {
                         Image(systemName: "info.circle.fill").font(.system(size: 14)).foregroundColor(.blue)
                         Text("The accounts team will assign the card issuer, set the final limit, and process your request through the approval chain.")
@@ -2424,11 +4180,10 @@ struct RequestCardPage: View {
                     .padding(12).frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.blue.opacity(0.04)).cornerRadius(8)
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.blue.opacity(0.15), lineWidth: 1))
-
-                }.padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 80)
+                }
+                .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 80)
             }
 
-            // Submit bar
             HStack(spacing: 12) {
                 Button(action: { presentationMode.wrappedValue.dismiss() }) {
                     Text("Cancel").font(.system(size: 14, weight: .semibold)).foregroundColor(.primary)
@@ -2436,23 +4191,18 @@ struct RequestCardPage: View {
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
                 }.buttonStyle(BorderlessButtonStyle())
 
-                Button(action: {
-                    guard !submitting, let limit = Double(proposedLimit), limit > 0 else { return }
-                    submitting = true
-                    appState.requestNewCard(proposedLimit: limit)
-                    presentationMode.wrappedValue.dismiss()
-                }) {
+                Button(action: submit) {
                     HStack(spacing: 6) {
                         if submitting { ActivityIndicator(isAnimating: true).frame(width: 16, height: 16) }
                         Text(submitting ? "Submitting..." : "Submit Request")
                     }
                     .font(.system(size: 14, weight: .bold)).foregroundColor(.black)
                     .frame(maxWidth: .infinity).padding(.vertical, 14)
-                    .background(Double(proposedLimit) ?? 0 > 0 && !submitting ? Color.gold : Color.gray.opacity(0.3))
+                    .background((Double(proposedLimit) ?? 0) > 0 && !submitting ? Color.gold : Color.gray.opacity(0.3))
                     .cornerRadius(10)
                 }
                 .buttonStyle(BorderlessButtonStyle())
-                .disabled(Double(proposedLimit) ?? 0 <= 0 || submitting)
+                .disabled((Double(proposedLimit) ?? 0) <= 0 || submitting)
             }
             .padding(.horizontal, 16).padding(.vertical, 12)
             .background(Color.white)
@@ -2470,7 +4220,327 @@ struct RequestCardPage: View {
         )
     }
 
-    private func formRow(label: String, value: String) -> some View {
+    // ── Accountant: full form (user picker, bank, BS code, justification) ──
+    private var accountantForm: some View {
+        ZStack(alignment: .bottom) {
+            Color.bgBase.edgesIgnoringSafeArea(.all)
+
+            ScrollView {
+                VStack(spacing: 0) {
+                    // CARD HOLDER
+                    fieldLabel("CARD HOLDER")
+                    VStack(alignment: .leading, spacing: 0) {
+                        // ── Search / selected-user row ──
+                        HStack(spacing: 6) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 11)).foregroundColor(.gray)
+                            if showUserDropdown || selectedUserId.isEmpty {
+                                TextField("Search by name or department...", text: $userSearch,
+                                          onEditingChanged: { editing in
+                                              showUserDropdown = editing
+                                              if editing { showBankDropdown = false }
+                                          })
+                                .font(.system(size: 13))
+                            } else {
+                                if let u = effectiveUser {
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(u.fullName)
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .foregroundColor(.primary).lineLimit(1)
+                                        Text("\(u.displayDepartment)\(u.displayDesignation.isEmpty ? "" : " · \(u.displayDesignation)")")
+                                            .font(.system(size: 10)).foregroundColor(.secondary).lineLimit(1)
+                                    }
+                                }
+                                Spacer()
+                                Button(action: {
+                                    selectedUserId = ""; userSearch = ""
+                                    showUserDropdown = true
+                                }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 13)).foregroundColor(.gray.opacity(0.5))
+                                }.buttonStyle(BorderlessButtonStyle())
+                            }
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 9)
+                        .background(Color.white)
+                        .cornerRadius(6)
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(
+                            showUserDropdown ? Color.goldDark : Color.borderColor,
+                            lineWidth: showUserDropdown ? 1.5 : 1
+                        ))
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            if !showUserDropdown && !selectedUserId.isEmpty {
+                                selectedUserId = ""; userSearch = ""; showUserDropdown = true
+                            }
+                        }
+
+                        // ── Inline user list ──
+                        if showUserDropdown {
+                            Group {
+                                if filteredUsers.isEmpty {
+                                    Text("No users found")
+                                        .font(.system(size: 12)).foregroundColor(.secondary)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(14)
+                                        .background(Color.white)
+                                } else {
+                                    ScrollView {
+                                        VStack(alignment: .leading, spacing: 0) {
+                                            ForEach(filteredUsers) { u in
+                                                Button(action: {
+                                                    selectedUserId = u.id
+                                                    userSearch = ""
+                                                    showUserDropdown = false
+                                                    #if canImport(UIKit)
+                                                    UIApplication.shared.sendAction(
+                                                        #selector(UIResponder.resignFirstResponder),
+                                                        to: nil, from: nil, for: nil)
+                                                    #endif
+                                                }) {
+                                                    HStack(spacing: 10) {
+                                                        ZStack {
+                                                            Circle().fill(Color.gold.opacity(0.18))
+                                                                .frame(width: 30, height: 30)
+                                                            Text(u.initials)
+                                                                .font(.system(size: 10, weight: .bold))
+                                                                .foregroundColor(.goldDark)
+                                                        }
+                                                        VStack(alignment: .leading, spacing: 2) {
+                                                            Text(u.fullName)
+                                                                .font(.system(size: 13, weight: .medium))
+                                                                .foregroundColor(.primary).lineLimit(1)
+                                                            HStack(spacing: 4) {
+                                                                Text(u.displayDepartment)
+                                                                    .font(.system(size: 10))
+                                                                    .foregroundColor(.secondary).lineLimit(1)
+                                                                if !u.displayDesignation.isEmpty {
+                                                                    Text("·").font(.system(size: 10)).foregroundColor(.secondary)
+                                                                    Text(u.displayDesignation)
+                                                                        .font(.system(size: 10))
+                                                                        .foregroundColor(.secondary).lineLimit(1)
+                                                                }
+                                                            }
+                                                        }
+                                                        Spacer()
+                                                        if selectedUserId == u.id {
+                                                            Image(systemName: "checkmark")
+                                                                .font(.system(size: 11, weight: .bold))
+                                                                .foregroundColor(.goldDark)
+                                                        }
+                                                    }
+                                                    .padding(.horizontal, 10).padding(.vertical, 8)
+                                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                                    .background(selectedUserId == u.id
+                                                                ? Color.gold.opacity(0.06) : Color.white)
+                                                    .contentShape(Rectangle())
+                                                }
+                                                .buttonStyle(BorderlessButtonStyle())
+                                                if u.id != filteredUsers.last?.id {
+                                                    Divider().padding(.horizontal, 8)
+                                                }
+                                            }
+                                        }
+                                    }
+                                    .frame(maxHeight: 220)
+                                }
+                            }
+                            .background(Color.white)
+                            .cornerRadius(8)
+                            .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                            .padding(.top, 4)
+                        }
+                    }
+
+                    Spacer().frame(height: 14)
+
+                    // DEPARTMENT
+                    fieldLabel("DEPARTMENT")
+                    HStack {
+                        Text(departmentDisplay.isEmpty ? "Auto-filled from user" : departmentDisplay)
+                            .font(.system(size: 14))
+                            .foregroundColor(departmentDisplay.isEmpty ? .secondary : .primary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 14).padding(.vertical, 12)
+                    .background(Color(UIColor.secondarySystemBackground))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+
+                    Spacer().frame(height: 14)
+
+                    // CARD ISSUER
+                    fieldLabel("CARD ISSUER (BANK ACCOUNT)")
+                    VStack(spacing: 0) {
+                        Button(action: {
+                            showUserDropdown = false
+                            withAnimation { showBankDropdown.toggle() }
+                        }) {
+                            HStack {
+                                if let bank = appState.bankAccounts.first(where: { $0.id == selectedBankId }) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(bank.name).font(.system(size: 14, weight: .semibold))
+                                        if !bank.accountNumber.isEmpty {
+                                            Text("Account: \(bank.accountNumber)").font(.system(size: 11)).foregroundColor(.secondary)
+                                        }
+                                    }
+                                } else {
+                                    Text("Search bank account...").font(.system(size: 14)).foregroundColor(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: showBankDropdown ? "chevron.up" : "chevron.down")
+                                    .font(.system(size: 12)).foregroundColor(.secondary)
+                            }
+                            .padding(.horizontal, 14).padding(.vertical, 12)
+                            .background(Color.white)
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
+
+                        if showBankDropdown {
+                            VStack(spacing: 0) {
+                                HStack {
+                                    Image(systemName: "magnifyingglass").font(.system(size: 12)).foregroundColor(.secondary)
+                                    TextField("Search...", text: $bankSearch).font(.system(size: 13))
+                                }
+                                .padding(.horizontal, 10).padding(.vertical, 8)
+                                .background(Color(UIColor.secondarySystemBackground))
+                                Divider()
+                                if appState.bankAccounts.isEmpty {
+                                    Text("No bank accounts found").font(.system(size: 12)).foregroundColor(.secondary).padding(14)
+                                } else {
+                                    ForEach(filteredBanks.prefix(6)) { bank in
+                                        Button(action: {
+                                            selectedBankId = bank.id; bankSearch = ""
+                                            withAnimation { showBankDropdown = false }
+                                        }) {
+                                            HStack(spacing: 10) {
+                                                Image(systemName: "building.columns.fill")
+                                                    .font(.system(size: 13)).foregroundColor(.goldDark).frame(width: 28)
+                                                VStack(alignment: .leading, spacing: 1) {
+                                                    Text(bank.name).font(.system(size: 13, weight: .semibold))
+                                                    if !bank.accountNumber.isEmpty {
+                                                        Text(bank.accountNumber).font(.system(size: 11)).foregroundColor(.secondary)
+                                                    }
+                                                }
+                                                Spacer()
+                                                if selectedBankId == bank.id {
+                                                    Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundColor(.goldDark)
+                                                }
+                                            }
+                                            .padding(.horizontal, 14).padding(.vertical, 9)
+                                            .background(selectedBankId == bank.id ? Color.gold.opacity(0.06) : Color.white)
+                                        }
+                                        .buttonStyle(BorderlessButtonStyle())
+                                        Divider().padding(.leading, 52)
+                                    }
+                                }
+                            }
+                            .background(Color.white)
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                            .cornerRadius(8)
+                        }
+                    }
+
+                    Spacer().frame(height: 14)
+
+                    // PROPOSED LIMIT + BS CONTROL CODE
+                    HStack(alignment: .top, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            fieldLabel("PROPOSED LIMIT")
+                            HStack(spacing: 4) {
+                                Text("£").font(.system(size: 14, weight: .semibold)).foregroundColor(.goldDark)
+                                TextField("1,500", text: $proposedLimit)
+                                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                    .keyboardType(.decimalPad)
+                            }
+                            .padding(.horizontal, 12).padding(.vertical, 12)
+                            .background(Color.white)
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                        }
+                        .frame(maxWidth: .infinity)
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            fieldLabel("BS CONTROL CODE")
+                            TextField("e.g. 1145", text: $bsControlCode)
+                                .font(.system(size: 14))
+                                .keyboardType(.numberPad)
+                                .padding(.horizontal, 12).padding(.vertical, 12)
+                                .background(Color.white)
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+
+                    Spacer().frame(height: 14)
+
+                    // JUSTIFICATION
+                    fieldLabel("JUSTIFICATION")
+                    MultilineTextView(text: $justification, placeholder: "Reason for card request...")
+                        .frame(minHeight: 90)
+                        .background(Color.white)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                        .cornerRadius(8)
+                }
+                .padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 90)
+            }
+            .onTapGesture { showUserDropdown = false; showBankDropdown = false }
+
+            Button(action: submit) {
+                HStack(spacing: 6) {
+                    if submitting { ActivityIndicator(isAnimating: true).frame(width: 16, height: 16) }
+                    Text(submitting ? "Submitting..." : "Submit Request").font(.system(size: 15, weight: .bold))
+                }
+                .foregroundColor(isValid && !submitting ? .black : .white)
+                .frame(maxWidth: .infinity).padding(.vertical, 15)
+                .background(isValid && !submitting ? Color.gold : Color.gray.opacity(0.35))
+                .cornerRadius(10)
+            }
+            .buttonStyle(BorderlessButtonStyle())
+            .disabled(!isValid || submitting)
+            .padding(.horizontal, 16).padding(.vertical, 12)
+            .background(Color.white)
+            .overlay(Rectangle().fill(Color.borderColor).frame(height: 1), alignment: .top)
+        }
+        .navigationBarTitle(Text("Request New Card"), displayMode: .inline)
+        .navigationBarBackButtonHidden(true)
+        .navigationBarItems(leading:
+            Button(action: { presentationMode.wrappedValue.dismiss() }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left").font(.system(size: 14, weight: .semibold))
+                    Text("Back").font(.system(size: 16))
+                }.foregroundColor(.goldDark)
+            }
+        )
+        .onAppear { appState.loadBankAccounts() }
+    }
+
+    private func submit() {
+        guard isValid, !submitting else { return }
+        submitting = true
+        let uid = isAccountant ? selectedUserId : (appState.currentUser?.id ?? "")
+        let user = UsersData.byId[uid] ?? appState.currentUser
+        appState.requestNewCard(
+            userId: uid,
+            holderName: user?.fullName ?? "",
+            departmentName: user?.displayDepartment ?? "",
+            bankAccountId: selectedBankId,
+            proposedLimit: Double(proposedLimit) ?? 0,
+            bsControlCode: bsControlCode,
+            justification: justification
+        )
+        presentationMode.wrappedValue.dismiss()
+    }
+
+    @ViewBuilder
+    private func fieldLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundColor(.secondary)
+            .padding(.bottom, 4)
+    }
+
+    private func simpleRow(label: String, value: String) -> some View {
         HStack {
             Text(label).font(.system(size: 12)).foregroundColor(.secondary)
             Spacer()
@@ -2499,11 +4569,11 @@ struct CardsForApprovalTabView: View {
                 VStack(spacing: 12) {
                     if cards.isEmpty {
                         VStack(spacing: 12) {
+                            Spacer(minLength: 0)
                             Image(systemName: "checkmark.seal").font(.system(size: 32)).foregroundColor(.gray.opacity(0.3))
                             Text("No cards pending approval").font(.system(size: 14, weight: .semibold)).foregroundColor(.secondary)
-                        }.frame(maxWidth: .infinity).padding(.vertical, 40)
-                        .background(Color.white).cornerRadius(10)
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                            Spacer(minLength: 0)
+                        }.frame(maxWidth: .infinity, minHeight: 480)
                     } else {
                         ForEach(cards) { card in
                             ApprovalCardRow(card: card, tierConfigs: appState.cardTierConfigRows, onApprove: {
@@ -2636,10 +4706,12 @@ struct ApprovalCardRow: View {
                                 .font(.system(size: 9, weight: .semibold))
                                 .foregroundColor(isApproved ? .green : isCurrent ? .goldDark : .gray)
                             if isApproved {
-                                let approver = card.approvals.first { $0.tierNumber == tier }
-                                let name = approver.flatMap { UsersData.byId[$0.userId]?.fullName } ?? ""
-                                if !name.isEmpty {
-                                    Text(name).font(.system(size: 8, weight: .medium)).foregroundColor(.green).lineLimit(1)
+                                let approverUser = card.approvals.first(where: { $0.tierNumber == tier }).flatMap { UsersData.byId[$0.userId] }
+                                if let user = approverUser {
+                                    Text(user.fullName).font(.system(size: 8, weight: .medium)).foregroundColor(.green).lineLimit(1)
+                                    if !user.displayDesignation.isEmpty {
+                                        Text(user.displayDesignation).font(.system(size: 7)).foregroundColor(.green.opacity(0.8)).lineLimit(1)
+                                    }
                                 }
                             } else {
                                 Text("Awaiting").font(.system(size: 8)).foregroundColor(isCurrent ? .goldDark : .gray)
@@ -2820,7 +4892,7 @@ struct ReceiptRow: View {
     private var statusLabel: String {
         switch receipt.matchStatus.lowercased() {
         case "pending", "pending_receipt": return "Pending Receipt"
-        case "pending_coding", "pending_code": return "Pending Code"
+        case "pending_coding", "pending_code", "pending code": return "Pending Code"
         case "awaiting_approval": return "Awaiting Approval"
         case "approved", "matched", "coded": return "Approved"
         case "queried": return "Queried"
@@ -2837,11 +4909,12 @@ struct ReceiptRow: View {
     private var statusBadgeColors: (Color, Color) {
         let teal = Color(red: 0.0, green: 0.6, blue: 0.5)
         let orange = Color(red: 0.95, green: 0.55, blue: 0.15)
+        let navy  = Color(red: 0.05, green: 0.15, blue: 0.42)
         switch receipt.matchStatus.lowercased() {
         case "approved", "matched", "coded": return (teal, teal.opacity(0.12))
         case "posted": return (teal, teal.opacity(0.12))
         case "pending", "pending_receipt": return (orange, orange.opacity(0.12))
-        case "pending_coding", "pending_code": return (orange, orange.opacity(0.12))
+        case "pending_coding", "pending_code", "pending code": return (navy, navy.opacity(0.12))
         case "awaiting_approval": return (.goldDark, Color.gold.opacity(0.15))
         case "queried": return (.purple, Color.purple.opacity(0.12))
         case "under_review": return (.blue, Color.blue.opacity(0.12))
@@ -2879,7 +4952,7 @@ struct ReceiptRow: View {
     private func statusColors(_ s: String) -> (Color, Color) {
         switch s {
         case "pending": return (.orange, Color.orange.opacity(0.1))
-        case "pending_coding": return (Color(red: 0.91, green: 0.29, blue: 0.48), Color(red: 0.91, green: 0.29, blue: 0.48).opacity(0.1))
+        case "pending_coding", "pending_code", "pending code": return (Color(red: 0.05, green: 0.15, blue: 0.42), Color(red: 0.05, green: 0.15, blue: 0.42).opacity(0.1))
         case "coded": return (.blue, Color.blue.opacity(0.1))
         case "matched": return (Color(red: 0, green: 0.6, blue: 0.5), Color(red: 0, green: 0.6, blue: 0.5).opacity(0.1))
         case "posted": return (.green, Color.green.opacity(0.1))
@@ -2909,11 +4982,12 @@ struct CardTransactionRow: View {
     private var statusColors: (Color, Color) {
         let teal = Color(red: 0.0, green: 0.6, blue: 0.5)
         let orange = Color(red: 0.95, green: 0.55, blue: 0.15)
+        let navy  = Color(red: 0.05, green: 0.15, blue: 0.42)
         switch transaction.status.lowercased() {
         case "approved", "matched", "coded": return (teal, teal.opacity(0.12))
         case "posted": return (teal, teal.opacity(0.12))
         case "pending", "pending_receipt": return (orange, orange.opacity(0.12))
-        case "pending_coding", "pending_code": return (orange, orange.opacity(0.12))
+        case "pending_coding", "pending_code", "pending code": return (navy, navy.opacity(0.12))
         case "awaiting_approval": return (.goldDark, Color.gold.opacity(0.15))
         case "queried": return (.purple, Color.purple.opacity(0.12))
         case "under_review": return (.blue, Color.blue.opacity(0.12))
@@ -3032,9 +5106,18 @@ struct CardTransactionDetailPage: View {
     @EnvironmentObject var appState: POViewModel
     @Environment(\.presentationMode) var presentationMode
     @State private var navigateToEdit = false
+    @State private var showOverrideSheet = false
+    @State private var overrideReason = ""
+    @State private var isOverriding = false
 
     private var live: CardTransaction {
-        appState.cardTransactions.first(where: { $0.id == transaction.id }) ?? transaction
+        appState.cardTransactions.first(where: { $0.id == transaction.id })
+            ?? appState.cardApprovalQueueItems.first(where: { $0.id == transaction.id })
+            ?? transaction
+    }
+
+    private var isInApprovalQueue: Bool {
+        appState.cardApprovalQueueItems.contains(where: { $0.id == transaction.id })
     }
 
     private var isLocked: Bool {
@@ -3045,11 +5128,12 @@ struct CardTransactionDetailPage: View {
     private var statusColors: (Color, Color) {
         let teal = Color(red: 0.0, green: 0.6, blue: 0.5)
         let orange = Color(red: 0.95, green: 0.55, blue: 0.15)
+        let navy  = Color(red: 0.05, green: 0.15, blue: 0.42)
         switch live.status.lowercased() {
         case "approved", "matched", "coded": return (teal, teal.opacity(0.12))
         case "posted": return (teal, teal.opacity(0.12))
         case "pending", "pending_receipt": return (orange, orange.opacity(0.12))
-        case "pending_coding", "pending_code": return (orange, orange.opacity(0.12))
+        case "pending_coding", "pending_code", "pending code": return (navy, navy.opacity(0.12))
         case "awaiting_approval": return (.goldDark, Color.gold.opacity(0.15))
         case "queried": return (.purple, Color.purple.opacity(0.12))
         case "under_review": return (.blue, Color.blue.opacity(0.12))
@@ -3070,10 +5154,19 @@ struct CardTransactionDetailPage: View {
                 VStack(alignment: .leading, spacing: 0) {
                     // ── Summary card (everything inside a single card) ──
                     VStack(alignment: .leading, spacing: 0) {
-                        // Header: title + status
-                        HStack {
+                        // Header: title + status + urgent
+                        HStack(spacing: 8) {
                             Text("Receipt Details").font(.system(size: 15, weight: .bold))
                             Spacer()
+                            if live.isUrgent {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "flame.fill").font(.system(size: 9))
+                                    Text("Urgent").font(.system(size: 10, weight: .bold))
+                                }
+                                .foregroundColor(.red)
+                                .padding(.horizontal, 7).padding(.vertical, 4)
+                                .background(Color.red.opacity(0.1)).cornerRadius(4)
+                            }
                             let (fg, bg) = statusColors
                             Text(live.statusDisplay).font(.system(size: 10, weight: .bold)).foregroundColor(fg)
                                 .padding(.horizontal, 8).padding(.vertical, 4).background(bg).cornerRadius(4)
@@ -3131,10 +5224,10 @@ struct CardTransactionDetailPage: View {
                             Text("APPROVAL PROGRESS").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
                             if !live.approvals.isEmpty {
                                 ForEach(Array(live.approvals.enumerated()), id: \.offset) { _, a in
-                                    approverRow(userId: a.userId, override: a.override)
+                                    approverRow(userId: a.userId, tierNumber: a.tierNumber, override: a.override)
                                 }
                             } else if !live.approvedBy.isEmpty {
-                                approverRow(userId: live.approvedBy, override: false)
+                                approverRow(userId: live.approvedBy, tierNumber: 1, override: false)
                             } else {
                                 Text("No approvals yet").font(.system(size: 11)).foregroundColor(.gray)
                             }
@@ -3174,8 +5267,29 @@ struct CardTransactionDetailPage: View {
                 .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 90)
             }
 
-            // Bottom bar with Edit Receipt button (hidden for approved/posted or when disabled)
-            if allowEdit && !isLocked {
+            // Bottom bar
+            if isInApprovalQueue {
+                // Override button for approval queue context
+                VStack(spacing: 0) {
+                    Rectangle().fill(Color.borderColor).frame(height: 1)
+                    HStack {
+                        Button(action: { overrideReason = ""; showOverrideSheet = true }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "person.badge.shield.checkmark.fill").font(.system(size: 13, weight: .bold))
+                                Text("Override").font(.system(size: 14, weight: .bold))
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color(red: 0.95, green: 0.55, blue: 0.15))
+                            .cornerRadius(10)
+                        }.buttonStyle(BorderlessButtonStyle())
+                    }
+                    .padding(.horizontal, 16).padding(.vertical, 12)
+                    .background(Color(UIColor.systemGroupedBackground))
+                }
+            } else if allowEdit && !isLocked {
+                // Edit Receipt for regular user context
                 VStack(spacing: 0) {
                     Rectangle().fill(Color.borderColor).frame(height: 1)
                     HStack {
@@ -3209,6 +5323,65 @@ struct CardTransactionDetailPage: View {
             NavigationLink(destination: EditCardTransactionPage(transaction: live).environmentObject(appState),
                            isActive: $navigateToEdit) { EmptyView() }.frame(width: 0, height: 0).hidden()
         )
+        .sheet(isPresented: $showOverrideSheet) {
+            NavigationView {
+                VStack(alignment: .leading, spacing: 20) {
+                    // Item summary
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(live.merchant.isEmpty ? live.description : live.merchant)
+                                .font(.system(size: 14, weight: .semibold))
+                            Text(live.holderName.isEmpty ? "—" : live.holderName)
+                                .font(.system(size: 12)).foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        Text(FormatUtils.formatGBP(live.amount))
+                            .font(.system(size: 15, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
+                    }
+                    .padding(14).background(Color(.systemGray6)).cornerRadius(10)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("REASON FOR OVERRIDE").font(.system(size: 10, weight: .bold)).foregroundColor(.secondary).tracking(0.5)
+                        TextField("e.g. Approver unavailable, deadline critical…", text: $overrideReason)
+                            .font(.system(size: 13))
+                            .padding(12)
+                            .background(Color.white)
+                            .cornerRadius(10)
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                    }
+
+                    Spacer()
+
+                    Button(action: {
+                        guard !overrideReason.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+                        isOverriding = true
+                        appState.overrideApprovalItem(live.id, reason: overrideReason) { success in
+                            isOverriding = false
+                            if success { showOverrideSheet = false; presentationMode.wrappedValue.dismiss() }
+                        }
+                    }) {
+                        HStack(spacing: 6) {
+                            if isOverriding { ActivityIndicator(isAnimating: true) }
+                            Text(isOverriding ? "Overriding…" : "Confirm Override")
+                                .font(.system(size: 15, weight: .bold))
+                        }
+                        .frame(maxWidth: .infinity).padding(.vertical, 14)
+                        .background(overrideReason.trimmingCharacters(in: .whitespaces).isEmpty || isOverriding
+                                    ? Color.gray.opacity(0.3) : Color(red: 0.95, green: 0.55, blue: 0.15))
+                        .foregroundColor(overrideReason.trimmingCharacters(in: .whitespaces).isEmpty || isOverriding
+                                         ? .gray : .white)
+                        .cornerRadius(12)
+                    }
+                    .disabled(overrideReason.trimmingCharacters(in: .whitespaces).isEmpty || isOverriding)
+                }
+                .padding(20)
+                .background(Color.bgBase.edgesIgnoringSafeArea(.all))
+                .navigationBarTitle("Override Approval", displayMode: .inline)
+                .navigationBarItems(leading: Button("Cancel") {
+                    showOverrideSheet = false
+                }.foregroundColor(.goldDark))
+            }
+        }
     }
 
     private func detailRow(_ label: String, _ value: String) -> some View {
@@ -3234,7 +5407,7 @@ struct CardTransactionDetailPage: View {
         return code.uppercased()
     }
 
-    private func approverRow(userId: String, override: Bool) -> some View {
+    private func approverRow(userId: String, tierNumber: Int, override: Bool) -> some View {
         let user = UsersData.byId[userId]
         return HStack(spacing: 8) {
             ZStack {
@@ -3244,6 +5417,14 @@ struct CardTransactionDetailPage: View {
             Text(user?.fullName ?? userId).font(.system(size: 13, weight: .semibold))
             if let d = user?.displayDesignation, !d.isEmpty {
                 Text("(\(d))").font(.system(size: 11)).foregroundColor(.secondary)
+            }
+            if tierNumber > 0 {
+                Text("Level \(tierNumber)")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(Color(red: 0.7, green: 0.55, blue: 0.0))
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Color(red: 1.0, green: 0.85, blue: 0.2).opacity(0.18))
+                    .cornerRadius(3)
             }
             if override {
                 Text("Override").font(.system(size: 9, weight: .bold)).foregroundColor(.purple)
@@ -3660,185 +5841,355 @@ struct ReceiptDetailPage: View {
     @EnvironmentObject var appState: POViewModel
     @Environment(\.presentationMode) var presentationMode
     @State private var activeSheet: ReceiptDetailSheet?
+    @State private var navigateToHistory = false
 
-    private var live: Receipt { appState.receipts.first(where: { $0.id == receipt.id }) ?? receipt }
+    // Prefer freshly fetched detail; fall back to the receipt passed in
+    private var live: Receipt {
+        appState.currentReceiptDetail?.id == receipt.id
+            ? appState.currentReceiptDetail!
+            : receipt
+    }
 
     private var receiptDocumentURL: URL? {
         guard !live.filePath.isEmpty else { return nil }
         return URL(string: "\(CardExpenseRequest.baseURL)\(live.filePath)")
     }
 
+    // MARK: - Derived helpers
+
     private var currentStep: Int {
-        switch live.matchStatus {
-        case "pending": return 0
-        case "pending_coding": return 1
-        case "coded": return 2
-        case "matched": return 3
-        case "posted": return 4
-        default: return -1
+        switch live.workflowStatus.lowercased() {
+        case "pending_receipt":             return 0
+        case "pending_code","pending_coding": return 1
+        case "awaiting_approval":           return 2
+        case "approved":                    return 3
+        case "posted":                      return 4
+        default:                            return 0
         }
     }
 
-    private func stepDot(index: Int, label: String, sub: String) -> some View {
-        let isDone = index < currentStep
-        let isActive = index == currentStep
-        let color: Color = isDone ? .green : isActive ? .goldDark : Color.gray.opacity(0.4)
-        let labelColor: Color = isDone ? .green : isActive ? .goldDark : .secondary
-        return VStack(spacing: 4) {
-            Circle().fill(color).frame(width: 10, height: 10)
-            Text(label).font(.system(size: 11, weight: isActive ? .bold : .semibold)).foregroundColor(labelColor).lineLimit(1).minimumScaleFactor(0.7)
-            Text(sub).font(.system(size: 9)).foregroundColor(.gray).lineLimit(1).minimumScaleFactor(0.7)
-        }
-        .frame(maxWidth: .infinity)
+    private var expenseDate: String {
+        let ts = live.transactionDate > 0 ? live.transactionDate : live.createdAt
+        return ts > 0 ? FormatUtils.formatTimestamp(ts) : "—"
     }
+
+    private var hasLinkedTxn: Bool { !live.linkedMerchant.isEmpty || live.linkedAmount != nil }
+    private var uploaderUser: AppUser? { UsersData.byId[live.uploaderId] }
+
+    // MARK: - Status badge
+
+    private func statusBadge() -> some View {
+        let teal   = Color(red: 0.0,  green: 0.6,  blue: 0.5)
+        let navy   = Color(red: 0.05, green: 0.15, blue: 0.42)
+        let orange = Color(red: 0.95, green: 0.55, blue: 0.15)
+        let s = live.workflowStatus.isEmpty ? live.matchStatus : live.workflowStatus
+        let (label, fg, bg): (String, Color, Color) = {
+            switch s.lowercased() {
+            case "pending_coding", "pending_code", "pending code": return ("Pending Code", navy, navy.opacity(0.12))
+            case "posted":               return ("Posted",            Color(red: 0.1, green: 0.6, blue: 0.3), Color.green.opacity(0.1))
+            case "approved":             return ("Approved",          teal,   teal.opacity(0.12))
+            case "awaiting_approval":    return ("Awaiting Approval", orange, orange.opacity(0.12))
+            case "matched","suggested_match": return ("Matched",      teal,   teal.opacity(0.12))
+            case "unmatched":            return ("No Match",          orange, orange.opacity(0.12))
+            case "pending_receipt":      return ("Pending Receipt",   orange, orange.opacity(0.12))
+            default:                     return ("Pending",           orange, orange.opacity(0.12))
+            }
+        }()
+        return Text(label)
+            .font(.system(size: 10, weight: .bold)).foregroundColor(fg)
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .background(bg).cornerRadius(5)
+    }
+
+    // MARK: - Step dot
+
+    private func stepDot(index: Int, label: String) -> some View {
+        let isDone   = index < currentStep
+        let isActive = index == currentStep
+        let dotColor: Color = isDone ? Color(red: 0.1, green: 0.6, blue: 0.3) : isActive ? .goldDark : Color.gray.opacity(0.3)
+        let textColor: Color = isDone ? Color(red: 0.1, green: 0.6, blue: 0.3) : isActive ? .goldDark : Color.gray.opacity(0.5)
+        return VStack(spacing: 5) {
+            ZStack {
+                Circle().fill(isDone ? Color(red: 0.1, green: 0.6, blue: 0.3) : isActive ? Color.goldDark : Color.gray.opacity(0.15))
+                    .frame(width: 22, height: 22)
+                if isDone {
+                    Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)).foregroundColor(.white)
+                } else {
+                    Circle().fill(isActive ? Color.white : dotColor).frame(width: 7, height: 7)
+                }
+            }
+            Text(label)
+                .font(.system(size: 9, weight: isActive ? .bold : .medium))
+                .foregroundColor(textColor)
+                .lineLimit(2).multilineTextAlignment(.center)
+                .minimumScaleFactor(0.7)
+        }.frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Detail row
+
+    private func dRow(_ icon: String, _ label: String, _ value: String, valueColor: Color = .primary) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon).font(.system(size: 12)).foregroundColor(.secondary).frame(width: 18)
+            Text(label).font(.system(size: 13)).foregroundColor(.secondary)
+            Spacer(minLength: 8)
+            Text(value).font(.system(size: 13, weight: .semibold)).foregroundColor(valueColor).lineLimit(1)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 11)
+    }
+
+    // MARK: - Body
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            Color.bgBase.edgesIgnoringSafeArea(.all)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    // 5-step progress flow
-                    VStack(alignment: .leading, spacing: 0) {
-                        HStack {
-                            Text("Receipt Details").font(.system(size: 14, weight: .bold))
-                            Spacer()
-                        }
-                        .padding(14)
-                        Divider()
-                        HStack(spacing: 0) {
-                            stepDot(index: 0, label: "Submitted", sub: "Receipt sent")
-                            stepDot(index: 1, label: "Coding", sub: "Budget coding")
-                            stepDot(index: 2, label: "Coded", sub: "Audit & verify")
-                            stepDot(index: 3, label: "Matched", sub: "Matched txn")
-                            stepDot(index: 4, label: "Posted", sub: "Ledger / payment")
-                        }
-                        .padding(.horizontal, 10).padding(.vertical, 14)
-                    }
-                    .background(Color.white).cornerRadius(10)
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+        let showActionBar = live.workflowStatus.lowercased() == "pending_receipt" && appState.currentUser?.isAccountant == true
 
-                    // Header
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text(live.displayMerchant).font(.system(size: 16, weight: .bold))
-                            Spacer()
-                            let sc = statusColor(live.matchStatus)
-                            Text(live.statusDisplay).font(.system(size: 10, weight: .semibold)).foregroundColor(sc.0)
-                                .padding(.horizontal, 8).padding(.vertical, 3).background(sc.1).cornerRadius(4)
+        return ZStack(alignment: .bottom) {
+            Color.bgBase.edgesIgnoringSafeArea(.all)
+
+            // Centered loader while fetching fresh detail
+            if appState.isLoadingReceiptDetail {
+                VStack {
+                    Spacer()
+                    LoaderView()
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity)
+                .background(Color.bgBase.edgesIgnoringSafeArea(.all))
+                .zIndex(1)
+            }
+
+            ScrollView {
+                VStack(spacing: 12) {
+
+                    // ── Hero card ─────────────────────────────────
+                    VStack(alignment: .leading, spacing: 0) {
+                        // Top: merchant + urgent + status
+                        HStack(alignment: .top, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 6) {
+                                    Text(live.displayMerchant.isEmpty ? "Receipt" : live.displayMerchant)
+                                        .font(.system(size: 18, weight: .bold)).lineLimit(2)
+                                    if live.isUrgent {
+                                        Text("URGENT")
+                                            .font(.system(size: 8, weight: .bold)).foregroundColor(.white)
+                                            .padding(.horizontal, 5).padding(.vertical, 3)
+                                            .background(Color.red).cornerRadius(4)
+                                    }
+                                }
+                                Text(expenseDate)
+                                    .font(.system(size: 12)).foregroundColor(.secondary)
+                            }
+                            Spacer(minLength: 8)
+                            statusBadge()
                         }
-                        HStack(spacing: 8) {
-                            Button(action: { activeSheet = .document }) {
+                        .padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 10)
+
+                        // Amount
+                        if live.displayAmount > 0 {
+                            Text(FormatUtils.formatGBP(live.displayAmount))
+                                .font(.system(size: 26, weight: .bold, design: .monospaced))
+                                .foregroundColor(.goldDark)
+                                .padding(.horizontal, 14).padding(.bottom, 10)
+                        }
+
+                        Divider().padding(.horizontal, 14)
+
+                        // Uploader
+                        HStack(spacing: 10) {
+                            ZStack {
+                                Circle().fill(Color.gold.opacity(0.18)).frame(width: 32, height: 32)
+                                Text((uploaderUser?.initials ?? String(live.uploaderName.prefix(2))).uppercased())
+                                    .font(.system(size: 12, weight: .bold)).foregroundColor(.goldDark)
+                            }
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(uploaderUser?.fullName ?? (live.uploaderName.isEmpty ? "—" : live.uploaderName))
+                                    .font(.system(size: 13, weight: .semibold))
+                                if !live.uploaderDepartment.isEmpty {
+                                    Text(live.uploaderDepartment)
+                                        .font(.system(size: 11)).foregroundColor(.secondary)
+                                }
+                            }
+                            Spacer()
+                            // Nominal code pill
+                            if let code = live.nominalCode, !code.isEmpty {
                                 HStack(spacing: 4) {
-                                    Image(systemName: "eye.fill").font(.system(size: 10))
-                                    Text("View Receipt").font(.system(size: 10, weight: .semibold))
+                                    Image(systemName: "tag.fill").font(.system(size: 9)).foregroundColor(.goldDark)
+                                    Text(code.uppercased().replacingOccurrences(of: "_", with: "-"))
+                                        .font(.system(size: 10, weight: .bold)).foregroundColor(.goldDark)
+                                }
+                                .padding(.horizontal, 8).padding(.vertical, 4)
+                                .background(Color.gold.opacity(0.12)).cornerRadius(5)
+                            }
+                        }
+                        .padding(.horizontal, 14).padding(.vertical, 10)
+
+                        Divider().padding(.horizontal, 14)
+
+                        // Action buttons
+                        HStack(spacing: 10) {
+                            Button(action: { activeSheet = .document }) {
+                                HStack(spacing: 5) {
+                                    Image(systemName: "doc.text.viewfinder").font(.system(size: 11))
+                                    Text("View Receipt").font(.system(size: 12, weight: .semibold))
                                 }
                                 .foregroundColor(.goldDark)
-                                .padding(.horizontal, 10).padding(.vertical, 5)
-                                .background(Color.gold.opacity(0.12)).cornerRadius(4)
+                                .frame(maxWidth: .infinity).padding(.vertical, 9)
+                                .background(Color.gold.opacity(0.1))
+                                .cornerRadius(8)
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gold.opacity(0.3), lineWidth: 1))
                             }.buttonStyle(BorderlessButtonStyle())
 
                             Button(action: { activeSheet = .edit }) {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "pencil").font(.system(size: 10))
-                                    Text("Edit Details").font(.system(size: 10, weight: .semibold))
+                                HStack(spacing: 5) {
+                                    Image(systemName: "pencil").font(.system(size: 11))
+                                    Text("Edit Details").font(.system(size: 12, weight: .semibold))
                                 }
                                 .foregroundColor(.white)
-                                .padding(.horizontal, 10).padding(.vertical, 5)
-                                .background(Color.goldDark).cornerRadius(4)
+                                .frame(maxWidth: .infinity).padding(.vertical, 9)
+                                .background(Color.goldDark)
+                                .cornerRadius(8)
                             }.buttonStyle(BorderlessButtonStyle())
                         }
+                        .padding(.horizontal, 14).padding(.vertical, 10)
+                    }
+                    .background(Color.white).cornerRadius(12)
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
+
+                    // ── Workflow progress ─────────────────────────
+                    VStack(spacing: 0) {
+                        Text("WORKFLOW").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 14)
+                        HStack(alignment: .top, spacing: 0) {
+                            stepDot(index: 0, label: "Submitted")
+                            stepConnector(isDone: currentStep > 0)
+                            stepDot(index: 1, label: "Coding")
+                            stepConnector(isDone: currentStep > 1)
+                            stepDot(index: 2, label: "Approval")
+                            stepConnector(isDone: currentStep > 2)
+                            stepDot(index: 3, label: "Approved")
+                            stepConnector(isDone: currentStep > 3)
+                            stepDot(index: 4, label: "Posted")
+                        }
+                        .padding(.horizontal, 10).padding(.bottom, 14)
+                    }
+                    .background(Color.white).cornerRadius(12)
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
+
+                    // ── Key details ───────────────────────────────
+                    VStack(spacing: 0) {
+                        Text("DETAILS").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 4)
 
                         if live.displayAmount > 0 {
-                            Text(FormatUtils.formatGBP(live.displayAmount))
-                                .font(.system(size: 22, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
+                            dRow("sterlingsign.circle", "Amount", FormatUtils.formatGBP(live.displayAmount), valueColor: .goldDark)
+                            Divider().padding(.leading, 42)
                         }
-                        HStack(spacing: 4) {
-                            Text("by").font(.system(size: 11)).foregroundColor(.secondary)
-                            Text(live.uploaderName).font(.system(size: 11, weight: .semibold))
-                            if !live.uploaderDepartment.isEmpty {
-                                Text("· \(live.uploaderDepartment)").font(.system(size: 11)).foregroundColor(.secondary)
-                            }
+                        dRow("calendar", "Date", expenseDate)
+                        if let code = live.nominalCode, !code.isEmpty {
+                            Divider().padding(.leading, 42)
+                            dRow("tag", "Nominal Code", code.uppercased().replacingOccurrences(of: "_", with: "-"), valueColor: .goldDark)
                         }
-                        HStack(spacing: 8) {
-                            if !live.fileType.isEmpty {
-                                Text(live.fileType.uppercased()).font(.system(size: 9, weight: .semibold)).foregroundColor(.gray)
-                                    .padding(.horizontal, 6).padding(.vertical, 2).background(Color.gray.opacity(0.08)).cornerRadius(4)
-                            }
-                            if !live.fileSizeDisplay.isEmpty { Text(live.fileSizeDisplay).font(.system(size: 10)).foregroundColor(.secondary) }
-                            if let t = live.uploadType, !t.isEmpty {
-                                Text(t.uppercased()).font(.system(size: 9, weight: .semibold)).foregroundColor(.blue)
-                                    .padding(.horizontal, 6).padding(.vertical, 2).background(Color.blue.opacity(0.08)).cornerRadius(4)
-                            }
+                        Divider().padding(.leading, 42)
+                        dRow("arrow.triangle.2.circlepath", "Match Status", live.matchStatus.replacingOccurrences(of: "_", with: " ").capitalized)
+                        if !live.workflowStatus.isEmpty {
+                            Divider().padding(.leading, 42)
+                            dRow("checkmark.seal", "Workflow", live.workflowStatus.replacingOccurrences(of: "_", with: " ").capitalized)
                         }
-                    }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.white).cornerRadius(10)
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                        Divider().padding(.leading, 42)
+                        dRow("person.fill", "Uploaded by", (uploaderUser?.fullName ?? live.uploaderName).isEmpty ? "—" : (uploaderUser?.fullName ?? live.uploaderName))
+                        Divider().padding(.leading, 42)
+                        dRow("clock", "Created", live.createdAt > 0 ? FormatUtils.formatTimestamp(live.createdAt) : "—")
+                        if !live.originalName.isEmpty {
+                            Divider().padding(.leading, 42)
+                            dRow("doc.fill", "File", live.originalName)
+                        }
+                    }
+                    .background(Color.white).cornerRadius(12)
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
 
-                    // Details
-                    VStack(spacing: 0) {
-                        dRow("Merchant", live.merchantDetected ?? "—")
-                        Divider().padding(.leading, 14)
-                        dRow("Amount", live.amountDetected.map { "£\($0)" } ?? "—")
-                        Divider().padding(.leading, 14)
-                        dRow("Date", live.dateDetected ?? "—")
-                        if let c = live.nominalCode, !c.isEmpty { Divider().padding(.leading, 14); dRow("Receipt Code", c) }
-                        Divider().padding(.leading, 14)
-                        dRow("File", live.originalName)
-                        Divider().padding(.leading, 14)
-                        dRow("Status", live.statusDisplay)
-                    }.background(Color.white).cornerRadius(10)
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                    // ── Linked transaction ────────────────────────
+                    if hasLinkedTxn {
+                        VStack(spacing: 0) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "link.circle.fill").font(.system(size: 13)).foregroundColor(.goldDark)
+                                Text("LINKED TRANSACTION").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.8)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 8)
+                            Divider()
+                            VStack(alignment: .leading, spacing: 6) {
+                                if !live.linkedMerchant.isEmpty {
+                                    Text(live.linkedMerchant)
+                                        .font(.system(size: 14, weight: .semibold)).lineLimit(2)
+                                }
+                                HStack(spacing: 10) {
+                                    if let amt = live.linkedAmount {
+                                        Text(FormatUtils.formatGBP(amt))
+                                            .font(.system(size: 14, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
+                                    }
+                                    if !live.linkedCardLast4.isEmpty {
+                                        HStack(spacing: 3) {
+                                            Text("····").font(.system(size: 11)).foregroundColor(.secondary)
+                                            Text(live.linkedCardLast4).font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                        }
+                                    }
+                                    if let ld = live.linkedDate, ld > 0 {
+                                        Text(FormatUtils.formatTimestamp(ld))
+                                            .font(.system(size: 11)).foregroundColor(.secondary)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 14).padding(.vertical, 12)
+                        }
+                        .background(Color.white).cornerRadius(12)
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
+                    }
 
-                    // Line items
+                    // ── Line items ────────────────────────────────
                     if !live.lineItems.isEmpty {
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text("LINE ITEMS (\(live.lineItems.count))").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
+                        VStack(spacing: 0) {
+                            Text("LINE ITEMS (\(live.lineItems.count))")
+                                .font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.8)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 8)
+                            Divider()
                             ForEach(Array(live.lineItems.enumerated()), id: \.offset) { idx, li in
-                                HStack {
+                                HStack(spacing: 8) {
                                     if let c = li.code, !c.isEmpty {
-                                        Text(c).font(.system(size: 10, weight: .semibold, design: .monospaced)).foregroundColor(.blue)
-                                            .padding(.horizontal, 4).padding(.vertical, 1).background(Color.blue.opacity(0.08)).cornerRadius(3)
+                                        Text(c.uppercased()).font(.system(size: 9, weight: .bold)).foregroundColor(.goldDark)
+                                            .padding(.horizontal, 5).padding(.vertical, 2)
+                                            .background(Color.gold.opacity(0.1)).cornerRadius(4)
                                     }
-                                    Text(li.description ?? "—").font(.system(size: 11)).lineLimit(1)
+                                    Text(li.description ?? "—").font(.system(size: 12)).foregroundColor(.primary).lineLimit(1)
                                     Spacer()
-                                    Text(FormatUtils.formatGBP(li.amountValue)).font(.system(size: 11, weight: .medium, design: .monospaced))
-                                }.padding(.horizontal, 14).padding(.vertical, 6)
-                                if idx < live.lineItems.count - 1 { Divider().padding(.horizontal, 14) }
+                                    Text(FormatUtils.formatGBP(li.amountValue))
+                                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                }
+                                .padding(.horizontal, 14).padding(.vertical, 10)
+                                if idx < live.lineItems.count - 1 { Divider().padding(.leading, 14) }
                             }
-                            Divider().padding(.horizontal, 14)
-                            HStack { Spacer(); Text("Total: ").font(.system(size: 12, weight: .semibold))
+                            Divider()
+                            HStack {
+                                Text("Total").font(.system(size: 13, weight: .semibold))
+                                Spacer()
                                 Text(FormatUtils.formatGBP(live.lineItems.reduce(0) { $0 + $1.amountValue }))
-                                    .font(.system(size: 14, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
-                            }.padding(.horizontal, 14).padding(.vertical, 8)
-                        }.background(Color.white).cornerRadius(10)
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                                    .font(.system(size: 15, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
+                            }
+                            .padding(.horizontal, 14).padding(.vertical, 11)
+                        }
+                        .background(Color.white).cornerRadius(12)
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
                     }
 
-                    // History
-                    if !live.history.isEmpty {
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text("HISTORY").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
-                                .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 8)
-                            ForEach(Array(live.history.enumerated()), id: \.offset) { idx, entry in
-                                HStack(alignment: .top, spacing: 10) {
-                                    Circle().fill(Color.goldDark).frame(width: 8, height: 8).padding(.top, 4)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(entry.action ?? "").font(.system(size: 12, weight: .semibold))
-                                        if let d = entry.details, !d.isEmpty { Text(d).font(.system(size: 10)).foregroundColor(.secondary) }
-                                        if let ts = entry.timestamp, ts > 0 { Text(FormatUtils.formatDateTime(ts)).font(.system(size: 9)).foregroundColor(.gray) }
-                                    }
-                                    Spacer()
-                                }.padding(.horizontal, 14).padding(.vertical, 6)
-                            }
-                        }.background(Color.white).cornerRadius(10)
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
-                    }
-                }.padding(.horizontal, 16).padding(.top, 14)
-                .padding(.bottom, (live.matchStatus == "pending" && appState.currentUser?.isAccountant == true) ? 80 : 24)
+                }
+                .padding(.horizontal, 16).padding(.top, 14)
+                .padding(.bottom, showActionBar ? 80 : 28)
+                .opacity(appState.isLoadingReceiptDetail ? 0 : 1)
             }
 
-            if live.matchStatus == "pending" && appState.currentUser?.isAccountant == true {
+            if showActionBar {
                 HStack(spacing: 10) {
                     Button(action: { appState.flagReceiptPersonal(live); presentationMode.wrappedValue.dismiss() }) {
                         Text("Flag Personal").font(.system(size: 13, weight: .bold)).foregroundColor(.purple)
@@ -3850,16 +6201,27 @@ struct ReceiptDetailPage: View {
                         Text("Confirm").font(.system(size: 13, weight: .bold)).foregroundColor(.black)
                             .padding(.horizontal, 20).padding(.vertical, 10).background(Color.gold).cornerRadius(8)
                     }.buttonStyle(BorderlessButtonStyle())
-                }.padding(.horizontal, 16).padding(.vertical, 12)
-                .background(Color(UIColor.systemGroupedBackground))
+                }
+                .padding(.horizontal, 16).padding(.vertical, 12)
+                .background(Color.white)
                 .overlay(Rectangle().fill(Color.borderColor).frame(height: 1), alignment: .top)
             }
         }
+        .background(
+            NavigationLink(destination: ReceiptHistoryPage(history: live.history).environmentObject(appState),
+                           isActive: $navigateToHistory) { EmptyView() }.frame(width: 0, height: 0).hidden()
+        )
         .navigationBarTitle(Text("Receipt Detail"), displayMode: .inline)
         .navigationBarBackButtonHidden(true)
-        .navigationBarItems(leading:
-            Button(action: { presentationMode.wrappedValue.dismiss() }) {
+        .navigationBarItems(
+            leading: Button(action: { presentationMode.wrappedValue.dismiss() }) {
                 HStack(spacing: 4) { Image(systemName: "chevron.left").font(.system(size: 14, weight: .semibold)); Text("Back").font(.system(size: 16)) }.foregroundColor(.goldDark)
+            },
+            trailing: Button(action: { navigateToHistory = true }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "clock.arrow.circlepath").font(.system(size: 13))
+                    Text("History").font(.system(size: 14))
+                }.foregroundColor(.goldDark)
             }
         )
         .sheet(item: $activeSheet) { sheet in
@@ -3877,23 +6239,80 @@ struct ReceiptDetailPage: View {
                 }.padding(32)
             }
         }
+        .onAppear { appState.loadReceiptDetail(id: receipt.id) }
     }
 
-    private func dRow(_ label: String, _ value: String) -> some View {
-        HStack { Text(label).font(.system(size: 12)).foregroundColor(.secondary); Spacer(); Text(value).font(.system(size: 12, weight: .semibold)).lineLimit(1) }
-            .padding(.horizontal, 14).padding(.vertical, 10)
+    private func stepConnector(isDone: Bool) -> some View {
+        Rectangle()
+            .fill(isDone ? Color(red: 0.1, green: 0.6, blue: 0.3) : Color.gray.opacity(0.2))
+            .frame(height: 2)
+            .padding(.bottom, 18)
     }
+}
 
-    private func statusColor(_ s: String) -> (Color, Color) {
-        switch s {
-        case "pending", "pending_coding": return (.orange, Color.orange.opacity(0.1))
-        case "coded": return (.blue, Color.blue.opacity(0.1))
-        case "matched": return (Color(red: 0, green: 0.6, blue: 0.5), Color(red: 0, green: 0.6, blue: 0.5).opacity(0.1))
-        case "posted": return (.green, Color.green.opacity(0.1))
-        case "unmatched": return (Color(red: 0.91, green: 0.29, blue: 0.48), Color(red: 0.91, green: 0.29, blue: 0.48).opacity(0.1))
-        case "personal": return (.purple, Color.purple.opacity(0.1))
-        default: return (.goldDark, Color.gold.opacity(0.15))
+// ═══════════════════════════════════════════════════════════════════
+// MARK: - Receipt History Page
+// ═══════════════════════════════════════════════════════════════════
+
+struct ReceiptHistoryPage: View {
+    let history: [ReceiptHistoryEntry]
+    @EnvironmentObject var appState: POViewModel
+    @Environment(\.presentationMode) var presentationMode
+
+    var body: some View {
+        ScrollView {
+            if history.isEmpty {
+                VStack(spacing: 12) {
+                    Spacer(minLength: 0)
+                    Image(systemName: "clock.arrow.circlepath").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
+                    Text("No history available").font(.system(size: 13)).foregroundColor(.secondary)
+                    Spacer(minLength: 0)
+                }.frame(maxWidth: .infinity, minHeight: 480)
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(history.enumerated()), id: \.offset) { idx, entry in
+                        HStack(alignment: .top, spacing: 12) {
+                            // Timeline dot + line
+                            VStack(spacing: 0) {
+                                Circle().fill(Color.goldDark).frame(width: 10, height: 10).padding(.top, 3)
+                                if idx < history.count - 1 {
+                                    Rectangle().fill(Color.goldDark.opacity(0.2)).frame(width: 1).frame(maxHeight: .infinity)
+                                }
+                            }.frame(width: 10)
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(entry.action ?? "Action").font(.system(size: 13, weight: .semibold))
+                                if let d = entry.details, !d.isEmpty {
+                                    Text(d).font(.system(size: 11)).foregroundColor(.secondary)
+                                }
+                                if let ts = entry.timestamp, ts > 0 {
+                                    Text(FormatUtils.formatDateTime(ts))
+                                        .font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
+                                }
+                            }
+                            Spacer()
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, idx == 0 ? 16 : 12)
+                        .padding(.bottom, idx == history.count - 1 ? 16 : 0)
+                    }
+                }
+                .background(Color.white).cornerRadius(10)
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 24)
+            }
         }
+        .background(Color.bgBase)
+        .navigationBarTitle(Text("History"), displayMode: .inline)
+        .navigationBarBackButtonHidden(true)
+        .navigationBarItems(leading:
+            Button(action: { presentationMode.wrappedValue.dismiss() }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left").font(.system(size: 14, weight: .semibold))
+                    Text("Back").font(.system(size: 16))
+                }.foregroundColor(.goldDark)
+            }
+        )
     }
 }
 
@@ -4707,4 +7126,72 @@ struct ReceiptWebViewContent: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {}
+}
+
+// MARK: - Multiline text input (iOS 13 compatible replacement for TextEditor)
+
+struct MultilineTextView: UIViewRepresentable {
+    @Binding var text: String
+    var placeholder: String = ""
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIView(context: Context) -> UITextView {
+        let tv = UITextView()
+        tv.delegate = context.coordinator
+        tv.font = UIFont.systemFont(ofSize: 14)
+        tv.backgroundColor = .clear
+        tv.textContainerInset = UIEdgeInsets(top: 10, left: 10, bottom: 10, right: 10)
+        tv.isScrollEnabled = false
+        tv.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        updatePlaceholder(tv)
+        return tv
+    }
+
+    func updateUIView(_ tv: UITextView, context: Context) {
+        if text.isEmpty && !tv.isFirstResponder {
+            tv.text = placeholder
+            tv.textColor = UIColor.placeholderText
+        } else if tv.textColor == UIColor.placeholderText && !text.isEmpty {
+            tv.text = text
+            tv.textColor = UIColor.label
+        } else if tv.textColor != UIColor.placeholderText {
+            if tv.text != text { tv.text = text }
+            tv.textColor = UIColor.label
+        }
+    }
+
+    private func updatePlaceholder(_ tv: UITextView) {
+        if text.isEmpty {
+            tv.text = placeholder
+            tv.textColor = UIColor.placeholderText
+        } else {
+            tv.text = text
+            tv.textColor = UIColor.label
+        }
+    }
+
+    class Coordinator: NSObject, UITextViewDelegate {
+        var parent: MultilineTextView
+        init(_ parent: MultilineTextView) { self.parent = parent }
+
+        func textViewDidBeginEditing(_ tv: UITextView) {
+            if tv.textColor == UIColor.placeholderText {
+                tv.text = ""
+                tv.textColor = UIColor.label
+            }
+        }
+
+        func textViewDidEndEditing(_ tv: UITextView) {
+            if tv.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                tv.text = parent.placeholder
+                tv.textColor = UIColor.placeholderText
+                parent.text = ""
+            }
+        }
+
+        func textViewDidChange(_ tv: UITextView) {
+            parent.text = tv.text
+        }
+    }
 }

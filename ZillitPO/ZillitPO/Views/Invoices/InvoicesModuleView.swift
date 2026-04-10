@@ -103,11 +103,15 @@ struct InvoicesModuleView: View {
             VStack(spacing: 0) {
                 tabBar
 
-                filterBar.padding(.horizontal, 16).padding(.top, 12)
-                searchBar.padding(.horizontal, 16).padding(.top, 10)
+                // Search + Filter in one line
+                HStack(spacing: 8) {
+                    searchBar
+                    filterBar
+                }
+                .padding(.horizontal, 16).padding(.top, 12)
                 ScrollView {
                     if appState.isLoading {
-                        LoaderView().padding(.top, 40)
+                        LoaderView()
                     } else if filteredInvoices.isEmpty {
                         emptyState.padding(.top, 20)
                     } else {
@@ -149,9 +153,12 @@ struct InvoicesModuleView: View {
         }
         .navigationBarTitle(Text("Invoices"), displayMode: .inline)
         .onAppear {
+            // Invoices page only loads its own data: invoices + settings (for approver badge).
+            // Payment runs are loaded lazily by the Payment Run tab / page when opened.
             appState.loadInvoices()
-            appState.loadPaymentRuns()
             appState.loadInvoiceSettings()
+            if appState.vendors.isEmpty { appState.loadVendors() }
+            if appState.invoiceTierConfigRows.isEmpty { appState.loadInvoiceApprovalTiers() }
         }
     }
 
@@ -186,10 +193,10 @@ struct InvoicesModuleView: View {
     @State private var showFilterSheet = false
 
     private var filterBar: some View {
-        HStack(spacing: 8) {
-            // Filter dropdown — matches PO QuickFiltersBar style
+        HStack(spacing: 6) {
+            // Filter dropdown
             Button(action: { showFilterSheet = true }) {
-                HStack(spacing: 6) {
+                HStack(spacing: 4) {
                     Image(systemName: "line.3.horizontal.decrease")
                         .font(.system(size: 10, weight: .medium)).foregroundColor(.goldDark)
                     Text(selectedFilter.rawValue)
@@ -197,9 +204,9 @@ struct InvoicesModuleView: View {
                     Image(systemName: "chevron.down")
                         .font(.system(size: 8, weight: .medium)).foregroundColor(.gray)
                 }
-                .padding(.horizontal, 12).padding(.vertical, 8)
-                .background(Color.white).cornerRadius(6)
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
+                .padding(.horizontal, 10).padding(.vertical, 10)
+                .background(Color.white).cornerRadius(8)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                 .contentShape(Rectangle())
             }
             .buttonStyle(BorderlessButtonStyle())
@@ -210,28 +217,23 @@ struct InvoicesModuleView: View {
                 } + [.cancel()]
             )
 
-            Spacer()
-
-            // Approval button — matches Drafts/Templates button style
+            // Payment Run Approval button
             if appState.isRunAuthApprover {
                 Button(action: { navigateToPaymentRunApproval = true }) {
                     HStack(spacing: 5) {
-                        Image(systemName: "banknote")
-                            .font(.system(size: 10, weight: .medium))
+                        Image(systemName: "banknote").font(.system(size: 10, weight: .medium))
                         Text("Payment Run Approval").font(.system(size: 12, weight: .semibold)).lineLimit(1)
                         if pendingPaymentRunCount > 0 {
                             Text("\(pendingPaymentRunCount)")
                                 .font(.system(size: 9, design: .monospaced))
                                 .foregroundColor(.white)
                                 .padding(.horizontal, 5).padding(.vertical, 2)
-                                .background(Color.goldDark)
-                                .cornerRadius(8)
+                                .background(Color.goldDark).cornerRadius(8)
                         }
                     }
                     .foregroundColor(.goldDark)
                     .padding(.horizontal, 12).padding(.vertical, 8)
-                    .background(Color.white)
-                    .cornerRadius(6)
+                    .background(Color.white).cornerRadius(6)
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.gold.opacity(0.3), lineWidth: 1))
                     .contentShape(Rectangle())
                 }
@@ -247,6 +249,7 @@ struct InvoicesModuleView: View {
         }
         .padding(10).background(Color.white).cornerRadius(8)
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+        .frame(maxWidth: .infinity)
     }
 
     private var statsCards: some View {
@@ -270,12 +273,12 @@ struct InvoicesModuleView: View {
 
     private var emptyState: some View {
         VStack(spacing: 12) {
-            Image(systemName: "doc.text").font(.system(size: 32)).foregroundColor(.gray.opacity(0.3))
+            Spacer(minLength: 0)
+            Image(systemName: "doc.text").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
             Text("No invoices found").font(.system(size: 13)).foregroundColor(.secondary)
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity).padding(.vertical, 40)
-        .background(Color.white).cornerRadius(10)
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+        .frame(maxWidth: .infinity, minHeight: 480)
     }
 
     private var invoiceList: some View {
@@ -324,16 +327,15 @@ struct PaymentRunApprovalPage: View {
             ScrollView {
                 VStack(spacing: 0) {
                     if appState.isLoading && appState.paymentRuns.isEmpty {
-                        LoaderView().padding(.top, 40)
+                        LoaderView()
                     } else if pendingRuns.isEmpty {
                         VStack(spacing: 12) {
-                            Image(systemName: "banknote").font(.system(size: 32)).foregroundColor(.gray.opacity(0.3))
+                            Spacer(minLength: 0)
+                            Image(systemName: "banknote").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
                             Text("No pending payment runs").font(.system(size: 13)).foregroundColor(.secondary)
+                            Spacer(minLength: 0)
                         }
-                        .frame(maxWidth: .infinity).padding(.vertical, 40)
-                        .background(Color.white).cornerRadius(10)
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
-                        .padding(.top, 20)
+                        .frame(maxWidth: .infinity, minHeight: 480)
                     } else {
                         VStack(spacing: 0) {
                             ForEach(pendingRuns, id: \.id) { run in
@@ -1475,9 +1477,8 @@ struct PaymentRunDetailPage: View {
         )
         .onAppear {
             if appState.paymentRuns.isEmpty { appState.loadPaymentRuns() }
-            if appState.tierConfigRows.isEmpty && appState.invoiceTierConfigRows.isEmpty {
-                appState.loadAllData()
-            }
+            if appState.invoiceTierConfigRows.isEmpty { appState.loadInvoiceApprovalTiers() }
+            if appState.vendors.isEmpty { appState.loadVendors() }
             // Fetch run detail to get invoices
             if liveRun.invoices.isEmpty {
                 loadingInvoices = true

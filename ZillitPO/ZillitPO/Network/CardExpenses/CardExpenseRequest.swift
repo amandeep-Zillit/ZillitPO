@@ -6,7 +6,7 @@
 import Foundation
 
 enum CardExpenseRequest {
-    static let baseURL = "http://192.168.1.7:3005"
+    static let baseURL = "http://192.168.1.3:3005"
 
     // MARK: - Receipts
     case fetchAllReceipts
@@ -33,17 +33,23 @@ enum CardExpenseRequest {
     case createCard([String: Any])
     case approveCardReq(String, [String: Any])         // id, body
     case rejectCardReq(String, [String: Any])          // id, body
+    case overrideCardReq(String, [String: Any])        // id, body
 
-    // MARK: - Approval Tiers
-    case fetchCardApprovalTiers
-
-    // MARK: - Overview
-    case fetchOverview
+    // MARK: - Metadata (hub counts + role)
+    case fetchMetadata
 
     // MARK: - Accountant Hub queues
     case fetchTopUps
     case fetchSmartAlerts
     case fetchCardHistory
+    case fetchPendingCoding
+    case fetchApprovalQueue
+    case overrideApproval(String, [String: Any])           // id, body
+    case getReceipt(String)                                // id
+    case fetchReceiptDetail(String)                        // id → /receipts/{id}/detail
+
+    // MARK: - Bank Accounts
+    case fetchBankAccounts
 
     // MARK: - Settings
     case fetchSettings
@@ -74,7 +80,7 @@ extension CardExpenseRequest: POURLRequestProtocol {
         case .fetchAllReceipts:
             return buildLocal(.get, "/api/v2/card-expenses/receipts")
 
-        case .fetchMyReceipts:
+case .fetchMyReceipts:
             return buildLocal(.get, "/api/v2/card-expenses/receipts/my")
 
         case .confirmReceipt(let id):
@@ -155,21 +161,12 @@ extension CardExpenseRequest: POURLRequestProtocol {
         case .rejectCardReq(let id, let body):
             return buildLocal(.post, "/api/v2/card-expenses/cards/\(id)/reject", body: body)
 
-        // MARK: Approval Tiers
-        case .fetchCardApprovalTiers:
-            let url = "http://192.168.1.7:3003/api/v2/account-hub/approval-tiers?module=card_expenses"
-            guard let u = URL(string: url) else { return nil }
-            var req = URLRequest(url: u)
-            req.httpMethod = "GET"
-            req.timeoutInterval = 30
-            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            req.setValue(APIClient.shared.projectId, forHTTPHeaderField: "x-project-id")
-            req.setValue(APIClient.shared.userId, forHTTPHeaderField: "x-user-id")
-            return req
+        case .overrideCardReq(let id, let body):
+            return buildLocal(.post, "/api/v2/card-expenses/cards/\(id)/override", body: body)
 
-        // MARK: Overview
-        case .fetchOverview:
-            return buildLocal(.get, "/api/v2/card-expenses/overview")
+        // MARK: Metadata
+        case .fetchMetadata:
+            return buildLocal(.get, "/api/v2/card-expenses/metadata")
 
         // MARK: Accountant Hub queues
         case .fetchTopUps:
@@ -178,6 +175,33 @@ extension CardExpenseRequest: POURLRequestProtocol {
             return buildLocal(.get, "/api/v2/card-expenses/alerts")
         case .fetchCardHistory:
             return buildLocal(.get, "/api/v2/card-expenses/receipts/posted-history")
+
+        case .fetchPendingCoding:
+            return buildLocal(.get, "/api/v2/card-expenses/receipts/pending-coding")
+
+        case .fetchApprovalQueue:
+            return buildLocal(.get, "/api/v2/card-expenses/approvals")
+
+        case .overrideApproval(let id, let body):
+            return buildLocal(.post, "/api/v2/card-expenses/approvals/\(id)/override", body: body)
+
+        case .getReceipt(let id):
+            return buildLocal(.get, "/api/v2/card-expenses/receipts/\(id)")
+
+        case .fetchReceiptDetail(let id):
+            return buildLocal(.get, "/api/v2/card-expenses/receipts/\(id)/detail")
+
+        // MARK: Bank Accounts
+        case .fetchBankAccounts:
+            let urlStr = "http://192.168.1.3:3003/api/v2/account-hub/bank-accounts?entity_type=production"
+            guard let u = URL(string: urlStr) else { return nil }
+            var req = URLRequest(url: u)
+            req.httpMethod = "GET"
+            req.timeoutInterval = 30
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.setValue(APIClient.shared.projectId, forHTTPHeaderField: "x-project-id")
+            req.setValue(APIClient.shared.userId, forHTTPHeaderField: "x-user-id")
+            return req
 
         // MARK: Settings
         case .fetchSettings:

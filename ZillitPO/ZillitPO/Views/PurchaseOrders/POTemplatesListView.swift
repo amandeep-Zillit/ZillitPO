@@ -7,10 +7,11 @@ struct POTemplatesListView: View {
         VStack(alignment: .leading, spacing: 12) {
             if appState.templates.isEmpty {
                 VStack(spacing: 12) {
-                    Image(systemName: "doc.on.doc").font(.system(size: 32)).foregroundColor(.gray.opacity(0.3))
+                    Spacer(minLength: 0)
+                    Image(systemName: "doc.on.doc").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
                     Text("No templates yet").font(.system(size: 13)).foregroundColor(.secondary)
-                }.frame(maxWidth: .infinity).padding(.vertical, 40).background(Color.white).cornerRadius(10)
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                    Spacer(minLength: 0)
+                }.frame(maxWidth: .infinity, minHeight: 480)
             } else {
                 ForEach(appState.templates, id: \.id) { tpl in
                     HStack(spacing: 0) {

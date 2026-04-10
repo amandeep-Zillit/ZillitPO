@@ -3,14 +3,23 @@ import SwiftUI
 struct LoaderView: View {
     var message = "Loading..."
     var body: some View {
-        VStack(spacing: 12) {
-            #if canImport(UIKit)
-            ActivityIndicator(isAnimating: true)
-            #else
-            Text("⟳").font(.system(size: 24))
-            #endif
-            Text(message).font(.system(size: 12)).foregroundColor(.secondary)
-        }.frame(maxWidth: .infinity).padding(.vertical, 40)
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            VStack(spacing: 12) {
+                #if canImport(UIKit)
+                ActivityIndicator(isAnimating: true)
+                #else
+                Text("⟳").font(.system(size: 24))
+                #endif
+                Text(message)
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        // minHeight ensures the Spacers have room to push content to centre
+        // even when LoaderView sits inside a ScrollView
+        .frame(maxWidth: .infinity, minHeight: 480)
     }
 }
 

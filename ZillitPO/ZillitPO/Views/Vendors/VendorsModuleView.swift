@@ -83,10 +83,11 @@ struct VendorsScrollableList: View {
             VStack(alignment: .leading, spacing: 12) {
                 if filtered.isEmpty {
                     VStack(spacing: 12) {
-                        Image(systemName: "person.2").font(.system(size: 32)).foregroundColor(.gray.opacity(0.3))
+                        Spacer(minLength: 0)
+                        Image(systemName: "person.2").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
                         Text("No vendors found").font(.system(size: 13)).foregroundColor(.secondary)
-                    }.frame(maxWidth: .infinity).padding(.vertical, 40).background(Color.white).cornerRadius(10)
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                        Spacer(minLength: 0)
+                    }.frame(maxWidth: .infinity, minHeight: 480)
                 } else {
                     ForEach(filtered, id: \.id) { vendor in
                         HStack(spacing: 0) {
@@ -173,6 +174,7 @@ struct VendorsModuleView: View {
             .padding(.bottom, 24)
         }
         .navigationBarTitle(Text("Vendors"), displayMode: .inline)
+        .onAppear { appState.loadVendors() }
     }
 }
 
@@ -310,7 +312,7 @@ struct VendorFormPage: View {
             }
         )
         .onDisappear {
-            appState.loadAllData()
+            appState.loadVendors()
         }
     }
 }
@@ -477,7 +479,7 @@ struct VendorFormView: View {
                 switch result {
                 case .success:
                     print("✅ Vendor created successfully")
-                    appState.loadAllData()
+                    appState.loadVendors()
                     onBack()
                 case .failure(let error):
                     print("❌ Create vendor failed: \(error)")

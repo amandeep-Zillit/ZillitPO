@@ -49,7 +49,7 @@ struct ContentView: View {
                             .contentShape(Rectangle())
                         }.buttonStyle(BorderlessButtonStyle())
 
-                        NavigationLink(destination: POHubPage().onAppear { appState.loadAllData() }, isActive: $showPurchaseOrders) {
+                        NavigationLink(destination: POHubPage(), isActive: $showPurchaseOrders) {
                             HStack(spacing: 12) {
                                 Image(systemName: "cart.fill").font(.system(size: 20)).foregroundColor(.white)
                                     .frame(width: 36, height: 36).background(Color.gold).cornerRadius(8)
@@ -156,7 +156,7 @@ struct POHubPage: View {
                 }.buttonStyle(BorderlessButtonStyle())
 
                 // Invoices tile
-                NavigationLink(destination: InvoicesModuleView().onAppear { appState.loadInvoices() }.environmentObject(appState), isActive: $navigateToInvoices) { EmptyView() }.hidden()
+                NavigationLink(destination: InvoicesModuleView().environmentObject(appState), isActive: $navigateToInvoices) { EmptyView() }.hidden()
                 Button(action: { navigateToInvoices = true }) {
                     HStack(spacing: 12) {
                         Image(systemName: "doc.text.fill").font(.system(size: 20)).foregroundColor(.white)

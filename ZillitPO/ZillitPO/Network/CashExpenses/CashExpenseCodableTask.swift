@@ -18,6 +18,7 @@ enum CashExpenseCodableTask {
     case fetchAuditQueue((Result<APIResponse<[ClaimBatchRaw]>?, Error>) -> Void)
     case fetchApprovalQueueClaims((Result<APIResponse<[ClaimBatchRaw]>?, Error>) -> Void)
     case fetchSignOffQueue((Result<APIResponse<[ClaimBatchRaw]>?, Error>) -> Void)
+    case fetchPaymentRouting((Result<APIResponse<PaymentRoutingResponse>?, Error>) -> Void)
     case createFloatRequest([String: Any], (Result<Data?, Error>) -> Void)
     case createClaimBatch([String: Any], (Result<Data?, Error>) -> Void)
     case saveClaims(String, [String: Any], (Result<Data?, Error>) -> Void)
@@ -62,6 +63,9 @@ extension CashExpenseCodableTask: PODataTaskProtocol {
             return APIClient.shared.codableResultTask(with: r, completion: c)
         case .fetchSignOffQueue(let c):
             guard let r = CashExpenseRequest.fetchSignOffQueue.urlRequest else { return nil }
+            return APIClient.shared.codableResultTask(with: r, completion: c)
+        case .fetchPaymentRouting(let c):
+            guard let r = CashExpenseRequest.fetchPaymentRouting.urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: r, completion: c)
         case .createFloatRequest(let body, let c):
             guard let r = CashExpenseRequest.createFloatRequest(body).urlRequest else { return nil }

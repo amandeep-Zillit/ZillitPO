@@ -75,16 +75,35 @@ class POViewModel: ObservableObject {
 
     // Card Expenses / Receipts state
     @Published var receipts: [Receipt] = []
+    @Published var inboxReceipts: [Receipt] = []
+    @Published var currentReceiptDetail: Receipt? = nil
+    @Published var isLoadingReceiptDetail = false
+    @Published var cardExpenseMeta: CardExpenseMeta = CardExpenseMeta()
     @Published var cardTransactions: [CardTransaction] = []
     @Published var cardReceipts: [CardTransaction] = []
+    @Published var pendingCodingItems: [PendingCodingItem] = []
+    @Published var cardApprovalQueueItems: [CardTransaction] = []
     @Published var myCardReceipts: [CardTransaction] = []
     @Published var topUpQueue: [TopUpItem] = []
     @Published var smartAlerts: [SmartAlert] = []
     @Published var cardHistory: [CardTransaction] = []
     @Published var userCards: [ExpenseCard] = []
     @Published var allCards: [ExpenseCard] = []
+    @Published var bankAccounts: [ProductionBankAccount] = []
     @Published var cardTierConfigRows: [ApprovalTierConfig] = []
     @Published var isCardApprover = false
+
+    // Card Expenses loading flags
+    // Start as `true` so the loader is visible on first render (before onAppear fires)
+    @Published var isLoadingReceipts       = true
+    @Published var isLoadingInboxReceipts  = true
+    @Published var isLoadingCardTxns       = true
+    @Published var isLoadingCards          = true
+    @Published var isLoadingSmartAlerts    = true
+    @Published var isLoadingTopUps         = true
+    @Published var isLoadingPendingCoding  = true
+    @Published var isLoadingCardApprovals  = true
+    @Published var isLoadingCardHistory    = true
 
     // Cash & Expenses state
     @Published var cashMeta: CashExpenseMetadata?
@@ -99,6 +118,21 @@ class POViewModel: ObservableObject {
     @Published var auditQueue: [ClaimBatch] = []
     @Published var approvalQueueClaims: [ClaimBatch] = []
     @Published var signOffQueue: [ClaimBatch] = []
+    @Published var paymentRouting: PaymentRoutingResponse = PaymentRoutingResponse()
+
+    // Cash Expenses loading flags
+    // Start as `true` so the loader is visible on first render (before onAppear fires)
+    @Published var isLoadingMyFloats       = true
+    @Published var isLoadingAllFloats      = true
+    @Published var isLoadingActiveFloats   = true
+    @Published var isLoadingApprovalFloats = true
+    @Published var isLoadingMyClaims       = true
+    @Published var isLoadingMyBatches      = true
+    @Published var isLoadingAllClaims      = true
+    @Published var isLoadingCodingQueue    = true
+    @Published var isLoadingAuditQueue     = true
+    @Published var isLoadingApprovalClaims = true
+    @Published var isLoadingSignOffQueue   = true
 
     // Payment Run state
     @Published var paymentRuns: [PaymentRun] = []
@@ -110,10 +144,52 @@ class POViewModel: ObservableObject {
     @Published var runDetailLoading = false
     @Published var approvingRunId: String?
 
-    init() { currentUser = UsersData.byId[userId]; configureAPI(); loadCashExpenseMetadata() }
+    init() {
+        currentUser = UsersData.byId[userId]
+        configureAPI()
+        // Pre-fetch metadata so coordinator tabs appear immediately on navigation
+        loadCardExpenseMeta()
+        loadCashExpenseMetadata()
+    }
 
     func switchUser(_ id: String) {
-        userId = id; currentUser = UsersData.byId[id]; configureAPI(); loadAllData(); loadCashExpenseMetadata()
+        userId = id
+        currentUser = UsersData.byId[id]
+        configureAPI()
+        // Clear any cached reference data so new-user views refetch cleanly
+        vendors = []
+        tierConfigRows = []
+        invoiceTierConfigRows = []
+        purchaseOrders = []
+        invoices = []
+        paymentRuns = []
+        cardTransactions = []
+        cardReceipts = []
+        inboxReceipts = []
+        pendingCodingItems = []
+        cardApprovalQueueItems = []
+        myCardReceipts = []
+        userCards = []
+        topUpQueue = []
+        smartAlerts = []
+        cardHistory = []
+        cardExpenseMeta = CardExpenseMeta()
+        cashMeta = nil
+        myFloats = []
+        myClaims = []
+        allClaims = []
+        activeFloats = []
+        // Reset loading flags to true so pages show loaders on next navigation
+        isLoadingReceipts = true; isLoadingInboxReceipts = true; isLoadingCardTxns = true; isLoadingCards = true
+        isLoadingSmartAlerts = true; isLoadingTopUps = true; isLoadingPendingCoding = true
+        isLoadingCardApprovals = true; isLoadingCardHistory = true
+        isLoadingMyFloats = true; isLoadingAllFloats = true; isLoadingActiveFloats = true
+        isLoadingApprovalFloats = true; isLoadingMyClaims = true; isLoadingMyBatches = true
+        isLoadingAllClaims = true; isLoadingCodingQueue = true; isLoadingAuditQueue = true
+        isLoadingApprovalClaims = true; isLoadingSignOffQueue = true
+        // Re-fetch metadata for new user so coordinator tabs appear immediately
+        loadCardExpenseMeta()
+        loadCashExpenseMetadata()
     }
 
     func configureAPI() {

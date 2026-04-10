@@ -21,9 +21,7 @@ struct CashExpensesHubView: View {
     private var auditClaims: [ClaimBatch] { appState.auditQueue }
     private var approvalClaims: [ClaimBatch] { appState.approvalQueueClaims }
     private var approvalQueueTotal: Int { appState.approvalQueueFloats.count + appState.approvalQueueClaims.count }
-    private var codingClaims: [ClaimBatch] {
-        appState.allClaims.filter { ["CODING", "CODED"].contains($0.status.uppercased()) }
-    }
+    private var codingClaims: [ClaimBatch] { appState.codingQueue }
 
     var body: some View {
         ZStack {
@@ -94,7 +92,12 @@ struct CashExpensesHubView: View {
                     // Coordinator-only tiles
                     if isCoord && !isAcct {
                         // Coding Queue tile
-                        NavigationLink(destination: CodingQueueListView(claims: codingClaims).environmentObject(appState).navigationBarTitle(Text("Coding Queue"), displayMode: .inline), isActive: $navigateToCodingQueue) { EmptyView() }.hidden()
+                        NavigationLink(
+                            destination: CodingQueueListView(claims: codingClaims, isLoading: appState.isLoadingCodingQueue).environmentObject(appState)
+                                .navigationBarTitle(Text("Coding Queue"), displayMode: .inline)
+                                .onAppear { appState.loadCodingQueue() },   // GET /cash-expenses/claims/coding-queue
+                            isActive: $navigateToCodingQueue
+                        ) { EmptyView() }.hidden()
                         Button(action: { navigateToCodingQueue = true }) {
                             HStack(spacing: 12) {
                                 Image(systemName: "doc.text.magnifyingglass").font(.system(size: 20)).foregroundColor(.white)
@@ -126,7 +129,10 @@ struct CashExpensesHubView: View {
             }
         }
         .navigationBarTitle(Text("Cash & Expenses"), displayMode: .inline)
-        .onAppear { appState.loadAllCashExpenseData() }
+        .onAppear {
+            // Only metadata — each tile loads its own data on appear
+            appState.loadCashExpenseMetadata()
+        }
     }
 }
 
@@ -154,10 +160,10 @@ struct PettyCashModuleView: View {
             return ["Active Floats", "History"]
         }
         if isCoord {
-            return ["Active Floats", "Float Request", "Submit Claim", "My Claims"]
+            return ["Active Floats", "Float Request", "Submit Receipts", "Receipts History"]
         }
         // User (Crew)
-        return ["Float Request", "Submit Claim", "My Claims"]
+        return ["Float Request", "Submit Receipts", "Receipts History"]
     }
 
     @State private var activeTab = ""
@@ -218,23 +224,41 @@ struct PettyCashModuleView: View {
         .navigationBarTitle(Text("Petty Cash"), displayMode: .inline)
         .onAppear {
             if activeTab.isEmpty { activeTab = isAcct ? "Active Floats" : isCoord ? "Active Floats" : "Float Request" }
-            appState.loadAllCashExpenseData()
+            appState.loadCashExpenseMetadata()
         }
     }
 
     @ViewBuilder
     private var cashTabContent: some View {
         switch activeTab {
-        case "Active Floats": FloatsListView(floats: appState.activeFloats).environmentObject(appState)
-        case "Post & Ledger": ClaimsListView(claims: appState.allPettyCashClaims.filter { ["READY_TO_POST", "POSTED"].contains($0.status.uppercased()) }, title: "Post & Ledger", hideFilterSearch: true).environmentObject(appState)
-        case "Cash Recon": ReconciliationView().environmentObject(appState)
-        case "Sign-off": SignOffListView().environmentObject(appState)
-        case "Approval Queue": ApprovalQueuePage().environmentObject(appState)
-        case "History": ClaimsListView(claims: appState.allPettyCashClaims, title: "History").environmentObject(appState)
-        case "Coding Queue": CodingQueueListView(claims: appState.codingQueue).environmentObject(appState)
-        case "Float Request": FloatRequestListView().environmentObject(appState)
-        case "Submit Claim":  SubmitClaimFormView(expenseType: "pc").environmentObject(appState)
-        case "My Claims":    ClaimsListView(claims: appState.myPettyCashClaims, title: "My Claims", filterMode: .myClaims).environmentObject(appState)
+        case "Active Floats":
+            FloatsListView(floats: appState.activeFloats).environmentObject(appState)
+                .onAppear { appState.loadActiveFloats() }
+        case "Post & Ledger":
+            ClaimsListView(claims: appState.allPettyCashClaims.filter { ["READY_TO_POST", "POSTED"].contains($0.status.uppercased()) }, title: "Post & Ledger", isLoading: appState.isLoadingAllClaims, hideFilterSearch: true).environmentObject(appState)
+                .onAppear { appState.loadAllClaims() }
+        case "Cash Recon":
+            ReconciliationView().environmentObject(appState)
+                .onAppear { appState.loadActiveFloats() }
+        case "Sign-off":
+            SignOffListView().environmentObject(appState)
+                .onAppear { appState.loadSignOffQueue() }
+        case "Approval Queue":
+            ApprovalQueuePage().environmentObject(appState)
+        case "History":
+            ClaimsListView(claims: appState.allPettyCashClaims, title: "History", isLoading: appState.isLoadingAllClaims).environmentObject(appState)
+                .onAppear { appState.loadAllClaims() }
+        case "Coding Queue":
+            CodingQueueListView(claims: appState.codingQueue, isLoading: appState.isLoadingCodingQueue).environmentObject(appState)
+                .onAppear { appState.loadCodingQueue() }
+        case "Float Request":
+            FloatRequestListView().environmentObject(appState)
+                .onAppear { appState.loadMyFloats() }
+        case "Submit Receipts":
+            SubmitClaimFormView(expenseType: "pc").environmentObject(appState)
+        case "Receipts History":
+            ClaimsListView(claims: appState.myPettyCashClaims, title: "Receipts History", isLoading: appState.isLoadingMyClaims, filterMode: .myClaims).environmentObject(appState)
+                .onAppear { appState.loadMyClaims() }
         default: EmptyView()
         }
     }
@@ -258,56 +282,36 @@ struct OutOfPocketModuleView: View {
             return ["Payment Routing", "History"]
         }
         if isCoord {
-            return ["Submit Claim", "My Claims"]
+            return ["Submit Receipts", "Receipts History"]
         }
         // User (Crew)
-        return ["Submit Claim", "My Claims"]
+        return ["Submit Receipts", "Receipts History"]
     }
 
     @State private var activeTab = ""
-    @State private var navigateToNewClaim = false
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            VStack(spacing: 0) {
-                HStack(spacing: 0) {
-                    ForEach(tabs, id: \.self) { tab in
-                        let isActive = activeTab == tab
-                        Button(action: { activeTab = tab }) {
-                            Text(tab).font(.system(size: 11, weight: isActive ? .semibold : .regular)).lineLimit(1)
-                                .foregroundColor(isActive ? .goldDark : .secondary)
-                                .frame(maxWidth: .infinity).padding(.vertical, 10)
-                                .overlay(isActive ? Rectangle().fill(Color.goldDark).frame(height: 2) : nil, alignment: .bottom)
-                        }.buttonStyle(BorderlessButtonStyle())
-                    }
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                ForEach(tabs, id: \.self) { tab in
+                    let isActive = activeTab == tab
+                    Button(action: { activeTab = tab }) {
+                        Text(tab).font(.system(size: 11, weight: isActive ? .semibold : .regular)).lineLimit(1)
+                            .foregroundColor(isActive ? .goldDark : .secondary)
+                            .frame(maxWidth: .infinity).padding(.vertical, 10)
+                            .overlay(isActive ? Rectangle().fill(Color.goldDark).frame(height: 2) : nil, alignment: .bottom)
+                    }.buttonStyle(BorderlessButtonStyle())
                 }
-                .overlay(Rectangle().fill(Color.borderColor).frame(height: 1), alignment: .bottom)
-
-                oopTabContent
             }
+            .overlay(Rectangle().fill(Color.borderColor).frame(height: 1), alignment: .bottom)
 
-            if isAcct {
-                Button(action: { navigateToNewClaim = true }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus").font(.system(size: 14, weight: .bold))
-                        Text("New Claim").font(.system(size: 14, weight: .bold))
-                    }
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 20).padding(.vertical, 14)
-                    .background(Color.gold).cornerRadius(28)
-                }
-                .padding(.trailing, 20).padding(.bottom, 24)
-            }
+            oopTabContent
         }
-        .background(
-            NavigationLink(destination: SubmitClaimFormView(expenseType: "oop").environmentObject(appState).navigationBarTitle(Text("New Claim"), displayMode: .inline), isActive: $navigateToNewClaim) { EmptyView() }
-                .frame(width: 0, height: 0).hidden()
-        )
         .background(Color.bgBase)
         .navigationBarTitle(Text("Out of Pocket"), displayMode: .inline)
         .onAppear {
-            if activeTab.isEmpty { activeTab = isAcct ? "Payment Routing" : "Submit Claim" }
-            appState.loadAllCashExpenseData()
+            if activeTab.isEmpty { activeTab = isAcct ? "Payment Routing" : "Submit Receipts" }
+            appState.loadCashExpenseMetadata()
         }
     }
 
@@ -340,8 +344,9 @@ struct OutOfPocketModuleView: View {
             let c = appState.allOOPClaims.filter { ["READY_TO_POST", "POSTED"].contains($0.status.uppercased()) }
             VStack(spacing: 0) {
                 oopStatsCards(c, firstLabel: "BATCHES")
-                ClaimsListView(claims: c, title: "Post & Ledger", hideFilterSearch: true).environmentObject(appState)
+                ClaimsListView(claims: c, title: "Post & Ledger", isLoading: appState.isLoadingAllClaims, hideFilterSearch: true).environmentObject(appState)
             }
+            .onAppear { appState.loadAllClaims() }
         case "Payment Routing":
             PaymentRoutingView().environmentObject(appState)
         case "Sign-off":
@@ -350,16 +355,24 @@ struct OutOfPocketModuleView: View {
                 oopStatsCards(c, firstLabel: "AWAITING SIGN-OFF")
                 OOPSignOffListView().environmentObject(appState)
             }
-        case "Approval Queue": ApprovalQueuePage().environmentObject(appState)
+            .onAppear { appState.loadSignOffQueue() }
+        case "Approval Queue":
+            ApprovalQueuePage().environmentObject(appState)
         case "History":
             let c = appState.allOOPClaims
             VStack(spacing: 0) {
                 oopStatsCards(c, firstLabel: "BATCHES")
-                ClaimsListView(claims: c, title: "History").environmentObject(appState)
+                ClaimsListView(claims: c, title: "History", isLoading: appState.isLoadingAllClaims).environmentObject(appState)
             }
-        case "Coding Queue":   ClaimsListView(claims: appState.codingQueue, title: "Coding Queue", filterMode: .expenseType).environmentObject(appState)
-        case "Submit Claim":   SubmitClaimFormView(expenseType: "oop").environmentObject(appState)
-        case "My Claims":      ClaimsListView(claims: appState.myOOPClaims, title: "My Claims", filterMode: .myClaims).environmentObject(appState)
+            .onAppear { appState.loadAllClaims() }
+        case "Coding Queue":
+            ClaimsListView(claims: appState.codingQueue, title: "Coding Queue", isLoading: appState.isLoadingCodingQueue, filterMode: .expenseType).environmentObject(appState)
+                .onAppear { appState.loadCodingQueue() }
+        case "Submit Receipts":
+            SubmitClaimFormView(expenseType: "oop").environmentObject(appState)
+        case "Receipts History":
+            ClaimsListView(claims: appState.myOOPClaims, title: "Receipts History", isLoading: appState.isLoadingMyClaims, filterMode: .myClaims).environmentObject(appState)
+                .onAppear { appState.loadMyClaims() }
         default: EmptyView()
         }
     }
@@ -374,6 +387,7 @@ enum ClaimFilterMode { case status, expenseType, myClaims }
 struct ClaimsListView: View {
     let claims: [ClaimBatch]
     var title: String = ""
+    var isLoading: Bool = false
     @EnvironmentObject var appState: POViewModel
     @State private var searchText = ""
     @State private var showFilterSheet = false
@@ -436,45 +450,46 @@ struct ClaimsListView: View {
     var body: some View {
         VStack(spacing: 0) {
             if !hideFilterSearch {
-                // Filter + Search
-                VStack(spacing: 10) {
-                    HStack(spacing: 8) {
-                        Button(action: { showFilterSheet = true }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "line.3.horizontal.decrease").font(.system(size: 10, weight: .medium)).foregroundColor(.goldDark)
-                                Text(activeFilter).font(.system(size: 12, weight: .semibold)).foregroundColor(.primary).lineLimit(1)
-                                Image(systemName: "chevron.down").font(.system(size: 8, weight: .medium)).foregroundColor(.gray)
-                            }
-                            .padding(.horizontal, 12).padding(.vertical, 8).background(Color.white).cornerRadius(6)
-                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(BorderlessButtonStyle())
-                        .compatActionSheet(title: filterMode == .expenseType ? "Filter by Type" : "Filter by Status", isPresented: $showFilterSheet, buttons:
-                            filters.map { f in
-                                let label = f == activeFilter ? "\(f) ✓" : f
-                                return CompatActionSheetButton.default(label) { activeFilter = f }
-                            } + [.cancel()]
-                        )
-                        Spacer()
-                    }
+                // Search + Filter in one line
+                HStack(spacing: 8) {
                     HStack(spacing: 8) {
                         Image(systemName: "magnifyingglass").foregroundColor(.gray).font(.system(size: 14))
                         TextField("Search claims…", text: $searchText).font(.system(size: 14))
-                    }.padding(10).background(Color.white).cornerRadius(8)
+                    }
+                    .padding(10).background(Color.white).cornerRadius(8)
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+
+                    Button(action: { showFilterSheet = true }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "line.3.horizontal.decrease").font(.system(size: 10, weight: .medium)).foregroundColor(.goldDark)
+                            Text(activeFilter).font(.system(size: 12, weight: .semibold)).foregroundColor(.primary).lineLimit(1)
+                            Image(systemName: "chevron.down").font(.system(size: 8, weight: .medium)).foregroundColor(.gray)
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 10).background(Color.white).cornerRadius(8)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
+                    .compatActionSheet(title: filterMode == .expenseType ? "Filter by Type" : "Filter by Status", isPresented: $showFilterSheet, buttons:
+                        filters.map { f in
+                            let label = f == activeFilter ? "\(f) ✓" : f
+                            return CompatActionSheetButton.default(label) { activeFilter = f }
+                        } + [.cancel()]
+                    )
                 }.padding(.horizontal, 16).padding(.top, 12)
             }
 
             ScrollView {
                 VStack(spacing: 10) {
-                    if filtered.isEmpty {
-                        VStack(spacing: 8) {
+                    if isLoading && claims.isEmpty {
+                        LoaderView()
+                    } else if filtered.isEmpty {
+                        VStack(spacing: 12) {
+                            Spacer(minLength: 0)
                             Image(systemName: "doc.text").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
                             Text("No claims found").font(.system(size: 13)).foregroundColor(.secondary)
-                        }.frame(maxWidth: .infinity).padding(.vertical, 40)
-                        .background(Color.white).cornerRadius(10)
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                            Spacer(minLength: 0)
+                        }.frame(maxWidth: .infinity, minHeight: 480)
                     } else {
                         ForEach(filtered) { claim in
                             if filterMode == .myClaims {
@@ -593,13 +608,12 @@ struct FloatsListView: View {
                 }.padding(.horizontal, 16).padding(.top, 4)
 
                 if floats.isEmpty {
-                    VStack(spacing: 8) {
+                    VStack(spacing: 12) {
+                        Spacer(minLength: 0)
                         Image(systemName: "banknote").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
                         Text("No active floats").font(.system(size: 13)).foregroundColor(.secondary)
-                    }.frame(maxWidth: .infinity).padding(.vertical, 40)
-                    .background(Color.white).cornerRadius(10)
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
-                    .padding(.horizontal, 16)
+                        Spacer(minLength: 0)
+                    }.frame(maxWidth: .infinity, minHeight: 480)
                 } else {
                     ForEach(floats) { f in
                         NavigationLink(destination: FloatDetailView(float: f).environmentObject(appState)) {
@@ -885,7 +899,7 @@ struct FloatCard: View {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// MARK: - Submit Claim Form
+// MARK: - Submit Receipts Form
 // ═══════════════════════════════════════════════════════════════════
 
 struct ClaimReceiptItem: Identifiable {
@@ -1140,15 +1154,16 @@ struct FloatRequestListView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 12) {
-                if floats.isEmpty {
-                    VStack(spacing: 8) {
+                if appState.isLoadingMyFloats && appState.myFloats.isEmpty {
+                    LoaderView()
+                } else if floats.isEmpty {
+                    VStack(spacing: 12) {
+                        Spacer(minLength: 0)
                         Image(systemName: "banknote").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
                         Text("No float requests yet").font(.system(size: 13)).foregroundColor(.secondary)
                         Text("Tap + New Float to submit your first request.").font(.system(size: 11)).foregroundColor(.gray)
-                    }.frame(maxWidth: .infinity).padding(.vertical, 50)
-                    .background(Color.white).cornerRadius(10)
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
-                    .padding(.horizontal, 16)
+                        Spacer(minLength: 0)
+                    }.frame(maxWidth: .infinity, minHeight: 480)
                 } else {
                     ForEach(floats) { f in
                         NavigationLink(destination: FloatRequestDetailPage(float: f)) {
@@ -1628,7 +1643,7 @@ struct SubmitClaimFormView: View {
                 Button(action: submitClaim) {
                     HStack(spacing: 6) {
                         if submitting { ActivityIndicator(isAnimating: true).frame(width: 16, height: 16) }
-                        Text(submitted ? "Submitted" : submitting ? "Submitting..." : "Submit Claim for Coding & Approval")
+                        Text(submitted ? "Submitted" : submitting ? "Submitting..." : "Submit Receipts for Coding & Approval")
                     }
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(submitted ? .white : .black)
@@ -2209,13 +2224,15 @@ struct SignOffListView: View {
                 // Sign-off Queue header
                 Text("Sign-off Queue").font(.system(size: 15, weight: .bold))
 
-                if queue.isEmpty {
-                    VStack(spacing: 8) {
+                if appState.isLoadingSignOffQueue && appState.signOffQueue.isEmpty {
+                    LoaderView()
+                } else if queue.isEmpty {
+                    VStack(spacing: 12) {
+                        Spacer(minLength: 0)
                         Image(systemName: "checkmark.seal").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
                         Text("No claims awaiting sign-off").font(.system(size: 13)).foregroundColor(.secondary)
-                    }.frame(maxWidth: .infinity).padding(.vertical, 40)
-                    .background(Color.white).cornerRadius(10)
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                        Spacer(minLength: 0)
+                    }.frame(maxWidth: .infinity, minHeight: 480)
                 } else {
                     ForEach(queue) { claim in
                         signOffCard(claim)
@@ -2567,11 +2584,12 @@ struct ReconciliationView: View {
                 Text("ACTIVE FLOAT BALANCES").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
 
                 if activeFloats.isEmpty {
-                    VStack(spacing: 8) {
+                    VStack(spacing: 12) {
+                        Spacer(minLength: 0)
+                        Image(systemName: "banknote").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
                         Text("No active floats").font(.system(size: 13)).foregroundColor(.secondary)
-                    }.frame(maxWidth: .infinity).padding(.vertical, 30)
-                    .background(Color.white).cornerRadius(10)
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                        Spacer(minLength: 0)
+                    }.frame(maxWidth: .infinity, minHeight: 480)
                 } else {
                     VStack(spacing: 0) {
                         HStack {
@@ -2718,13 +2736,11 @@ struct PaymentRoutingView: View {
     @State private var bacsGenerated = false
     @State private var showBacsAlert = false
 
-    private var approvedOOP: [ClaimBatch] {
-        appState.allOOPClaims.filter { ["APPROVED", "READY_TO_POST"].contains($0.status.uppercased()) }
-    }
-    private var bacsClaims: [ClaimBatch] { approvedOOP.filter { $0.settlementType.uppercased() != "PAYROLL" } }
-    private var payrollClaims: [ClaimBatch] { approvedOOP.filter { $0.settlementType.uppercased() == "PAYROLL" } }
-    private var bacsTotal: Double { bacsClaims.reduce(0) { $0 + $1.totalGross } }
-    private var payrollTotal: Double { payrollClaims.reduce(0) { $0 + $1.totalGross } }
+    private var routing: PaymentRoutingResponse { appState.paymentRouting }
+    private var bacsBatches: [PaymentRoutingBatch]    { routing.bacsBatches }
+    private var payrollBatches: [PaymentRoutingBatch] { routing.payrollBatches }
+    private var bacsTotal: Double    { routing.stats.bacsReady }
+    private var payrollTotal: Double { routing.stats.payrollTotal }
 
     var body: some View {
         ScrollView {
@@ -2745,10 +2761,10 @@ struct PaymentRoutingView: View {
                 // Stat cards
                 HStack(spacing: 8) {
                     statCard(label: "BACS READY", value: FormatUtils.formatGBP(bacsTotal),
-                             sub: "\(bacsClaims.count) claims · ready to generate",
+                             sub: "\(bacsBatches.count) claims · ready to generate",
                              valueColor: .green, bg: Color.green.opacity(0.06), border: Color.green.opacity(0.3))
                     statCard(label: "PAYROLL AUTO-ADDED", value: FormatUtils.formatGBP(payrollTotal),
-                             sub: "\(payrollClaims.count) claims",
+                             sub: "\(payrollBatches.count) claims",
                              valueColor: Color(red: 0.2, green: 0.5, blue: 0.85),
                              bg: Color.white, border: Color.borderColor)
                     statCard(label: "BACS FILE",
@@ -2764,13 +2780,13 @@ struct PaymentRoutingView: View {
                 sectionCard(
                     icon: "building.columns.fill",
                     title: "BACS Payments",
-                    subtitle: "\(bacsClaims.count) claims · \(FormatUtils.formatGBP(bacsTotal))",
+                    subtitle: "\(bacsBatches.count) claims · \(FormatUtils.formatGBP(bacsTotal))",
                     badge: bacsGenerated ? "Generated" : "Ready",
                     badgeColor: .green,
                     emptyText: "No BACS claims to process.",
-                    isEmpty: bacsClaims.isEmpty,
+                    isEmpty: bacsBatches.isEmpty,
                     footerValue: FormatUtils.formatGBP(bacsTotal),
-                    footerSub: "\(Set(bacsClaims.map { $0.userId }).count) payees",
+                    footerSub: "\(Set(bacsBatches.map { $0.userId }).count) payees",
                     actionTitle: bacsGenerated ? "BACS File Ready" : "Generate BACS File",
                     actionEnabled: !bacsGenerated,
                     onAction: { generateBACS() }
@@ -2784,9 +2800,9 @@ struct PaymentRoutingView: View {
                     badge: "Auto-routed",
                     badgeColor: .gray,
                     emptyText: "No payroll claims.",
-                    isEmpty: payrollClaims.isEmpty,
+                    isEmpty: payrollBatches.isEmpty,
                     footerValue: FormatUtils.formatGBP(payrollTotal),
-                    footerSub: "\(payrollClaims.count) additions",
+                    footerSub: "\(payrollBatches.count) additions",
                     actionTitle: nil,
                     actionEnabled: false,
                     onAction: {}
@@ -2807,17 +2823,18 @@ struct PaymentRoutingView: View {
             .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 20)
         }
         .background(Color.bgBase)
+        .onAppear { appState.loadPaymentRouting() }
         .alert(isPresented: $showBacsAlert) {
             Alert(
                 title: Text("BACS File Generated"),
-                message: Text("\(bacsClaims.count) claim\(bacsClaims.count == 1 ? "" : "s") totaling \(FormatUtils.formatGBP(bacsTotal)) have been batched and are ready to upload to your bank."),
+                message: Text("\(bacsBatches.count) claim\(bacsBatches.count == 1 ? "" : "s") totaling \(FormatUtils.formatGBP(bacsTotal)) have been batched and are ready to upload to your bank."),
                 dismissButton: .default(Text("OK"))
             )
         }
     }
 
     private func generateBACS() {
-        guard !bacsClaims.isEmpty else { return }
+        guard !bacsBatches.isEmpty else { return }
         bacsGenerated = true
         showBacsAlert = true
     }
@@ -2898,13 +2915,15 @@ struct OOPSignOffListView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 10) {
-                if claims.isEmpty {
-                    VStack(spacing: 8) {
+                if appState.isLoadingSignOffQueue && appState.signOffQueue.isEmpty {
+                    LoaderView()
+                } else if claims.isEmpty {
+                    VStack(spacing: 12) {
+                        Spacer(minLength: 0)
                         Image(systemName: "checkmark.seal").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
                         Text("No OOP claims awaiting sign-off").font(.system(size: 13)).foregroundColor(.secondary)
-                    }.frame(maxWidth: .infinity).padding(.vertical, 40)
-                    .background(Color.white).cornerRadius(10)
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                        Spacer(minLength: 0)
+                    }.frame(maxWidth: .infinity, minHeight: 480)
                 } else {
                     ForEach(claims) { claim in ClaimRow(claim: claim) }
                 }
@@ -2976,13 +2995,15 @@ struct AuditQueuePage: View {
             // Claims list
             ScrollView {
                 VStack(spacing: 10) {
-                    if filtered.isEmpty {
-                        VStack(spacing: 8) {
+                    if appState.isLoadingAuditQueue && appState.auditQueue.isEmpty {
+                        LoaderView()
+                    } else if filtered.isEmpty {
+                        VStack(spacing: 12) {
+                            Spacer(minLength: 0)
                             Image(systemName: "checkmark.seal").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
                             Text("No batches awaiting audit.").font(.system(size: 13)).foregroundColor(.secondary)
-                        }.frame(maxWidth: .infinity).padding(.vertical, 40)
-                        .background(Color.white).cornerRadius(10)
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                            Spacer(minLength: 0)
+                        }.frame(maxWidth: .infinity, minHeight: 480)
                     } else {
                         ForEach(filtered) { claim in ClaimRow(claim: claim) }
                     }
@@ -2991,6 +3012,7 @@ struct AuditQueuePage: View {
         }
         .background(Color.bgBase)
         .navigationBarTitle(Text("Audit Queue"), displayMode: .inline)
+        .onAppear { appState.loadAuditQueue() }
     }
 }
 
@@ -3073,11 +3095,12 @@ struct ApprovalQueuePage: View {
                         }
 
                         if pendingFloats.isEmpty {
-                            VStack(spacing: 8) {
+                            VStack(spacing: 12) {
+                                Spacer(minLength: 0)
+                                Image(systemName: "banknote").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
                                 Text("No float requests awaiting your approval.").font(.system(size: 13)).foregroundColor(.secondary)
-                            }.frame(maxWidth: .infinity).padding(.vertical, 30)
-                            .background(Color.white).cornerRadius(10)
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                                Spacer(minLength: 0)
+                            }.frame(maxWidth: .infinity, minHeight: 480)
                         } else {
                             ForEach(pendingFloats) { f in FloatCard(float: f, batches: []) }
                         }
@@ -3104,12 +3127,15 @@ struct ApprovalQueuePage: View {
                             Text("\(filteredClaims.count) PENDING").font(.system(size: 10, weight: .bold)).foregroundColor(.goldDark)
                         }
 
-                        if filteredClaims.isEmpty {
-                            VStack(spacing: 8) {
+                        if appState.isLoadingApprovalClaims && appState.approvalQueueClaims.isEmpty {
+                            LoaderView()
+                        } else if filteredClaims.isEmpty {
+                            VStack(spacing: 12) {
+                                Spacer(minLength: 0)
+                                Image(systemName: "doc.text").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
                                 Text("No batches awaiting approval.").font(.system(size: 13)).foregroundColor(.secondary)
-                            }.frame(maxWidth: .infinity).padding(.vertical, 30)
-                            .background(Color.white).cornerRadius(10)
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                                Spacer(minLength: 0)
+                            }.frame(maxWidth: .infinity, minHeight: 480)
                         } else {
                             ForEach(filteredClaims) { claim in ClaimRow(claim: claim) }
                         }
@@ -3652,6 +3678,7 @@ struct BatchStatusSheet: View {
 
 struct CodingQueueListView: View {
     let claims: [ClaimBatch]
+    var isLoading: Bool = false
     @EnvironmentObject var appState: POViewModel
     @State private var activeFilter = "All"
     @State private var showFilterSheet = false
@@ -3690,13 +3717,15 @@ struct CodingQueueListView: View {
 
             ScrollView {
                 VStack(spacing: 10) {
-                    if filtered.isEmpty {
-                        VStack(spacing: 8) {
+                    if isLoading && claims.isEmpty {
+                        LoaderView()
+                    } else if filtered.isEmpty {
+                        VStack(spacing: 12) {
+                            Spacer(minLength: 0)
                             Image(systemName: "doc.text").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
                             Text("No claims in coding queue").font(.system(size: 13)).foregroundColor(.secondary)
-                        }.frame(maxWidth: .infinity).padding(.vertical, 40)
-                        .background(Color.white).cornerRadius(10)
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                            Spacer(minLength: 0)
+                        }.frame(maxWidth: .infinity, minHeight: 480)
                     } else {
                         ForEach(filtered) { claim in
                             Button(action: { selectedClaim = claim; navigateToDetail = true }) {

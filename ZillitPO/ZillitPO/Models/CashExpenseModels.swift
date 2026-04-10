@@ -261,3 +261,138 @@ struct ClaimBatchRaw: Codable {
         return cb
     }
 }
+
+// MARK: - Payment Routing Response
+
+struct PaymentRoutingResponse: Decodable {
+    var stats: PaymentRoutingStats = PaymentRoutingStats()
+    var bacsBatches: [PaymentRoutingBatch] = []
+    var payrollBatches: [PaymentRoutingBatch] = []
+
+    enum CodingKeys: String, CodingKey {
+        case stats
+        case bacsBatches    = "bacs_batches"
+        case payrollBatches = "payroll_batches"
+    }
+
+    init() {}
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        stats         = (try? c.decode(PaymentRoutingStats.self,   forKey: .stats))         ?? PaymentRoutingStats()
+        bacsBatches   = (try? c.decode([PaymentRoutingBatch].self, forKey: .bacsBatches))   ?? []
+        payrollBatches = (try? c.decode([PaymentRoutingBatch].self, forKey: .payrollBatches)) ?? []
+    }
+}
+
+struct PaymentRoutingStats: Decodable {
+    var bacsReady: Double = 0
+    var bacsCount: Int    = 0
+    var payrollTotal: Double = 0
+    var payrollCount: Int    = 0
+
+    enum CodingKeys: String, CodingKey {
+        case bacsReady    = "bacs_ready"
+        case bacsCount    = "bacs_count"
+        case payrollTotal = "payroll_total"
+        case payrollCount = "payroll_count"
+    }
+
+    init() {}
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func dbl(_ k: CodingKeys) -> Double {
+            if let d = try? c.decode(Double.self, forKey: k) { return d }
+            if let s = try? c.decode(String.self, forKey: k), let d = Double(s) { return d }
+            return 0
+        }
+        bacsReady    = dbl(.bacsReady)
+        bacsCount    = (try? c.decode(Int.self, forKey: .bacsCount))    ?? 0
+        payrollTotal = dbl(.payrollTotal)
+        payrollCount = (try? c.decode(Int.self, forKey: .payrollCount)) ?? 0
+    }
+}
+
+struct PaymentRoutingBatch: Identifiable, Decodable {
+    var id: String = UUID().uuidString
+    var userId: String = ""
+    var batchReference: String = ""
+    var totalGross: Double = 0
+    var totalNet: Double = 0
+    var totalVat: Double = 0
+    var settlementType: String = ""
+    var settlementDetails: RoutingSettlementDetails? = nil
+    var status: String = ""
+    var claimCount: Int = 0
+    var postedAt: Int64? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case id, status
+        case userId            = "user_id"
+        case batchReference    = "batch_reference"
+        case totalGross        = "total_gross"
+        case totalNet          = "total_net"
+        case totalVat          = "total_vat"
+        case settlementType    = "settlement_type"
+        case settlementDetails = "settlement_details"
+        case claimCount        = "claim_count"
+        case postedAt          = "posted_at"
+    }
+
+    init() {}
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func dbl(_ k: CodingKeys) -> Double {
+            if let d = try? c.decode(Double.self, forKey: k) { return d }
+            if let s = try? c.decode(String.self, forKey: k), let d = Double(s) { return d }
+            return 0
+        }
+        id              = (try? c.decode(String.self, forKey: .id))             ?? UUID().uuidString
+        userId          = (try? c.decode(String.self, forKey: .userId))         ?? ""
+        batchReference  = (try? c.decode(String.self, forKey: .batchReference)) ?? ""
+        totalGross      = dbl(.totalGross)
+        totalNet        = dbl(.totalNet)
+        totalVat        = dbl(.totalVat)
+        settlementType  = (try? c.decode(String.self, forKey: .settlementType)) ?? ""
+        settlementDetails = try? c.decode(RoutingSettlementDetails.self, forKey: .settlementDetails)
+        status          = (try? c.decode(String.self, forKey: .status))         ?? ""
+        claimCount      = (try? c.decode(Int.self,    forKey: .claimCount))     ?? 0
+        if let i = try? c.decode(Int64.self, forKey: .postedAt)                 { postedAt = i }
+        else if let s = try? c.decode(String.self, forKey: .postedAt),
+                let i = Int64(s)                                                 { postedAt = i }
+    }
+
+    var holderName: String { UsersData.byId[userId]?.fullName ?? userId }
+}
+
+struct RoutingSettlementDetails: Decodable {
+    var bankDetails: RoutingBankDetails? = nil
+    var paymentMethod: String = ""
+
+    enum CodingKeys: String, CodingKey {
+        case bankDetails   = "bank_details"
+        case paymentMethod = "payment_method"
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        bankDetails   = try? c.decode(RoutingBankDetails.self, forKey: .bankDetails)
+        paymentMethod = (try? c.decode(String.self, forKey: .paymentMethod)) ?? ""
+    }
+}
+
+struct RoutingBankDetails: Decodable {
+    var sortCode: String = ""
+    var accountName: String = ""
+    var accountNumber: String = ""
+
+    enum CodingKeys: String, CodingKey {
+        case sortCode      = "sort_code"
+        case accountName   = "account_name"
+        case accountNumber = "account_number"
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        sortCode      = (try? c.decode(String.self, forKey: .sortCode))      ?? ""
+        accountName   = (try? c.decode(String.self, forKey: .accountName))   ?? ""
+        accountNumber = (try? c.decode(String.self, forKey: .accountNumber)) ?? ""
+    }
+}

@@ -6,7 +6,7 @@
 import Foundation
 
 enum CashExpenseRequest {
-    static let baseURL = "http://192.168.1.7:3006" 
+    static let baseURL = "http://192.168.1.3:3006" 
     
 
     // Metadata (roles, settings)
@@ -31,6 +31,8 @@ enum CashExpenseRequest {
     case getClaim(String)
     case saveClaims(String, [String: Any])       // batchId, body
     case saveAndSubmit(String, [String: Any])     // batchId, body (forward to accounts)
+    // Overview
+    case fetchPaymentRouting
     // Settings
     case fetchSettings
 }
@@ -72,6 +74,7 @@ extension CashExpenseRequest: POURLRequestProtocol {
         case .getClaim(let id):      return buildLocal(.get, "/api/v2/cash-expenses/claims/\(id)")
         case .saveClaims(let id, let body): return buildLocal(.post, "/api/v2/cash-expenses/claims/\(id)/save-claims", body: body)
         case .saveAndSubmit(let id, let body): return buildLocal(.post, "/api/v2/cash-expenses/claims/\(id)/save-and-submit", body: body)
+        case .fetchPaymentRouting:   return buildLocal(.get, "/api/v2/cash-expenses/claims/overview/payment-routing")
         case .fetchSettings:         return buildLocal(.get, "/api/v2/cash-expenses/settings")
         }
     }

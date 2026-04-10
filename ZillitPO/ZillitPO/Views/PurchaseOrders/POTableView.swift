@@ -9,10 +9,11 @@ struct POTableView: View {
         ZStack {
             if appState.filteredPOs.isEmpty {
                 VStack(spacing: 12) {
-                    Image(systemName: "doc.text").font(.system(size: 32)).foregroundColor(.gray.opacity(0.3))
+                    Spacer(minLength: 0)
+                    Image(systemName: "doc.text").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
                     Text("No purchase orders found").font(.system(size: 13)).foregroundColor(.secondary)
-                }.frame(maxWidth: .infinity).padding(.vertical, 40).background(Color.white).cornerRadius(10)
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                    Spacer(minLength: 0)
+                }.frame(maxWidth: .infinity, minHeight: 480)
             } else {
                 VStack(spacing: 0) {
                     ForEach(appState.filteredPOs, id: \.id) { po in

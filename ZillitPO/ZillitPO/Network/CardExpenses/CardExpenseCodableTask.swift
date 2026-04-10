@@ -20,17 +20,27 @@ enum CardExpenseCodableTask {
     // Cards
     case fetchCards(String, (Result<APIResponse<[CardRaw]>?, Error>) -> Void)
     case fetchAllCards((Result<APIResponse<[CardRaw]>?, Error>) -> Void)
+    case fetchCard(String, (Result<APIResponse<CardRaw>?, Error>) -> Void)
     case createCard([String: Any], (Result<Data?, Error>) -> Void)
     case approveCard(String, [String: Any], (Result<Data?, Error>) -> Void)
     case rejectCard(String, [String: Any], (Result<Data?, Error>) -> Void)
+    case overrideCard(String, [String: Any], (Result<Data?, Error>) -> Void)
 
-    // Approval Tiers
-    case fetchCardApprovalTiers((Result<APIResponse<[ApprovalTierConfig]>?, Error>) -> Void)
+    // Metadata
+    case fetchMetadata((Result<APIResponse<CardExpenseMeta>?, Error>) -> Void)
 
     // Accountant Hub queues
     case fetchTopUps((Result<APIResponse<[TopUpItemRaw]>?, Error>) -> Void)
     case fetchSmartAlerts((Result<APIResponse<[SmartAlertRaw]>?, Error>) -> Void)
     case fetchCardHistory((Result<APIResponse<[CardTransactionRaw]>?, Error>) -> Void)
+    case fetchPendingCoding((Result<APIResponse<[PendingCodingItemRaw]>?, Error>) -> Void)
+    case fetchPendingCodingItem(String, (Result<APIResponse<PendingCodingItemRaw>?, Error>) -> Void)
+    case fetchReceiptDetail(String, (Result<APIResponse<ReceiptRaw>?, Error>) -> Void)
+    case fetchApprovalQueue((Result<APIResponse<[CardTransactionRaw]>?, Error>) -> Void)
+    case overrideApproval(String, [String: Any], (Result<Data?, Error>) -> Void)
+
+    // Bank Accounts
+    case fetchBankAccounts((Result<APIResponse<[ProductionBankAccountRaw]>?, Error>) -> Void)
 }
 
 extension CardExpenseCodableTask: PODataTaskProtocol {
@@ -42,7 +52,7 @@ extension CardExpenseCodableTask: PODataTaskProtocol {
             guard let req = CardExpenseRequest.fetchAllReceipts.urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: req, completion: completion)
 
-        case .fetchMyReceipts(let userId, let completion):
+case .fetchMyReceipts(let userId, let completion):
             guard let req = CardExpenseRequest.fetchMyReceipts(userId).urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: req, completion: completion)
 
@@ -83,6 +93,10 @@ extension CardExpenseCodableTask: PODataTaskProtocol {
             guard let req = CardExpenseRequest.fetchCards("").urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: req, completion: completion)
 
+        case .fetchCard(let id, let completion):
+            guard let req = CardExpenseRequest.getCard(id).urlRequest else { return nil }
+            return APIClient.shared.codableResultTask(with: req, completion: completion)
+
         case .createCard(let body, let completion):
             guard let req = CardExpenseRequest.createCard(body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: req, completion: completion)
@@ -95,9 +109,13 @@ extension CardExpenseCodableTask: PODataTaskProtocol {
             guard let req = CardExpenseRequest.rejectCardReq(id, body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: req, completion: completion)
 
-        // Approval Tiers
-        case .fetchCardApprovalTiers(let completion):
-            guard let req = CardExpenseRequest.fetchCardApprovalTiers.urlRequest else { return nil }
+        case .overrideCard(let id, let body, let completion):
+            guard let req = CardExpenseRequest.overrideCardReq(id, body).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: req, completion: completion)
+
+        // Metadata
+        case .fetchMetadata(let completion):
+            guard let req = CardExpenseRequest.fetchMetadata.urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: req, completion: completion)
 
         // Accountant Hub queues
@@ -109,6 +127,30 @@ extension CardExpenseCodableTask: PODataTaskProtocol {
             return APIClient.shared.codableResultTask(with: req, completion: completion)
         case .fetchCardHistory(let completion):
             guard let req = CardExpenseRequest.fetchCardHistory.urlRequest else { return nil }
+            return APIClient.shared.codableResultTask(with: req, completion: completion)
+
+        case .fetchPendingCoding(let completion):
+            guard let req = CardExpenseRequest.fetchPendingCoding.urlRequest else { return nil }
+            return APIClient.shared.codableResultTask(with: req, completion: completion)
+
+        case .fetchPendingCodingItem(let id, let completion):
+            guard let req = CardExpenseRequest.getReceipt(id).urlRequest else { return nil }
+            return APIClient.shared.codableResultTask(with: req, completion: completion)
+
+        case .fetchReceiptDetail(let id, let completion):
+            guard let req = CardExpenseRequest.fetchReceiptDetail(id).urlRequest else { return nil }
+            return APIClient.shared.codableResultTask(with: req, completion: completion)
+
+        case .fetchApprovalQueue(let completion):
+            guard let req = CardExpenseRequest.fetchApprovalQueue.urlRequest else { return nil }
+            return APIClient.shared.codableResultTask(with: req, completion: completion)
+
+        case .overrideApproval(let id, let body, let completion):
+            guard let req = CardExpenseRequest.overrideApproval(id, body).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: req, completion: completion)
+
+        case .fetchBankAccounts(let completion):
+            guard let req = CardExpenseRequest.fetchBankAccounts.urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: req, completion: completion)
         }
     }

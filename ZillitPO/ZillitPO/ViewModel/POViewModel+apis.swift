@@ -9,6 +9,39 @@ extension POViewModel {
 
     // MARK: - Data Loading
 
+    func loadVendors() {
+        POCodableTask.fetchVendors { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let response):
+                    self?.vendors = response?.data ?? []
+                    print("✅ Loaded \(self?.vendors.count ?? 0) vendors")
+                case .failure(let error):
+                    print("❌ Fetch vendors failed: \(error)")
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    func loadApprovalTiers() {
+        POCodableTask.fetchApprovalTiers { [weak self] result in
+            DispatchQueue.main.async {
+                if case .success(let r) = result { self?.tierConfigRows = r?.data ?? [] }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    func loadInvoiceApprovalTiers() {
+        POCodableTask.fetchInvoiceApprovalTiers { [weak self] result in
+            DispatchQueue.main.async {
+                if case .success(let r) = result {
+                    self?.invoiceTierConfigRows = r?.data ?? []
+                    self?.updateInvoiceApproverStatus()
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
     func loadAllData() {
         isLoading = true
         let group = DispatchGroup()
@@ -49,22 +82,6 @@ extension POViewModel {
         }
         if let task = tiersTask.urlDataTask { task.resume() } else { group.leave() }
 
-        // Fetch templates
-        group.enter()
-        let templatesTask = POCodableTask.fetchTemplates { [weak self] result in
-            DispatchQueue.main.async {
-                switch result {
-                case .success(let response):
-                    self?.templates = response?.data ?? []
-                    print("✅ Loaded \(self?.templates.count ?? 0) templates")
-                case .failure(let error):
-                    print("❌ Fetch templates failed: \(error)")
-                }
-                group.leave()
-            }
-        }
-        if let task = templatesTask.urlDataTask { task.resume() } else { group.leave() }
-
         // Fetch invoice tier configs
         group.enter()
         let invoiceTiersTask = POCodableTask.fetchInvoiceApprovalTiers { [weak self] result in
@@ -88,16 +105,12 @@ extension POViewModel {
         }
         if let task = invoiceTiersTask.urlDataTask { task.resume() } else { group.leave() }
 
-        // After all complete, load POs, drafts, invoices, payment runs, settings, and form template
+        // After shared resources load, compute approver visibility for the invoice sidebar badge
         group.notify(queue: .main) { [weak self] in
             self?.updateInvoiceApproverStatus()
-            self?.loadPOs()
-            self?.loadDrafts()
-            self?.loadInvoices()
-            self?.loadPaymentRuns()
-            self?.loadInvoiceSettings()
-            self?.loadFormTemplate()
+            self?.isLoading = false
         }
+        // Each PO / Invoice / PaymentRuns page loads its own data on appear.
     }
 
     func loadFormTemplate() {
@@ -474,7 +487,7 @@ extension POViewModel {
                 case .success:
                     print("✅ Vendor deleted")
                     self?.vendors.removeAll { $0.id == id }
-                    self?.loadAllData()
+                    self?.loadVendors()
                 case .failure(let error):
                     print("❌ Delete vendor failed: \(error)")
                 }
