@@ -28,7 +28,7 @@ struct QuickFiltersBar: View {
                             }
                             .foregroundColor(.goldDark)
                             .padding(.horizontal, 12).padding(.vertical, 8)
-                            .background(Color.white).cornerRadius(6)
+                            .background(Color.bgSurface).cornerRadius(6)
                             .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.gold.opacity(0.3), lineWidth: 1))
                             .contentShape(Rectangle())
                         }
@@ -40,7 +40,7 @@ struct QuickFiltersBar: View {
                 HStack(spacing: 6) {
                     Image(systemName: "magnifyingglass").foregroundColor(.gray).font(.system(size: 12))
                     TextField("Search POs by number, vendor, description...", text: $appState.searchText).font(.system(size: 13))
-                }.padding(10).background(Color.white).cornerRadius(8)
+                }.padding(10).background(Color.bgSurface).cornerRadius(8)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
             }
         }.frame(height: 76)
@@ -55,7 +55,7 @@ struct QuickFiltersBar: View {
                 Image(systemName: "chevron.down").font(.system(size: 8, weight: .medium)).foregroundColor(.gray)
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
-            .background(Color.white).cornerRadius(6)
+            .background(Color.bgSurface).cornerRadius(6)
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
             .contentShape(Rectangle())
         }
@@ -78,7 +78,7 @@ struct QuickFiltersBar: View {
                 }
             }
             .padding(.horizontal, compact ? 10 : 12).padding(.vertical, 8)
-            .background(Color.white).cornerRadius(6)
+            .background(Color.bgSurface).cornerRadius(6)
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
             .contentShape(Rectangle())
         }

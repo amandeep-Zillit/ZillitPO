@@ -5,6 +5,37 @@
 
 import SwiftUI
 
+// MARK: - File-scope helpers (shared across all views in this file)
+
+/// Maps a float status string to (foreground, background) colors used for
+/// status badges. Mirrors the backend FloatRequestService state machine:
+///   AWAITING_APPROVAL → APPROVED/ACCT_OVERRIDE → READY_TO_COLLECT → COLLECTED →
+///   ACTIVE/SPENDING/SPENT/PENDING_RETURN → CLOSED/CANCELLED/REJECTED
+///
+/// Every status has a distinct color so two different states never look alike
+/// in the badge list (e.g. AWAITING_APPROVAL was previously confused with
+/// PENDING_RETURN because both used orange).
+func floatStatusColors(_ s: String) -> (Color, Color) {
+    let teal  = Color(red: 0.0,  green: 0.6,  blue: 0.5)   // #009980  — collected (got cash)
+    let pink  = Color(red: 0.91, green: 0.29, blue: 0.48)  // #E84A7A  — pending return (needs physical action)
+    let amber = Color(red: 0.95, green: 0.6,  blue: 0.0)   // #F29A00  — awaiting approval
+    switch s.uppercased() {
+    case "AWAITING_APPROVAL":   return (amber, amber.opacity(0.12))              // amber — awaiting review
+    case "APPROVED",
+         "ACCT_OVERRIDE":       return (.green, Color.green.opacity(0.12))       // green — approved
+    case "READY_TO_COLLECT":    return (.blue, Color.blue.opacity(0.12))         // blue  — crew action needed
+    case "COLLECTED":           return (teal, teal.opacity(0.12))                // teal  — cash in hand
+    case "ACTIVE",
+         "SPENDING":            return (.goldDark, Color.gold.opacity(0.15))     // gold  — in-use
+    case "SPENT":               return (.purple, Color.purple.opacity(0.12))     // purple— out of cash
+    case "PENDING_RETURN":      return (pink, pink.opacity(0.12))                // pink  — return required
+    case "CLOSED":              return (.gray, Color.gray.opacity(0.12))         // gray  — terminal ok
+    case "CANCELLED",
+         "REJECTED":            return (.red, Color.red.opacity(0.1))            // red   — terminal bad
+    default: return (.goldDark, Color.gold.opacity(0.15))
+    }
+}
+
 // MARK: - Cash & Expenses Hub (2 tiles: Petty Cash, Out of Pocket)
 
 struct CashExpensesHubView: View {
@@ -40,7 +71,7 @@ struct CashExpensesHubView: View {
                             }
                             Spacer()
                             Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(Color(red: 0.2, green: 0.7, blue: 0.45))
-                        }.padding(14).background(Color.white).cornerRadius(12)
+                        }.padding(14).background(Color.bgSurface).cornerRadius(12)
                         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.2, green: 0.7, blue: 0.45).opacity(0.3), lineWidth: 1))
                         .contentShape(Rectangle())
                     }.buttonStyle(BorderlessButtonStyle())
@@ -57,7 +88,7 @@ struct CashExpensesHubView: View {
                             }
                             Spacer()
                             Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(Color(red: 0.56, green: 0.27, blue: 0.68))
-                        }.padding(14).background(Color.white).cornerRadius(12)
+                        }.padding(14).background(Color.bgSurface).cornerRadius(12)
                         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.56, green: 0.27, blue: 0.68).opacity(0.3), lineWidth: 1))
                         .contentShape(Rectangle())
                     }.buttonStyle(BorderlessButtonStyle())
@@ -83,7 +114,7 @@ struct CashExpensesHubView: View {
                                 }
                                 Spacer()
                                 Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(.goldDark)
-                            }.padding(14).background(Color.white).cornerRadius(12)
+                            }.padding(14).background(Color.bgSurface).cornerRadius(12)
                             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.gold.opacity(0.3), lineWidth: 1))
                             .contentShape(Rectangle())
                         }.buttonStyle(BorderlessButtonStyle())
@@ -116,7 +147,7 @@ struct CashExpensesHubView: View {
                                 }
                                 Spacer()
                                 Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(.blue)
-                            }.padding(14).background(Color.white).cornerRadius(12)
+                            }.padding(14).background(Color.bgSurface).cornerRadius(12)
                             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.blue.opacity(0.3), lineWidth: 1))
                             .contentShape(Rectangle())
                         }.buttonStyle(BorderlessButtonStyle())
@@ -147,17 +178,38 @@ struct PettyCashModuleView: View {
     private var isCoord: Bool { appState.cashMeta?.is_coordinator == true }
     private var isSenior: Bool { appState.cashMeta?.is_senior == true }
 
+    /// A float is "open" when it's not in a terminal state.
+    /// Terminal statuses (backend FloatRequestService): CLOSED, CANCELLED, REJECTED.
     private var hasOpenFloat: Bool {
-        let terminal: Set<String> = ["CLOSED", "RETURNED", "REJECTED"]
+        let terminal: Set<String> = ["CLOSED", "CANCELLED", "REJECTED"]
         return appState.myFloats.contains { !terminal.contains($0.status.uppercased()) }
     }
+
+    /// Whether the New Float button should be visible for the current role/tab.
+    /// Hidden while underlying data is still loading so the button only appears
+    /// once we know whether the user/account is in a state to create a float.
+    private var showNewFloatButton: Bool {
+        if isAcct {
+            // Accountants see the button on the Active Floats register (to add on behalf of users).
+            // Wait for activeFloats to finish loading so it shows up after the loader, not over it.
+            return activeTab == "Active Floats" && !appState.isLoadingActiveFloats
+        }
+        // Crew / coordinator request new floats from the Float Request tab.
+        // Wait for myFloats to load so we know whether they already have an open float.
+        return activeTab == "Float Request" && !appState.isLoadingMyFloats
+    }
+
+    /// Whether the button should be disabled (tappable → opens form).
     private var newFloatDisabled: Bool {
-        activeTab == "Float Request" && hasOpenFloat
+        // Accountants can always create floats — on behalf of any user, no personal open-float restriction
+        if isAcct { return false }
+        // Crew/coord can only have one open float at a time
+        return hasOpenFloat
     }
 
     private var tabs: [String] {
         if isAcct {
-            return ["Active Floats", "History"]
+            return ["Active Floats", "Top-ups"]
         }
         if isCoord {
             return ["Active Floats", "Float Request", "Submit Receipts", "Receipts History"]
@@ -190,30 +242,19 @@ struct PettyCashModuleView: View {
                 cashTabContent
             }
 
-            if (isAcct && activeTab == "Active Floats") || activeTab == "Float Request" {
-                VStack(alignment: .trailing, spacing: 8) {
-                    if newFloatDisabled {
-                        HStack(spacing: 6) {
-                            Image(systemName: "info.circle.fill").font(.system(size: 11)).foregroundColor(.orange)
-                            Text("You already have an open float. Close it before requesting a new one.")
-                                .font(.system(size: 11)).foregroundColor(.primary)
-                        }
-                        .padding(.horizontal, 10).padding(.vertical, 8)
-                        .background(Color.orange.opacity(0.12)).cornerRadius(8)
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.orange.opacity(0.4), lineWidth: 1))
+            if showNewFloatButton {
+                Button(action: { navigateToNewFloat = true }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus").font(.system(size: 14, weight: .bold))
+                        Text("New Float").font(.system(size: 14, weight: .bold))
                     }
-                    Button(action: { if !newFloatDisabled { navigateToNewFloat = true } }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "plus").font(.system(size: 14, weight: .bold))
-                            Text("New Float").font(.system(size: 14, weight: .bold))
-                        }
-                        .foregroundColor(newFloatDisabled ? .white : .black)
-                        .padding(.horizontal, 20).padding(.vertical, 14)
-                        .background(newFloatDisabled ? Color.gray.opacity(0.5) : Color.gold).cornerRadius(28)
-                    }
-                    .disabled(newFloatDisabled)
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 20).padding(.vertical, 14)
+                    .background(Color.gold).cornerRadius(28)
+                    .opacity(newFloatDisabled ? 0.5 : 1)
                 }
-                .padding(.trailing, 20).padding(.bottom, 24).padding(.leading, 20)
+                .disabled(newFloatDisabled)
+                .padding(.trailing, 20).padding(.bottom, 24)
             }
         }
         .background(
@@ -248,6 +289,8 @@ struct PettyCashModuleView: View {
         case "History":
             ClaimsListView(claims: appState.allPettyCashClaims, title: "History", isLoading: appState.isLoadingAllClaims).environmentObject(appState)
                 .onAppear { appState.loadAllClaims() }
+        case "Top-ups":
+            CashTopUpsView().environmentObject(appState)
         case "Coding Queue":
             CodingQueueListView(claims: appState.codingQueue, isLoading: appState.isLoadingCodingQueue).environmentObject(appState)
                 .onAppear { appState.loadCodingQueue() }
@@ -279,7 +322,7 @@ struct OutOfPocketModuleView: View {
 
     private var tabs: [String] {
         if isAcct {
-            return ["Payment Routing", "History"]
+            return ["Payment Routing"]
         }
         if isCoord {
             return ["Submit Receipts", "Receipts History"]
@@ -321,7 +364,7 @@ struct OutOfPocketModuleView: View {
             Text(value).font(.system(size: 18, weight: .bold, design: .monospaced)).foregroundColor(.primary).lineLimit(1).minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(10)
-        .background(Color.white).cornerRadius(8)
+        .background(Color.bgSurface).cornerRadius(8)
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
     }
 
@@ -456,7 +499,7 @@ struct ClaimsListView: View {
                         Image(systemName: "magnifyingglass").foregroundColor(.gray).font(.system(size: 14))
                         TextField("Search claims…", text: $searchText).font(.system(size: 14))
                     }
-                    .padding(10).background(Color.white).cornerRadius(8)
+                    .padding(10).background(Color.bgSurface).cornerRadius(8)
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
 
                     Button(action: { showFilterSheet = true }) {
@@ -465,7 +508,7 @@ struct ClaimsListView: View {
                             Text(activeFilter).font(.system(size: 12, weight: .semibold)).foregroundColor(.primary).lineLimit(1)
                             Image(systemName: "chevron.down").font(.system(size: 8, weight: .medium)).foregroundColor(.gray)
                         }
-                        .padding(.horizontal, 10).padding(.vertical, 10).background(Color.white).cornerRadius(8)
+                        .padding(.horizontal, 10).padding(.vertical, 10).background(Color.bgSurface).cornerRadius(8)
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                         .contentShape(Rectangle())
                     }
@@ -570,7 +613,7 @@ struct ClaimRow: View {
                 Text(FormatUtils.formatDateTime(claim.createdAt)).font(.system(size: 10)).foregroundColor(.gray)
             }
         }
-        .padding(12).background(Color.white).cornerRadius(10)
+        .padding(12).background(Color.bgSurface).cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 
@@ -591,6 +634,268 @@ struct ClaimRow: View {
 
 // MARK: - Floats List View
 
+// ═══════════════════════════════════════════════════════════════════
+// MARK: - Cash Top-ups View (accountant side, Petty Cash tab)
+// ═══════════════════════════════════════════════════════════════════
+
+struct CashTopUpsView: View {
+    @EnvironmentObject var appState: POViewModel
+
+    enum TopUpFilter: String, CaseIterable {
+        case all = "All", pending = "Pending", completed = "Completed", skipped = "Skipped"
+    }
+    @State private var activeFilter: TopUpFilter = .all
+    @State private var showFilterSheet = false
+
+    private var pending: [TopUpItem] {
+        appState.cashTopUpQueue
+            .filter { $0.status.lowercased() == "pending" }
+            .sorted { $0.createdAt < $1.createdAt }
+    }
+
+    private var history: [TopUpItem] {
+        appState.cashTopUpQueue
+            .filter { ["completed", "partial", "skipped"].contains($0.status.lowercased()) }
+            .sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    private var filteredPending: [TopUpItem] {
+        switch activeFilter {
+        case .all, .pending: return pending
+        default: return []
+        }
+    }
+
+    private var filteredHistory: [TopUpItem] {
+        switch activeFilter {
+        case .all: return history
+        case .pending: return []
+        case .completed: return history.filter { ["completed", "partial"].contains($0.status.lowercased()) }
+        case .skipped: return history.filter { $0.status.lowercased() == "skipped" }
+        }
+    }
+
+    var body: some View {
+        Group {
+            if appState.isLoadingTopUps && appState.cashTopUpQueue.isEmpty {
+                VStack { Spacer(); LoaderView(); Spacer() }
+                    .background(Color.bgBase)
+            } else {
+                ScrollView {
+                    VStack(spacing: 12) {
+                        infoBanner
+                        filterBar
+                        if !filteredPending.isEmpty { pendingSection }
+                        if !filteredHistory.isEmpty { historySection }
+                        if filteredPending.isEmpty && filteredHistory.isEmpty {
+                            emptyState
+                        }
+                    }
+                    .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 24)
+                }
+                .background(Color.bgBase)
+            }
+        }
+        .onAppear { appState.loadTopUpQueue() }
+    }
+
+    // ── Orange info banner ────────────────────────────────────────
+    private var infoBanner: some View {
+        let orange = Color(red: 0.95, green: 0.55, blue: 0.15)
+        return HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "chart.bar.fill").font(.system(size: 12)).foregroundColor(orange)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Petty Cash Top-Ups")
+                    .font(.system(size: 12, weight: .bold)).foregroundColor(orange)
+                Text("Cash float top-up requests created from crew claim submissions. Mark as topped-up when you hand over the cash.")
+                    .font(.system(size: 11)).foregroundColor(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        .background(orange.opacity(0.08)).cornerRadius(8)
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(orange.opacity(0.25), lineWidth: 1))
+    }
+
+    // ── Filter dropdown (compact action sheet) ────────────────────
+    private var filterBar: some View {
+        HStack(spacing: 6) {
+            Button(action: { showFilterSheet = true }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "line.3.horizontal.decrease")
+                        .font(.system(size: 10, weight: .medium)).foregroundColor(.goldDark)
+                    Text(activeFilter.rawValue)
+                        .font(.system(size: 12, weight: .semibold)).foregroundColor(.primary).lineLimit(1)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8, weight: .medium)).foregroundColor(.gray)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .background(Color.bgSurface).cornerRadius(6)
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(BorderlessButtonStyle())
+            .compatActionSheet(title: "Filter by Status", isPresented: $showFilterSheet, buttons:
+                TopUpFilter.allCases.map { f in
+                    let label = f == activeFilter ? "\(f.rawValue) ✓" : f.rawValue
+                    return CompatActionSheetButton.default(label) { activeFilter = f }
+                } + [.cancel()]
+            )
+            Spacer()
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "checkmark.circle").font(.system(size: 28)).foregroundColor(.gray.opacity(0.35))
+            Text("No top-ups match this filter").font(.system(size: 13)).foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity).padding(.vertical, 40)
+        .background(Color.bgSurface).cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+    }
+
+    private var summaryCards: some View {
+        let pendingTotal = pending.reduce(0.0) { $0 + $1.amount }
+        let completedTotal = history.filter { $0.status.lowercased() == "completed" }.reduce(0.0) { $0 + $1.amount }
+        return HStack(spacing: 8) {
+            statCard(label: "PENDING", value: FormatUtils.formatGBP(pendingTotal),
+                     sub: "\(pending.count) request\(pending.count == 1 ? "" : "s")",
+                     color: Color(red: 0.95, green: 0.55, blue: 0.15))
+            statCard(label: "COMPLETED", value: FormatUtils.formatGBP(completedTotal),
+                     sub: "\(history.filter { $0.status.lowercased() == "completed" }.count) completed",
+                     color: Color(red: 0.0, green: 0.6, blue: 0.5))
+        }
+        .frame(height: 80)
+    }
+
+    private func statCard(label: String, value: String, sub: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.5)
+            Text(value).font(.system(size: 16, weight: .bold, design: .monospaced)).foregroundColor(color)
+            Text(sub).font(.system(size: 10)).foregroundColor(.secondary).lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(10)
+        .background(Color.bgSurface).cornerRadius(8)
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+    }
+
+    private var pendingSection: some View {
+        let orange = Color(red: 0.95, green: 0.55, blue: 0.15)
+        return VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "flame.fill").font(.system(size: 12)).foregroundColor(orange)
+                Text("PENDING TOP-UPS").font(.system(size: 11, weight: .bold)).tracking(0.4)
+                Text("\(filteredPending.count)")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced)).foregroundColor(.white)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(orange).cornerRadius(8)
+                Spacer()
+            }
+            .padding(12).background(orange.opacity(0.06))
+
+            ForEach(filteredPending) { item in
+                Divider()
+                cashTopUpRow(item, isPending: true)
+            }
+        }
+        .background(Color.bgSurface).cornerRadius(12)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
+    }
+
+    private var historySection: some View {
+        let teal = Color(red: 0.0, green: 0.6, blue: 0.5)
+        let title: String = {
+            switch activeFilter {
+            case .completed: return "COMPLETED"
+            case .skipped:   return "SKIPPED"
+            default:         return "COMPLETED & SKIPPED"
+            }
+        }()
+        return VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.seal.fill").font(.system(size: 12)).foregroundColor(teal)
+                Text(title).font(.system(size: 11, weight: .bold)).tracking(0.4)
+                Text("\(filteredHistory.count)")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced)).foregroundColor(.secondary)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Color.gray.opacity(0.2)).cornerRadius(8)
+                Spacer()
+            }
+            .padding(12).background(Color.gray.opacity(0.06))
+
+            ForEach(filteredHistory) { item in
+                Divider()
+                cashTopUpRow(item, isPending: false)
+            }
+        }
+        .background(Color.bgSurface).cornerRadius(12)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
+    }
+
+    private func cashTopUpRow(_ item: TopUpItem, isPending: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.holderName.isEmpty ? "—" : item.holderName)
+                        .font(.system(size: 13, weight: .semibold)).foregroundColor(.primary)
+                    if !item.department.isEmpty {
+                        Text(item.department).font(.system(size: 10)).foregroundColor(.secondary)
+                    }
+                    if !item.floatReqNumber.isEmpty {
+                        Text(item.floatReqNumber).font(.system(size: 10, design: .monospaced)).foregroundColor(.goldDark)
+                    }
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 3) {
+                    Text(FormatUtils.formatGBP(item.amount))
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
+                        .foregroundColor(Color(red: 0.95, green: 0.55, blue: 0.15))
+                    statusBadge(item.status)
+                }
+            }
+            if isPending {
+                HStack(spacing: 8) {
+                    Button(action: { appState.markTopUpCompleted(item.id, amount: item.amount) }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.circle.fill").font(.system(size: 11))
+                            Text("Mark Topped Up").font(.system(size: 11, weight: .bold))
+                        }
+                        .foregroundColor(.white).padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(Color(red: 0.0, green: 0.6, blue: 0.5)).cornerRadius(6)
+                    }.buttonStyle(BorderlessButtonStyle())
+                    Button(action: { appState.skipTopUp(item.id) }) {
+                        Text("Skip").font(.system(size: 11, weight: .semibold)).foregroundColor(.gray)
+                            .padding(.horizontal, 12).padding(.vertical, 8)
+                            .background(Color.bgSurface)
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
+                    }.buttonStyle(BorderlessButtonStyle())
+                    Spacer()
+                }
+            }
+        }
+        .padding(12)
+    }
+
+    private func statusBadge(_ s: String) -> some View {
+        let (fg, bg, label): (Color, Color, String) = {
+            switch s.lowercased() {
+            case "pending":   return (Color(red: 0.95, green: 0.55, blue: 0.15), Color(red: 0.95, green: 0.55, blue: 0.15).opacity(0.12), "Pending")
+            case "completed": return (Color(red: 0.0, green: 0.6, blue: 0.5), Color(red: 0.0, green: 0.6, blue: 0.5).opacity(0.12), "Completed")
+            case "partial":   return (.blue, Color.blue.opacity(0.12), "Partial")
+            case "skipped":   return (.gray, Color.gray.opacity(0.12), "Skipped")
+            default:          return (.secondary, Color.gray.opacity(0.12), s.capitalized)
+            }
+        }()
+        return Text(label)
+            .font(.system(size: 9, weight: .bold)).foregroundColor(fg)
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(bg).cornerRadius(4)
+    }
+}
+
 struct FloatsListView: View {
     let floats: [FloatRequest]
     @EnvironmentObject var appState: POViewModel
@@ -598,35 +903,597 @@ struct FloatsListView: View {
     private var totalOutstanding: Double { floats.reduce(0) { $0 + $1.remaining } }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                // Register header
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Active Floats Register").font(.system(size: 15, weight: .bold))
-                    Text("\(floats.count) active float\(floats.count == 1 ? "" : "s") · \(FormatUtils.formatGBP(totalOutstanding)) outstanding")
-                        .font(.system(size: 12)).foregroundColor(.secondary)
-                }.padding(.horizontal, 16).padding(.top, 4)
+        Group {
+            if appState.isLoadingActiveFloats && floats.isEmpty {
+                // Show loader while fetching for the first time
+                VStack { Spacer(); LoaderView(); Spacer() }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.bgBase)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        // Register header
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Active Floats Register").font(.system(size: 15, weight: .bold))
+                            Text("\(floats.count) active float\(floats.count == 1 ? "" : "s") · \(FormatUtils.formatGBP(totalOutstanding)) outstanding")
+                                .font(.system(size: 12)).foregroundColor(.secondary)
+                        }.padding(.horizontal, 16).padding(.top, 4)
 
-                if floats.isEmpty {
-                    VStack(spacing: 12) {
-                        Spacer(minLength: 0)
-                        Image(systemName: "banknote").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
-                        Text("No active floats").font(.system(size: 13)).foregroundColor(.secondary)
-                        Spacer(minLength: 0)
-                    }.frame(maxWidth: .infinity, minHeight: 480)
-                } else {
-                    ForEach(floats) { f in
-                        NavigationLink(destination: FloatDetailView(float: f).environmentObject(appState)) {
-                            FloatCard(
-                                float: f,
-                                batches: appState.allClaims.filter { $0.floatRequestId == f.id },
-                                disableInternalTap: true
-                            )
-                            .padding(.horizontal, 16)
-                        }.buttonStyle(PlainButtonStyle())
+                        if floats.isEmpty {
+                            VStack(spacing: 12) {
+                                Spacer(minLength: 0)
+                                Image(systemName: "banknote").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
+                                Text("No active floats").font(.system(size: 13)).foregroundColor(.secondary)
+                                Spacer(minLength: 0)
+                            }.frame(maxWidth: .infinity, minHeight: 480)
+                        } else {
+                            ForEach(floats) { f in
+                                NavigationLink(destination: FloatDetailView(float: f).environmentObject(appState)) {
+                                    FloatCard(
+                                        float: f,
+                                        batches: appState.allClaims.filter { $0.floatRequestId == f.id },
+                                        disableInternalTap: true
+                                    )
+                                    .padding(.horizontal, 16)
+                                }.buttonStyle(PlainButtonStyle())
+                            }
+                        }
+                    }.padding(.top, 8).padding(.bottom, 20)
+                }
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MARK: - Float Approval Detail Page (full breakdown for approvers)
+// ═══════════════════════════════════════════════════════════════════
+
+struct FloatApprovalDetailPage: View {
+    let float: FloatRequest
+    @EnvironmentObject var appState: POViewModel
+    @Environment(\.presentationMode) var presentationMode
+
+    @State private var details: FloatDetailsResponse? = nil
+    @State private var liveFloat: FloatRequest? = nil
+    @State private var isLoading = true
+    @State private var showRejectSheet = false
+    @State private var rejectReason = ""
+    @State private var actioning = false
+
+    private var displayFloat: FloatRequest { liveFloat ?? float }
+    private var totals: FloatTotals { details?.totals ?? FloatTotals() }
+    private var isAccountant: Bool { appState.currentUser?.isAccountant == true }
+    private var isApprover: Bool { appState.cashMeta?.is_approver == true }
+    private var canAct: Bool {
+        // Approvers and accountants can approve / reject AWAITING_APPROVAL floats
+        displayFloat.status.uppercased() == "AWAITING_APPROVAL" && (isApprover || isAccountant)
+    }
+
+    /// 2 if no tier config is carried on the model — matches the web.
+    private var totalApprovalTiers: Int { max(2, displayFloat.approvals.count + 1) }
+
+    private var isAwaitingApproval: Bool {
+        displayFloat.status.uppercased() == "AWAITING_APPROVAL"
+    }
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            Color.bgSurface.edgesIgnoringSafeArea(.all)
+            if isLoading {
+                VStack { Spacer(); LoaderView(); Spacer() }
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        // Header — name, role, date, pending badge
+                        pendingHeader
+                            .padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 14)
+
+                        Divider()
+
+                        // 2-column grid of details (screenshot 2 layout)
+                        detailsGrid
+                            .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 14)
+
+                        Divider()
+
+                        // Purpose panel (light grey box)
+                        purposePanel
+                            .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 14)
+
+                        Divider()
+
+                        // Approval progress
+                        approvalProgressPanel
+                            .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 14)
+
+                        // Rejection reason (if set)
+                        if let reason = displayFloat.rejectionReason, !reason.isEmpty {
+                            Divider()
+                            rejectionCard(reason: reason)
+                                .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 14)
+                        }
+
+                        // Activity sections only make sense AFTER issuance;
+                        // suppressed while the float is still AWAITING_APPROVAL.
+                        if !isAwaitingApproval {
+                            if !(details?.batches.isEmpty ?? true)  {
+                                Divider()
+                                batchesSection.padding(.horizontal, 16).padding(.vertical, 14)
+                            }
+                            if !(details?.topups.isEmpty ?? true)   {
+                                Divider()
+                                topupsSection.padding(.horizontal, 16).padding(.vertical, 14)
+                            }
+                            if !(details?.returns.isEmpty ?? true)  {
+                                Divider()
+                                returnsSection.padding(.horizontal, 16).padding(.vertical, 14)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, canAct ? 100 : 24)
+                }
+            }
+            if canAct { actionFooter }
+        }
+        .navigationBarTitle(Text("\(displayFloat.reqNumber) — Float Request"), displayMode: .inline)
+        .onAppear { reload() }
+        .sheet(isPresented: $showRejectSheet) { rejectSheet }
+    }
+
+    // MARK: - New header / grid / purpose / approval panels
+
+    /// Top section — user name (bold), role · department, submitted date/time,
+    /// and a "PENDING X/Y" badge on the right.
+    private var pendingHeader: some View {
+        let user = UsersData.byId[displayFloat.userId]
+        let name = user?.fullName ?? "—"
+        let roleLine: String = {
+            let role = user?.displayDesignation ?? ""
+            let dept = displayFloat.department.isEmpty ? (user?.displayDepartment ?? "") : displayFloat.department
+            switch (role.isEmpty, dept.isEmpty) {
+            case (false, false): return "\(role) · \(dept)"
+            case (false, true):  return role
+            case (true, false):  return dept
+            default:             return ""
+            }
+        }()
+        return HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(name).font(.system(size: 16, weight: .bold))
+                if !roleLine.isEmpty {
+                    Text(roleLine).font(.system(size: 12)).foregroundColor(.secondary)
+                }
+                Text(FormatUtils.formatDateTime(displayFloat.createdAt))
+                    .font(.system(size: 11, design: .monospaced)).foregroundColor(.gray)
+            }
+            Spacer(minLength: 8)
+            Text("PENDING \(displayFloat.approvals.count)/\(totalApprovalTiers)")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(.goldDark)
+                .padding(.horizontal, 10).padding(.vertical, 5)
+                .background(Color.gold.opacity(0.15)).cornerRadius(6)
+        }
+    }
+
+    /// Two-column grid of six fields — REQUESTED AMOUNT / HOW LONG,
+    /// COLLECTION METHOD / DEPARTMENT, START DATE / COLLECT DATE/TIME.
+    private var detailsGrid: some View {
+        let duration: String = {
+            let d = displayFloat.duration.lowercased()
+            if d == "run_of_show" { return "Run of Show" }
+            if d.isEmpty { return "—" }
+            if let n = Int(d) { return "\(n) day\(n == 1 ? "" : "s")" }
+            return displayFloat.duration
+        }()
+        let collection: String = {
+            let key = displayFloat.collectionMethod
+            if let label = collectionOptions.first(where: { $0.0 == key })?.1 { return label }
+            if key.isEmpty { return "—" }
+            return key.replacingOccurrences(of: "_", with: " ").capitalized
+        }()
+        let startDate: String = {
+            guard let s = displayFloat.startDate, s > 0 else { return "—" }
+            return FormatUtils.formatTimestamp(s)
+        }()
+        return VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 16) {
+                gridCell("REQUESTED AMOUNT", FormatUtils.formatGBP(displayFloat.reqAmount), valueColor: .goldDark, mono: true)
+                gridCell("HOW LONG", duration)
+            }
+            HStack(alignment: .top, spacing: 16) {
+                gridCell("COLLECTION METHOD", collection)
+                gridCell("DEPARTMENT", displayFloat.department.isEmpty ? "—" : displayFloat.department)
+            }
+            HStack(alignment: .top, spacing: 16) {
+                gridCell("START DATE", startDate)
+                gridCell("COLLECT DATE/TIME", "—")
+            }
+        }
+    }
+
+    private func gridCell(_ label: String, _ value: String,
+                          valueColor: Color = .primary, mono: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
+            Text(value)
+                .font(mono
+                      ? .system(size: 15, weight: .bold, design: .monospaced)
+                      : .system(size: 13, weight: .semibold))
+                .foregroundColor(valueColor)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// "PURPOSE / JUSTIFICATION" with the body in a subtle grey-filled box.
+    private var purposePanel: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("PURPOSE / JUSTIFICATION")
+                .font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
+            Text(displayFloat.purpose.isEmpty ? "—" : displayFloat.purpose)
+                .font(.system(size: 13))
+                .foregroundColor(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(Color.bgRaised)
+                .cornerRadius(8)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// APPROVAL PROGRESS (N/T) — lists existing approvals, or "No approvals yet".
+    private var approvalProgressPanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("APPROVAL PROGRESS (\(displayFloat.approvals.count)/\(totalApprovalTiers))")
+                .font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
+            if displayFloat.approvals.isEmpty {
+                Text("No approvals yet")
+                    .font(.system(size: 13)).foregroundColor(.secondary)
+            } else {
+                ForEach(displayFloat.approvals, id: \.tierNumber) { a in
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 12)).foregroundColor(.green)
+                        Text(UsersData.byId[a.userId]?.fullName ?? a.userId)
+                            .font(.system(size: 12, weight: .semibold))
+                        Spacer()
+                        Text("Tier \(a.tierNumber)")
+                            .font(.system(size: 10)).foregroundColor(.secondary)
+                        Text(FormatUtils.formatDateTime(a.approvedAt))
+                            .font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
                     }
                 }
-            }.padding(.top, 8).padding(.bottom, 20)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Header
+
+    private var headerCard: some View {
+        let (fg, bg) = floatStatusColors(displayFloat.status)
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(UsersData.byId[displayFloat.userId]?.fullName ?? "—")
+                        .font(.system(size: 16, weight: .bold))
+                    if !displayFloat.department.isEmpty {
+                        Text(displayFloat.department).font(.system(size: 12)).foregroundColor(.secondary)
+                    }
+                    Text("#\(displayFloat.reqNumber)")
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundColor(.goldDark)
+                }
+                Spacer()
+                Text(displayFloat.statusDisplay.uppercased())
+                    .font(.system(size: 9, weight: .bold)).foregroundColor(fg)
+                    .padding(.horizontal, 8).padding(.vertical, 4).background(bg).cornerRadius(4)
+            }
+            if !displayFloat.statusSubtitle.isEmpty {
+                Text(displayFloat.statusSubtitle).font(.system(size: 11)).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Divider()
+            HStack(spacing: 12) {
+                metaCol("Submitted", FormatUtils.formatTimestamp(displayFloat.createdAt))
+                metaCol("Duration", displayFloat.duration.isEmpty ? "—" : (displayFloat.duration == "run_of_show" ? "Run of Show" : "\(displayFloat.duration) days"))
+                metaCol("Cost Code", displayFloat.costCode.isEmpty ? "—" : displayFloat.costCode.uppercased())
+            }
+        }
+        .padding(14).background(Color.bgSurface).cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+    }
+
+    private func metaCol(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label).font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
+            Text(value).font(.system(size: 11, weight: .semibold))
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var purposeCard: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("PURPOSE").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
+            Text(displayFloat.purpose).font(.system(size: 13)).fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.bgSurface).cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+    }
+
+    // MARK: - Amounts breakdown
+
+    private var amountsBreakdownCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Amounts").font(.system(size: 14, weight: .bold))
+            VStack(spacing: 6) {
+                amountRow("Requested",   FormatUtils.formatGBP(totals.requested > 0 ? totals.requested : displayFloat.reqAmount))
+                amountRow("Issued",      FormatUtils.formatGBP(totals.issued))
+                if totals.toppedUp > 0   { amountRow("Topped Up",  FormatUtils.formatGBP(totals.toppedUp), color: .blue) }
+                amountRow("Spent",       FormatUtils.formatGBP(totals.spent), color: .orange)
+                if totals.returned > 0   { amountRow("Returned",   FormatUtils.formatGBP(totals.returned), color: .gray) }
+                Divider()
+                amountRow("Balance",     FormatUtils.formatGBP(totals.finalBalance > 0 ? totals.finalBalance : displayFloat.remaining), color: .goldDark, bold: true)
+            }
+        }
+        .padding(14).background(Color.bgSurface).cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+    }
+
+    private func amountRow(_ label: String, _ value: String, color: Color = .primary, bold: Bool = false) -> some View {
+        HStack {
+            Text(label).font(.system(size: 12, weight: bold ? .bold : .regular)).foregroundColor(.secondary)
+            Spacer()
+            Text(value).font(.system(size: 13, weight: bold ? .bold : .semibold, design: .monospaced)).foregroundColor(color)
+        }
+    }
+
+    // MARK: - Posted batches
+
+    private var batchesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Posted Batches").font(.system(size: 14, weight: .bold))
+                Spacer()
+                Text("\(details?.batches.count ?? 0)").font(.system(size: 11, design: .monospaced)).foregroundColor(.secondary)
+            }
+            ForEach(details?.batches ?? [], id: \.id) { raw in
+                let batch = raw.toClaimBatch()
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("#\(batch.batchReference)").font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundColor(.goldDark)
+                        Text(batch.statusDisplay).font(.system(size: 10)).foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Text(FormatUtils.formatGBP(batch.totalGross))
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                }
+                .padding(10).background(Color.bgRaised).cornerRadius(8)
+            }
+        }
+        .padding(14).background(Color.bgSurface).cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+    }
+
+    // MARK: - Top-ups
+
+    private var topupsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Top-ups").font(.system(size: 14, weight: .bold))
+                Spacer()
+                Text("\(details?.topups.count ?? 0)").font(.system(size: 11, design: .monospaced)).foregroundColor(.secondary)
+            }
+            ForEach(details?.topups ?? [], id: \.id) { t in
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(t.status.capitalized).font(.system(size: 11, weight: .semibold))
+                        if t.createdAt > 0 {
+                            Text(FormatUtils.formatTimestamp(t.createdAt)).font(.system(size: 10)).foregroundColor(.secondary)
+                        }
+                    }
+                    Spacer()
+                    Text(FormatUtils.formatGBP(t.issuedAmount > 0 ? t.issuedAmount : t.amount))
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundColor(.blue)
+                }
+                .padding(10).background(Color.bgRaised).cornerRadius(8)
+            }
+        }
+        .padding(14).background(Color.bgSurface).cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+    }
+
+    // MARK: - Returns
+
+    private var returnsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Cash Returns").font(.system(size: 14, weight: .bold))
+                Spacer()
+                Text("\(details?.returns.count ?? 0)").font(.system(size: 11, design: .monospaced)).foregroundColor(.secondary)
+            }
+            ForEach(details?.returns ?? [], id: \.id) { r in
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(r.returnReason.replacingOccurrences(of: "_", with: " ").capitalized)
+                            .font(.system(size: 11, weight: .semibold))
+                        Spacer()
+                        Text(FormatUtils.formatGBP(r.returnAmount))
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundColor(.gray)
+                    }
+                    if !r.reasonNotes.isEmpty {
+                        Text(r.reasonNotes).font(.system(size: 10)).foregroundColor(.secondary)
+                    }
+                    if r.recordedAt > 0 {
+                        Text(FormatUtils.formatDateTime(r.recordedAt)).font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
+                    }
+                }
+                .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.bgRaised).cornerRadius(8)
+            }
+        }
+        .padding(14).background(Color.bgSurface).cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+    }
+
+    // MARK: - Approvals
+
+    private var approvalsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Approvals").font(.system(size: 14, weight: .bold))
+            ForEach(displayFloat.approvals.sorted(by: { $0.tierNumber < $1.tierNumber }), id: \.userId) { a in
+                HStack {
+                    Image(systemName: "checkmark.circle.fill").font(.system(size: 12)).foregroundColor(.green)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Tier \(a.tierNumber) — \(UsersData.byId[a.userId]?.fullName ?? a.userId)")
+                            .font(.system(size: 12, weight: .semibold))
+                        if a.approvedAt > 0 {
+                            Text(FormatUtils.formatDateTime(a.approvedAt)).font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary)
+                        }
+                    }
+                    Spacer()
+                }
+            }
+        }
+        .padding(14).background(Color.bgSurface).cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+    }
+
+    private func rejectionCard(reason: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "xmark.circle.fill").font(.system(size: 12)).foregroundColor(.red)
+                Text("Rejection Reason").font(.system(size: 12, weight: .bold)).foregroundColor(.red)
+            }
+            Text(reason).font(.system(size: 11)).foregroundColor(.primary).fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.red.opacity(0.06)).cornerRadius(8)
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.red.opacity(0.3), lineWidth: 1))
+    }
+
+    // MARK: - Action footer (role-aware)
+    //
+    // Accountants get a single "Override" button (bypasses the tier chain;
+    // matches the web flow that stamps the float as ACCT_OVERRIDE).
+    // Approvers see the normal "Reject" + "Approve" pair.
+
+    @ViewBuilder
+    private var actionFooter: some View {
+        Group {
+            if isAccountant {
+                // Accountant: single gold "Override" button, right-aligned.
+                // Accountants have override privilege over the approval chain,
+                // so this takes precedence even if they also happen to be an
+                // approver on this float.
+                HStack {
+                    Spacer()
+                    Button(action: overrideFloat) {
+                        HStack(spacing: 6) {
+                            if actioning {
+                                ActivityIndicator(isAnimating: true).frame(width: 14, height: 14)
+                            }
+                            Text(actioning ? "Overriding…" : "Override")
+                                .font(.system(size: 14, weight: .bold))
+                        }
+                        .foregroundColor(.black)
+                        .padding(.horizontal, 28).padding(.vertical, 12)
+                        .background(Color.gold).cornerRadius(8)
+                    }.buttonStyle(BorderlessButtonStyle()).disabled(actioning)
+                }
+            } else {
+                // Approver (and approver+accountant): Reject + Approve pair
+                HStack(spacing: 10) {
+                    Button(action: { showRejectSheet = true }) {
+                        Text("Reject").font(.system(size: 14, weight: .bold)).foregroundColor(.white)
+                            .frame(maxWidth: .infinity).padding(.vertical, 14)
+                            .background(Color.red).cornerRadius(10)
+                    }.buttonStyle(BorderlessButtonStyle()).disabled(actioning)
+                    Button(action: approve) {
+                        HStack(spacing: 6) {
+                            if actioning { ActivityIndicator(isAnimating: true).frame(width: 14, height: 14) }
+                            Text(actioning ? "Approving…" : "Approve").font(.system(size: 14, weight: .bold))
+                        }
+                        .foregroundColor(.white).frame(maxWidth: .infinity).padding(.vertical, 14)
+                        .background(Color.green).cornerRadius(10)
+                    }.buttonStyle(BorderlessButtonStyle()).disabled(actioning)
+                }
+            }
+        }
+        .padding(.horizontal, 16).padding(.vertical, 12)
+        .background(Color.bgSurface)
+        .overlay(Rectangle().fill(Color.borderColor).frame(height: 1), alignment: .top)
+    }
+
+    private var rejectSheet: some View {
+        NavigationView {
+            ZStack {
+                Color.bgBase.edgesIgnoringSafeArea(.all)
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Reject float request from \(UsersData.byId[displayFloat.userId]?.fullName ?? "—")")
+                        .font(.system(size: 15, weight: .semibold))
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Reason").font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
+                        TextField("Enter reason…", text: $rejectReason)
+                            .font(.system(size: 14)).padding(10)
+                            .background(Color.bgSurface).cornerRadius(8)
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                    }
+                    Spacer()
+                }.padding()
+            }
+            .navigationBarTitle(Text("Reject Float"), displayMode: .inline)
+            .navigationBarItems(
+                leading: Button("Cancel") { showRejectSheet = false; rejectReason = "" }.foregroundColor(.goldDark),
+                trailing: Button("Reject") {
+                    let r = rejectReason.trimmingCharacters(in: .whitespaces)
+                    guard !r.isEmpty else { return }
+                    showRejectSheet = false
+                    reject(reason: r)
+                }.foregroundColor(.red).font(.system(size: 16, weight: .bold))
+            )
+        }
+    }
+
+    // MARK: - Actions
+
+    private func reload() {
+        appState.loadFloatDetails(displayFloat.id) { d in
+            details = d
+            if let raw = d?.float { liveFloat = raw.toFloatRequest() }
+            isLoading = false
+        }
+    }
+
+    private func approve() {
+        actioning = true
+        // Backend is keyed on tier_number. Approver supplies their own tier; for now use next tier.
+        let nextTier = (displayFloat.approvals.map { $0.tierNumber }.max() ?? 0) + 1
+        let totalTiers = max(nextTier, 1)
+        appState.approveFloatRequest(id: displayFloat.id, tierNumber: nextTier, totalTiers: totalTiers) { success in
+            actioning = false
+            if success { presentationMode.wrappedValue.dismiss() }
+        }
+    }
+
+    private func reject(reason: String) {
+        actioning = true
+        appState.rejectFloatRequest(id: displayFloat.id, reason: reason) { success in
+            actioning = false
+            if success { presentationMode.wrappedValue.dismiss() }
+        }
+    }
+
+    /// Accountant one-click override — posts `override: true` alongside the
+    /// standard approve payload. Backend stamps the float as ACCT_OVERRIDE.
+    private func overrideFloat() {
+        actioning = true
+        appState.overrideFloatRequest(id: displayFloat.id) { success in
+            actioning = false
+            if success { presentationMode.wrappedValue.dismiss() }
         }
     }
 }
@@ -788,7 +1655,7 @@ struct FloatCard: View {
                 }
             }
         }
-        .background(Color.white).cornerRadius(10)
+        .background(Color.bgSurface).cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 
@@ -878,13 +1745,7 @@ struct FloatCard: View {
     }
 
     private func floatStatusColor(_ s: String) -> (Color, Color) {
-        switch s.uppercased() {
-        case "APPROVED", "ACTIVE", "SPENDING": return (.green, Color.green.opacity(0.1))
-        case "AWAITING_APPROVAL": return (.goldDark, Color.gold.opacity(0.15))
-        case "REJECTED": return (.red, Color.red.opacity(0.1))
-        case "CLOSED": return (.gray, Color.gray.opacity(0.1))
-        default: return (.goldDark, Color.gold.opacity(0.15))
-        }
+        floatStatusColors(s)
     }
 
     private func batchStatusColor(_ s: String) -> (Color, Color) {
@@ -923,18 +1784,31 @@ struct FloatDetailView: View {
     let float: FloatRequest
     @EnvironmentObject var appState: POViewModel
     @State private var selectedBatchId: String?
+    /// Rich details from GET /float-requests/{id}/details (batches, top-ups,
+    /// returns, totals). Fetched on appear so batches always populate even
+    /// if the Active Floats tab hasn't loaded `allClaims` yet.
+    @State private var details: FloatDetailsResponse? = nil
 
-    private var batches: [ClaimBatch] { appState.allClaims.filter { $0.floatRequestId == float.id } }
+    /// Batches belonging to this float. Prefer the authoritative
+    /// `/details` response; fall back to the client-side filter on
+    /// `allClaims` so the UI still works if the detail call hasn't
+    /// completed yet and the claims list happens to be populated.
+    private var batches: [ClaimBatch] {
+        if let d = details, !d.batches.isEmpty {
+            return d.batches.map { $0.toClaimBatch() }
+        }
+        return appState.allClaims.filter { $0.floatRequestId == float.id }
+    }
     private var balance: Double { float.issuedFloat - float.receiptsAmount }
 
+    /// Delegates to the shared file-scope helper so float status colors are
+    /// consistent everywhere (FloatCard, FloatDetailView, approval queue, etc.)
+    /// Uses the full backend state machine:
+    /// AWAITING_APPROVAL → APPROVED / ACCT_OVERRIDE → READY_TO_COLLECT →
+    /// COLLECTED → ACTIVE / SPENDING / SPENT / PENDING_RETURN →
+    /// CLOSED / CANCELLED / REJECTED.
     private func statusColor(_ s: String) -> (Color, Color) {
-        switch s.uppercased() {
-        case "APPROVED", "ACTIVE", "SPENDING": return (.green, Color.green.opacity(0.1))
-        case "AWAITING_APPROVAL": return (.goldDark, Color.gold.opacity(0.15))
-        case "REJECTED": return (.red, Color.red.opacity(0.1))
-        case "CLOSED": return (.gray, Color.gray.opacity(0.1))
-        default: return (.goldDark, Color.gold.opacity(0.15))
-        }
+        floatStatusColors(s)
     }
 
     private func batchColor(_ s: String) -> (Color, Color) {
@@ -1015,128 +1889,439 @@ struct FloatDetailView: View {
         .padding(.bottom, 10).background(Color.bgRaised.opacity(0.5))
     }
 
+    // MARK: - Layout helpers
+
+    private var spendPercent: Double {
+        let issued = float.issuedFloat
+        guard issued > 0 else { return 0 }
+        return min(max(float.receiptsAmount / issued, 0), 1)
+    }
+
+    private var statusFooter: (String, Color, String) {
+        let teal = Color(red: 0.0, green: 0.6, blue: 0.5)
+        switch float.status.uppercased() {
+        case "AWAITING_APPROVAL":   return ("Float request submitted — awaiting approval", .orange, "clock.fill")
+        case "APPROVED":            return ("Float approved — awaiting cash preparation", .green, "checkmark.circle.fill")
+        case "ACCT_OVERRIDE":       return ("Override approved — awaiting cash preparation", .green, "bolt.fill")
+        case "READY_TO_COLLECT":    return ("Cash ready — collect from the accountant", .blue, "banknote.fill")
+        case "COLLECTED":           return ("Cash collected — ready to spend", teal, "checkmark.seal.fill")
+        case "ACTIVE":              return ("Float active — submit receipts against this float", .goldDark, "creditcard.fill")
+        case "SPENDING":            return ("Spending in progress — submit receipts as you go", .goldDark, "cart.fill")
+        case "SPENT":               return ("All cash spent — submit final receipts to close", .purple, "doc.text.fill")
+        case "PENDING_RETURN":      return ("Awaiting physical cash return to accountant", Color(red: 0.91, green: 0.29, blue: 0.48), "arrow.uturn.backward.circle.fill")
+        case "CLOSED":              return ("Float closed", .gray, "checkmark.seal.fill")
+        case "CANCELLED":           return ("Float cancelled", .red, "xmark.circle.fill")
+        case "REJECTED":            return ("Float rejected — see notes below", .red, "xmark.circle.fill")
+        default:                    return (float.statusDisplay, .secondary, "info.circle.fill")
+        }
+    }
+
+    /// Two-line detail cell (label on top, value below) used in the 3-column grid.
+    private func gridCell(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
+            Text(value.isEmpty ? "—" : value)
+                .font(.system(size: 13, weight: value.isEmpty ? .regular : .semibold))
+                .foregroundColor(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Three stat columns (Float Issued / Spent / Remaining Balance) — styled
+    /// like the web screenshot with subtle cream background and colored values.
+    private func statColumn(label: String, value: String, color: Color) -> some View {
+        VStack(spacing: 4) {
+            Text(label).font(.system(size: 10, weight: .semibold)).foregroundColor(.secondary).tracking(0.4)
+            Text(value).font(.system(size: 16, weight: .bold, design: .monospaced)).foregroundColor(color)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+    }
+
+    // MARK: - Body
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                // ── Summary card ──
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 8) {
-                        Text(float.reqNumber).font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundColor(.secondary)
-                        Spacer()
-                        let (fg, bg) = statusColor(float.status)
-                        Text(float.statusDisplay.uppercased()).font(.system(size: 9, weight: .bold)).foregroundColor(fg)
-                            .padding(.horizontal, 8).padding(.vertical, 3).background(bg).cornerRadius(4)
-                    }
+            VStack(alignment: .leading, spacing: 0) {
 
-                    HStack(spacing: 0) {
-                        VStack(spacing: 2) {
-                            Text("ISSUED").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.3)
-                            Text(FormatUtils.formatGBP(float.issuedFloat)).font(.system(size: 15, weight: .bold, design: .monospaced))
-                        }.frame(maxWidth: .infinity)
-                        VStack(spacing: 2) {
-                            Text("SPENT").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.3)
-                            Text(FormatUtils.formatGBP(float.receiptsAmount)).font(.system(size: 15, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
-                        }.frame(maxWidth: .infinity)
-                        VStack(spacing: 2) {
-                            Text("BALANCE").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.3)
-                            Text(FormatUtils.formatGBP(balance)).font(.system(size: 15, weight: .bold, design: .monospaced)).foregroundColor(.green)
-                        }.frame(maxWidth: .infinity)
-                    }
-                    .padding(.vertical, 10).background(Color.bgRaised).cornerRadius(8)
-
-                    Divider()
-
-                    VStack(spacing: 0) {
-                        detailRow("Submitted", FormatUtils.formatTimestamp(float.createdAt))
-                        if !float.costCode.isEmpty { detailRow("Cost Code", float.costCode.uppercased()) }
-                        if !float.purpose.isEmpty { detailRow("Purpose", float.purpose) }
-                        if !float.duration.isEmpty { detailRow("Duration", "\(float.duration) days") }
-                        if !float.collectionMethod.isEmpty { detailRow("Collection", float.collectionMethod.replacingOccurrences(of: "_", with: " ").capitalized) }
-                        if let start = float.startDate, start > 0 { detailRow("Start Date", FormatUtils.formatTimestamp(start)) }
-                        if !float.department.isEmpty { detailRow("Department", float.department) }
-                    }
+                // ── Header: "Float Details" + status badge ──────────────
+                HStack {
+                    Text("Float Details").font(.system(size: 16, weight: .bold))
+                    Spacer()
+                    let (fg, bg) = statusColor(float.status)
+                    Text(float.statusDisplay)
+                        .font(.system(size: 11, weight: .bold)).foregroundColor(fg)
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .background(bg).cornerRadius(6)
                 }
-                .padding(14)
-                .background(Color.white).cornerRadius(12)
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 14)
 
-                // ── Approvals card ──
-                if !float.approvals.isEmpty {
+                Divider()
+
+                // ── REF + SUBMITTED ON ──────────────────────────────────
+                HStack(alignment: .top, spacing: 12) {
+                    gridCell("REF.", "#\(float.reqNumber)")
+                    gridCell("SUBMITTED ON", FormatUtils.formatTimestamp(float.createdAt))
+                }
+                .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 14)
+
+                Divider()
+
+                // ── USER / DEPARTMENT / REQUESTED AMOUNT ────────────────
+                HStack(alignment: .top, spacing: 12) {
+                    gridCell("USER", UsersData.byId[float.userId]?.fullName ?? "—")
+                    gridCell("DEPARTMENT", float.department)
+                    gridCell("REQUESTED AMOUNT", FormatUtils.formatGBP(float.reqAmount))
+                }
+                .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 14)
+
+                // ── START DATE / HOW LONG / PREFERRED COLLECTION METHOD ──
+                HStack(alignment: .top, spacing: 12) {
+                    gridCell("START DATE", (float.startDate ?? 0) > 0 ? FormatUtils.formatTimestamp(float.startDate!) : "—")
+                    gridCell("HOW LONG", durationLabel)
+                    gridCell("PREFERRED COLLECTION METHOD", collectionDisplay(float.collectionMethod))
+                }
+                .padding(.horizontal, 16).padding(.bottom, 14)
+
+                // ── COLLECT DATE/TIME ───────────────────────────────────
+                HStack(alignment: .top, spacing: 12) {
+                    gridCell("COLLECT DATE/TIME", "—")
+                    Spacer().frame(maxWidth: .infinity)
+                    Spacer().frame(maxWidth: .infinity)
+                }
+                .padding(.horizontal, 16).padding(.bottom, 16)
+
+                Divider()
+
+                // ── Stats strip (Issued / Spent / Remaining) ────────────
+                HStack(spacing: 0) {
+                    statColumn(label: "FLOAT ISSUED", value: FormatUtils.formatGBP(float.issuedFloat), color: .goldDark)
+                    Divider().frame(height: 48)
+                    statColumn(label: "SPENT",        value: FormatUtils.formatGBP(float.receiptsAmount), color: .blue)
+                    Divider().frame(height: 48)
+                    statColumn(label: "REMAINING BALANCE", value: FormatUtils.formatGBP(balance),
+                               color: Color(red: 0.0, green: 0.55, blue: 0.25))
+                }
+                .background(Color.gold.opacity(0.04))
+                .padding(.vertical, 4)
+
+                Divider()
+
+                // ── Spend progress bar ──────────────────────────────────
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Spend progress").font(.system(size: 11)).foregroundColor(.secondary)
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 2).fill(Color(.systemGray5)).frame(height: 4)
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(spendPercent > 0.8 ? Color.red : Color.goldDark)
+                                .frame(width: max(geo.size.width * CGFloat(spendPercent), 0), height: 4)
+                        }
+                    }.frame(height: 4)
+                }
+                .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 16)
+
+                // ── PURPOSE/REASON ──────────────────────────────────────
+                if !float.purpose.isEmpty {
+                    Divider()
                     VStack(alignment: .leading, spacing: 6) {
+                        Text("PURPOSE/REASON").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
+                        Text(float.purpose).font(.system(size: 13))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 16)
+                }
+
+                // ── Status footer ("Cash collected — ready to spend") ───
+                Divider()
+                let (footerText, footerColor, footerIcon) = statusFooter
+                HStack(spacing: 8) {
+                    Image(systemName: footerIcon).font(.system(size: 13)).foregroundColor(footerColor)
+                    Text(footerText).font(.system(size: 12, weight: .semibold)).foregroundColor(footerColor)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 16)
+
+                // ── Rejection banner (keeps extra context when applicable) ──
+                if let reason = float.rejectionReason, !reason.isEmpty {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("REJECTION REASON").font(.system(size: 9, weight: .bold)).foregroundColor(.red).tracking(0.6)
+                        Text(reason).font(.system(size: 12)).foregroundColor(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16).padding(.vertical, 14)
+                    .background(Color.red.opacity(0.06))
+                }
+
+                // ── Approvals (full-width section) ─────────────────────
+                if !float.approvals.isEmpty {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 10) {
                         Text("APPROVALS (\(float.approvals.count))").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
                         ForEach(float.approvals, id: \.tierNumber) { a in
                             HStack(spacing: 6) {
-                                Image(systemName: "checkmark.circle.fill").font(.system(size: 11)).foregroundColor(.green)
-                                Text(UsersData.byId[a.userId]?.fullName ?? a.userId).font(.system(size: 11, weight: .medium))
+                                Image(systemName: "checkmark.circle.fill").font(.system(size: 12)).foregroundColor(.green)
+                                Text(UsersData.byId[a.userId]?.fullName ?? a.userId).font(.system(size: 12, weight: .medium))
                                 Spacer()
                                 Text("Tier \(a.tierNumber)").font(.system(size: 10)).foregroundColor(.secondary)
                                 Text(FormatUtils.formatTimestamp(a.approvedAt)).font(.system(size: 9)).foregroundColor(.gray)
                             }
                         }
                     }
-                    .padding(14)
-                    .background(Color.white).cornerRadius(12)
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 16)
                 }
 
-                // ── Batches card ──
+                // ── Batches (full-width section) ───────────────────────
+                // Each batch row is a NavigationLink to a full-page status
+                // timeline (BatchStatusDetailPage) instead of the previous
+                // inline expansion.
                 if !batches.isEmpty {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text("\(batches.count) BATCHES").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
-                            .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 6)
-                        ForEach(batches) { batch in
-                            let isSelected = selectedBatchId == batch.id
-                            VStack(spacing: 0) {
-                                Button(action: { selectedBatchId = isSelected ? nil : batch.id }) {
-                                    HStack(spacing: 8) {
-                                        Image(systemName: "doc.text").font(.system(size: 11))
-                                            .foregroundColor(isSelected ? .goldDark : .gray)
-                                        VStack(alignment: .leading, spacing: 1) {
-                                            Text("#\(batch.batchReference)").font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundColor(.goldDark)
-                                            Text("\(batch.claimCount) receipt\(batch.claimCount == 1 ? "" : "s") · \(FormatUtils.formatTimestamp(batch.createdAt))").font(.system(size: 10)).foregroundColor(.gray)
-                                        }
-                                        Spacer()
-                                        VStack(alignment: .trailing, spacing: 2) {
-                                            Text(FormatUtils.formatGBP(batch.totalGross)).font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundColor(.primary)
-                                            let (bfg, bbg) = batchColor(batch.status)
-                                            Text(batch.statusDisplay).font(.system(size: 8, weight: .bold)).foregroundColor(bfg)
-                                                .padding(.horizontal, 6).padding(.vertical, 2).background(bbg).cornerRadius(3)
-                                        }
-                                    }
-                                    .padding(.horizontal, 14).padding(.vertical, 8)
-                                    .background(isSelected ? Color.gold.opacity(0.04) : Color.clear)
-                                    .contentShape(Rectangle())
-                                }.buttonStyle(PlainButtonStyle())
-
-                                if isSelected { batchStatusFlow(batch) }
-                                Divider().padding(.horizontal, 14)
+                    Divider()
+                    Text("\(batches.count) BATCH\(batches.count == 1 ? "" : "ES")")
+                        .font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
+                        .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 8)
+                    ForEach(batches) { batch in
+                        NavigationLink(destination: BatchStatusDetailPage(batch: batch)) {
+                            HStack(spacing: 10) {
+                                Image(systemName: "doc.text").font(.system(size: 12)).foregroundColor(.gray)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text("#\(batch.batchReference)")
+                                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                        .foregroundColor(.goldDark)
+                                    Text("\(batch.claimCount) receipt\(batch.claimCount == 1 ? "" : "s") · \(FormatUtils.formatTimestamp(batch.createdAt))")
+                                        .font(.system(size: 10)).foregroundColor(.gray)
+                                }
+                                Spacer()
+                                VStack(alignment: .trailing, spacing: 2) {
+                                    Text(FormatUtils.formatGBP(batch.totalGross))
+                                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                        .foregroundColor(.primary)
+                                    let (bfg, bbg) = batchColor(batch.status)
+                                    Text(batch.statusDisplay)
+                                        .font(.system(size: 8, weight: .bold)).foregroundColor(bfg)
+                                        .padding(.horizontal, 6).padding(.vertical, 2)
+                                        .background(bbg).cornerRadius(3)
+                                }
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 10)).foregroundColor(.gray.opacity(0.6))
                             }
-                        }
+                            .padding(.horizontal, 16).padding(.vertical, 12)
+                            .contentShape(Rectangle())
+                        }.buttonStyle(PlainButtonStyle())
+                        Divider()
                     }
-                    .padding(.bottom, 8)
-                    .background(Color.white).cornerRadius(12)
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
-                    .padding(.horizontal, 16)
-                }
-
-                // ── Rejection ──
-                if let reason = float.rejectionReason, !reason.isEmpty {
-                    HStack(spacing: 6) {
-                        Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 11)).foregroundColor(.red)
-                        Text(reason).font(.system(size: 11)).foregroundColor(.red)
-                    }
-                    .padding(12)
-                    .background(Color.red.opacity(0.06)).cornerRadius(10)
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.red.opacity(0.3), lineWidth: 1))
-                    .padding(.horizontal, 16)
+                    Spacer().frame(height: 8)
                 }
             }
-            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(Color.bgBase)
+        .background(Color.bgSurface)
         .navigationBarTitle(Text("Float \(float.reqNumber)"), displayMode: .inline)
+        .onAppear {
+            // Always hit /float-requests/{id}/details so the BATCHES section
+            // populates directly from the backend, independent of whether
+            // `allClaims` has loaded for this session.
+            appState.loadFloatDetails(float.id) { d in
+                if let d = d { self.details = d }
+            }
+            // Also ensure allClaims is available as a fallback so we can
+            // show batches immediately while /details is still inflight.
+            if appState.allClaims.isEmpty { appState.loadAllClaims() }
+        }
+    }
+
+    // MARK: - Helpers
+
+    private var durationLabel: String {
+        let d = float.duration.lowercased()
+        if d == "run_of_show" { return "Run of Show" }
+        if d.isEmpty { return "—" }
+        if let n = Int(d) { return "\(n) day\(n == 1 ? "" : "s")" }
+        return float.duration
+    }
+
+    private func collectionDisplay(_ key: String) -> String {
+        if let label = collectionOptions.first(where: { $0.0 == key })?.1 { return label }
+        if key.isEmpty { return "—" }
+        return key.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MARK: - Batch Status Detail Page
+// Full-page status timeline for a single claim batch. Mirrors the web
+// layout: header (ref + summary), STATUS label, then a 6-step vertical
+// timeline with green dots/labels for completed steps and an orange dot
+// for the current step.
+// ═══════════════════════════════════════════════════════════════════
+
+struct BatchStatusDetailPage: View {
+    let batch: ClaimBatch
+
+    /// 6-step flow — matches the web screenshot.
+    private var steps: [(key: String, label: String, subCompleted: String, subCurrent: String)] {
+        [
+            ("CODING",            "Submitted",         "Batch #\(batch.batchReference)",           "Receipts sent"),
+            ("CODED",             "Coordinator Coding", "Budget coding done",                      "Awaiting coding"),
+            ("IN_AUDIT",          "Accounts Audit",    "Audited & verified",                       "Awaiting audit"),
+            ("AWAITING_APPROVAL", "Approval",          "Approved",                                 "Awaiting approval"),
+            ("READY_TO_POST",     "Post & Ledger",     "Posted to ledger",                         "Ready to post"),
+            ("POSTED",            "Settlement",
+                settlementSubtitle(batch.settlementType, fallback: "Complete"),
+                settlementSubtitle(batch.settlementType, fallback: "Pending settlement"))
+        ]
+    }
+
+    /// Current step index based on batch.status. Returns -1 when rejected.
+    private var currentIndex: Int {
+        switch batch.status.uppercased() {
+        case "CODING":                          return 0
+        case "CODED":                           return 1
+        case "IN_AUDIT":                        return 2
+        case "AWAITING_APPROVAL", "ACCT_OVERRIDE", "APPROVED":
+            return 3
+        case "READY_TO_POST", "ESCALATED":      return 4
+        case "POSTED":                          return 5
+        case "REJECTED":                        return -1
+        default:                                return 0
+        }
+    }
+
+    /// Map settlement type → humanised subtitle ("Reduce float" / "Reimburse
+    /// BACS" / "Payroll" etc.).
+    private func settlementSubtitle(_ type: String, fallback: String) -> String {
+        let t = type.lowercased()
+        switch t {
+        case "":                          return fallback
+        case "reduce", "reduce_float":    return "Reduce float"
+        case "reimb", "reimburse":        return "Reimburse"
+        case "reimburse_bacs", "bacs":    return "Reimburse BACS"
+        case "payroll":                   return "Payroll"
+        case "float":                     return "Float"
+        default:                          return t.replacingOccurrences(of: "_", with: " ").capitalized
+        }
+    }
+
+    private var headerSubtitle: String {
+        let total = FormatUtils.formatGBP(batch.totalGross)
+        let receipts = "\(batch.claimCount) receipt\(batch.claimCount == 1 ? "" : "s")"
+        let stamp = FormatUtils.formatDateTime(batch.createdAt)
+        return "\(total) · \(receipts) · \(stamp)"
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                // ── Header ─────────────────────────────────────────────
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("#\(batch.batchReference)")
+                        .font(.system(size: 18, weight: .bold))
+                    Text(headerSubtitle)
+                        .font(.system(size: 12)).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 14)
+
+                Divider()
+
+                // ── STATUS label + timeline ────────────────────────────
+                Text("STATUS")
+                    .font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
+                    .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 12)
+
+                VStack(spacing: 0) {
+                    ForEach(Array(steps.enumerated()), id: \.offset) { idx, step in
+                        timelineRow(index: idx, step: step, isLast: idx == steps.count - 1)
+                    }
+                    // Rejected — append a red terminal node
+                    if batch.status.uppercased() == "REJECTED" {
+                        HStack(alignment: .top, spacing: 12) {
+                            ZStack {
+                                Circle().fill(Color.red).frame(width: 12, height: 12)
+                            }
+                            .frame(width: 20)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("Rejected")
+                                    .font(.system(size: 14, weight: .bold)).foregroundColor(.red)
+                                Text("Resubmit required")
+                                    .font(.system(size: 11)).foregroundColor(.red.opacity(0.7))
+                            }
+                            Spacer()
+                        }
+                        .padding(.horizontal, 16).padding(.top, 4)
+                    }
+                }
+                .padding(.bottom, 18)
+
+                // ── Settlement + rejection details ─────────────────────
+                if let reason = batch.rejectionReason, !reason.isEmpty {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("REJECTION REASON")
+                            .font(.system(size: 9, weight: .bold)).foregroundColor(.red).tracking(0.6)
+                        Text(reason).font(.system(size: 13))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16).padding(.vertical, 14)
+                    .background(Color.red.opacity(0.06))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(Color.bgSurface)
+        .navigationBarTitle(Text("Batch \(batch.batchReference)"), displayMode: .inline)
+    }
+
+    /// Renders one row of the vertical status timeline with connecting
+    /// lines between the dots, matching the screenshot.
+    @ViewBuilder
+    private func timelineRow(index: Int,
+                             step: (key: String, label: String,
+                                    subCompleted: String, subCurrent: String),
+                             isLast: Bool) -> some View {
+        let current = currentIndex
+        let isCompleted = current > index
+        let isCurrent   = current == index
+        // Color: green when completed, gold when current, gray otherwise.
+        let dotColor: Color = isCompleted ? .green : (isCurrent ? Color(red: 1.0, green: 0.55, blue: 0.0) : Color.gray.opacity(0.35))
+        let labelColor: Color = isCompleted ? .green : (isCurrent ? Color(red: 1.0, green: 0.55, blue: 0.0) : .secondary)
+        let subtitle = isCompleted ? step.subCompleted : (isCurrent ? step.subCurrent : step.subCurrent)
+
+        HStack(alignment: .top, spacing: 12) {
+            // Column: dot + connecting line
+            VStack(spacing: 0) {
+                ZStack {
+                    Circle().fill(dotColor).frame(width: 12, height: 12)
+                }
+                .frame(width: 20, height: 20)
+                if !isLast {
+                    Rectangle()
+                        .fill((isCompleted ? Color.green : Color.gray.opacity(0.25)).opacity(0.5))
+                        .frame(width: 2)
+                        .frame(maxHeight: .infinity)
+                }
+            }
+            .frame(width: 20)
+
+            // Right: title + subtitle
+            VStack(alignment: .leading, spacing: 2) {
+                Text(step.label)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(labelColor)
+                Text(subtitle)
+                    .font(.system(size: 11))
+                    .foregroundColor(labelColor.opacity(0.85))
+            }
+            .padding(.bottom, isLast ? 0 : 12)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
     }
 }
 
@@ -1166,7 +2351,7 @@ struct FloatRequestListView: View {
                     }.frame(maxWidth: .infinity, minHeight: 480)
                 } else {
                     ForEach(floats) { f in
-                        NavigationLink(destination: FloatRequestDetailPage(float: f)) {
+                        NavigationLink(destination: FloatDetailView(float: f).environmentObject(appState)) {
                             FloatRequestRow(float: f).padding(.horizontal, 16)
                         }.buttonStyle(PlainButtonStyle())
                     }
@@ -1306,7 +2491,7 @@ struct ClaimDetailPage: View {
                 }
                 .padding(14)
             }
-            .background(Color.white).cornerRadius(12)
+            .background(Color.bgSurface).cornerRadius(12)
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
             .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 20)
         }
@@ -1338,14 +2523,18 @@ struct ClaimDetailPage: View {
 struct FloatRequestRow: View {
     let float: FloatRequest
 
+    /// Delegates to the shared file-scope helper so the status badge colors on
+    /// the list match exactly what's shown on the detail page / approval queue.
     private var statusColors: (Color, Color) {
-        switch float.status.uppercased() {
-        case "APPROVED", "ACTIVE", "SPENDING", "ISSUED", "IN_USE": return (.green, Color.green.opacity(0.12))
-        case "AWAITING_APPROVAL": return (.orange, Color.orange.opacity(0.15))
-        case "REJECTED": return (.red, Color.red.opacity(0.12))
-        case "CLOSED", "RETURNED": return (.gray, Color.gray.opacity(0.15))
-        default: return (.goldDark, Color.gold.opacity(0.15))
-        }
+        floatStatusColors(float.status)
+    }
+
+    private var durationLabel: String {
+        let d = float.duration.lowercased()
+        if d == "run_of_show" { return "Run of Show" }
+        if d.isEmpty { return "" }
+        if let n = Int(d) { return "\(n) day\(n == 1 ? "" : "s")" }
+        return float.duration
     }
 
     var body: some View {
@@ -1365,14 +2554,14 @@ struct FloatRequestRow: View {
             VStack(alignment: .trailing, spacing: 2) {
                 Text(FormatUtils.formatGBP(float.reqAmount))
                     .font(.system(size: 15, weight: .bold, design: .monospaced))
-                if !float.duration.isEmpty {
-                    Text("\(float.duration) days").font(.system(size: 10)).foregroundColor(.secondary)
+                if !durationLabel.isEmpty {
+                    Text(durationLabel).font(.system(size: 10)).foregroundColor(.secondary)
                 }
             }
             Image(systemName: "chevron.right").font(.system(size: 11)).foregroundColor(.gray)
         }
         .padding(14)
-        .background(Color.white).cornerRadius(10)
+        .background(Color.bgSurface).cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 }
@@ -1394,27 +2583,49 @@ struct FloatDetailsCard: View {
     let float: FloatRequest
 
     private var statusColors: (Color, Color) {
+        let teal = Color(red: 0.0, green: 0.6, blue: 0.5)
         switch float.status.uppercased() {
-        case "APPROVED", "ACTIVE", "SPENDING", "ISSUED", "IN_USE": return (.green, Color.green.opacity(0.12))
-        case "AWAITING_APPROVAL": return (Color.orange, Color.orange.opacity(0.15))
-        case "REJECTED": return (.red, Color.red.opacity(0.12))
-        case "CLOSED", "RETURNED": return (.gray, Color.gray.opacity(0.15))
+        case "AWAITING_APPROVAL":   return (.orange, Color.orange.opacity(0.15))
+        case "APPROVED",
+             "ACCT_OVERRIDE":       return (.green, Color.green.opacity(0.12))
+        case "READY_TO_COLLECT":    return (.blue, Color.blue.opacity(0.12))
+        case "COLLECTED":           return (teal, teal.opacity(0.12))
+        case "ACTIVE",
+             "SPENDING":            return (.goldDark, Color.gold.opacity(0.15))
+        case "SPENT":               return (.purple, Color.purple.opacity(0.12))
+        case "PENDING_RETURN":      return (.orange, Color.orange.opacity(0.15))
+        case "CLOSED":              return (.gray, Color.gray.opacity(0.15))
+        case "REJECTED",
+             "CANCELLED":           return (.red, Color.red.opacity(0.12))
         default: return (.goldDark, Color.gold.opacity(0.15))
         }
     }
 
     private var footer: (String, Color, String) {
+        let teal = Color(red: 0.0, green: 0.6, blue: 0.5)
         switch float.status.uppercased() {
         case "AWAITING_APPROVAL":
-            return ("Float request submitted — awaiting approval", .green, "checkmark.circle.fill")
-        case "APPROVED", "ISSUED":
-            return ("Float approved — ready to collect", .green, "checkmark.circle.fill")
-        case "IN_USE", "SPENDING", "ACTIVE":
+            return ("Float request submitted — awaiting approval", .orange, "clock.fill")
+        case "APPROVED":
+            return ("Float approved — awaiting cash preparation", .green, "checkmark.circle.fill")
+        case "ACCT_OVERRIDE":
+            return ("Override approved — awaiting cash preparation", .green, "bolt.fill")
+        case "READY_TO_COLLECT":
+            return ("Cash ready — collect from the accountant", .blue, "banknote.fill")
+        case "COLLECTED":
+            return ("Cash collected — ready to spend", teal, "checkmark.seal.fill")
+        case "ACTIVE":
             return ("Float active — submit receipts against this float", .goldDark, "creditcard.fill")
-        case "CLAIMABLE":
-            return ("Float ready to close — submit final batch", .goldDark, "doc.text.fill")
-        case "RETURNED", "CLOSED":
+        case "SPENDING":
+            return ("Spending in progress — submit receipts as you go", .goldDark, "cart.fill")
+        case "SPENT":
+            return ("All cash spent — submit final receipts to close", .purple, "doc.text.fill")
+        case "PENDING_RETURN":
+            return ("Awaiting physical cash return to accountant", .orange, "arrow.uturn.backward.circle.fill")
+        case "CLOSED":
             return ("Float closed", .gray, "checkmark.seal.fill")
+        case "CANCELLED":
+            return ("Float cancelled", .red, "xmark.circle.fill")
         case "REJECTED":
             return ("Float rejected — see notes below", .red, "xmark.circle.fill")
         default:
@@ -1490,7 +2701,7 @@ struct FloatDetailsCard: View {
                 }.padding(14).background(Color.red.opacity(0.06))
             }
         }
-        .background(Color.white).cornerRadius(12)
+        .background(Color.bgSurface).cornerRadius(12)
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
     }
 
@@ -1531,7 +2742,21 @@ struct SubmitClaimFormView: View {
     @EnvironmentObject var appState: POViewModel
 
     @State private var receipts: [ClaimReceiptItem] = [ClaimReceiptItem()]
-    @State private var settlementType: String = "reimb" // PC: reimb, reduce, topup, close  |  OOP: reimb only
+    // Primary settlement is auto-derived ("reimb" or "reduce") — never user-overridable.
+    // followUp is an OPTIONAL extra action (independent of the primary):
+    //   nil      → no extra action
+    //   "top_up" → reimburse this batch back into the float
+    //   "close"  → close the float after this batch
+    @State private var settlementType: String = ""  // legacy — only used for old reimbursement panel
+    @State private var followUp: String? = nil
+
+    // Pending (not-yet-posted) batches against the active float — fetched on appear.
+    // Used to compute the *effective* float balance (live balance − pending submissions)
+    // so the primary derivation accounts for receipts already in the pipeline.
+    @State private var pendingBatches: [ClaimBatch] = []
+    private var pendingBatchesTotal: Double {
+        pendingBatches.reduce(0) { $0 + $1.totalGross }
+    }
     @State private var reimbMethod: String = "bacs"
     @State private var accountName: String = ""
     @State private var sortCode: String = ""
@@ -1578,33 +2803,21 @@ struct SubmitClaimFormView: View {
 
                 // ── Step 2: Settlement / Reimbursement ──
                 if expenseType == "pc" {
-                    stepHeader(number: "2", title: "Choose Your Settlement", subtitle: "How should this claim be settled?")
+                    stepHeader(number: "2", title: "Choose Your Settlement", subtitle: "This will be sent to the accountant with your receipts")
 
-                    VStack(spacing: 8) {
-                        settlementOption(id: "reimb", icon: "arrow.uturn.backward.circle.fill", title: "Reimburse Me",
-                                         desc: "I overspent my float. Reimburse the difference.", color: Color(red: 0.2, green: 0.7, blue: 0.45))
-                        settlementOption(id: "reduce", icon: "arrow.down.circle.fill", title: "Reduce My Float",
-                                         desc: "I have cash remaining and want to reduce my float balance.", color: .orange)
-                        settlementOption(id: "topup", icon: "arrow.up.circle.fill", title: "Top Up My Float",
-                                         desc: "I'd like more cash to continue spending on this float.", color: .blue)
-                        settlementOption(id: "close", icon: "xmark.circle.fill", title: "Close This Float",
-                                         desc: "All receipts submitted. Return remaining cash and close.", color: .red)
-                    }
+                    settlementStatsBanner
+                    primarySettlementCard
 
-                    // Show bank details for reimburse
-                    if settlementType == "reimb" {
+                    // When this batch overdraws the float, the primary becomes "Reimburse"
+                    // and the user needs to provide reimbursement bank details.
+                    // Also show when the user picked "Reimburse to Float" follow-up — the
+                    // reimbursement amount goes back to the float, but the form is the same.
+                    if autoPrimarySettlement == "reimb" {
                         reimbursementSection
                     }
-                    // Show top-up amount
-                    if settlementType == "topup" {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("TOP UP AMOUNT").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.5)
-                            TextField("£0.00", text: $topUpAmount)
-                                .font(.system(size: 14, weight: .semibold, design: .monospaced)).keyboardType(.decimalPad)
-                                .padding(10).background(Color.white).cornerRadius(8)
-                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
-                        }
-                    }
+
+                    optionalSettlementPills
+                    optionalSettlementDetail
                 } else {
                     // OOP: always reimbursement
                     stepHeader(number: "2", title: "Reimbursement Method", subtitle: "How would you like to be paid back?")
@@ -1614,21 +2827,11 @@ struct SubmitClaimFormView: View {
                 // ── Notes ──
                 VStack(alignment: .leading, spacing: 4) {
                     Text("ADDITIONAL NOTES").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.5)
-                    TextField("Any additional context for the accountant…", text: $notes)
-                        .font(.system(size: 13)).padding(10)
-                        .background(Color.white).cornerRadius(8)
+                    MultilineTextView(text: $notes, placeholder: "Any additional context for the accountant…")
+                        .frame(maxWidth: .infinity, minHeight: 70)
+                        .background(Color.bgSurface).cornerRadius(8)
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                 }
-
-                // ── Summary ──
-                HStack {
-                    Text("\(receipts.count) receipt\(receipts.count == 1 ? "" : "s")").font(.system(size: 12)).foregroundColor(.secondary)
-                    Spacer()
-                    Text("Total: \(FormatUtils.formatGBP(batchTotal))")
-                        .font(.system(size: 14, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
-                }
-                .padding(12).background(Color.white).cornerRadius(8)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
 
                 // ── Error ──
                 if let err = submitError {
@@ -1639,29 +2842,21 @@ struct SubmitClaimFormView: View {
                     .background(Color.red.opacity(0.06)).cornerRadius(8)
                 }
 
-                // ── Submit ──
+                // ── Submit (full-width) ──
                 Button(action: submitClaim) {
                     HStack(spacing: 6) {
                         if submitting { ActivityIndicator(isAnimating: true).frame(width: 16, height: 16) }
-                        Text(submitted ? "Submitted" : submitting ? "Submitting..." : "Submit Receipts for Coding & Approval")
+                        Text(submitted ? "Submitted" : submitting ? "Submitting..." : "Submit Claim for Coding & Approval")
                     }
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(submitted ? .white : .black)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(.white)
                     .frame(maxWidth: .infinity).padding(.vertical, 14)
-                    .background(submitted ? Color.green : Color.gold).cornerRadius(10)
+                    .background(submitted ? Color.green : Color.orange).cornerRadius(10)
                 }
                 .buttonStyle(BorderlessButtonStyle())
                 .disabled(submitting || submitted)
 
-                // Info
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "info.circle.fill").font(.system(size: 12)).foregroundColor(.blue)
-                    Text("Your claim will be sent for coding by the department coordinator, then audited by accounts before approval.")
-                        .font(.system(size: 11)).foregroundColor(.blue)
-                }
-                .padding(10).frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.blue.opacity(0.04)).cornerRadius(8)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.blue.opacity(0.15), lineWidth: 1))
+                claimInfoBanner
 
             }.padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 30)
         }
@@ -1673,6 +2868,34 @@ struct SubmitClaimFormView: View {
                 uploadReceiptId = nil
             }), isActive: $navigateToUpload) { EmptyView() }.frame(width: 0, height: 0).hidden()
         )
+        .onAppear {
+            // Load the user's floats so we can compute float balance for the settlement banner
+            if appState.myFloats.isEmpty { appState.loadMyFloats() }
+            // Load the user's batches so we can subtract pending (not-yet-posted) ones
+            // from the effective balance — matches the web's pendingBatches calc.
+            appState.loadMyBatches()
+        }
+        .onReceive(appState.$myBatches) { batches in
+            recomputePendingBatches(from: batches)
+        }
+        .onReceive(appState.$myFloats) { _ in
+            // Float list arrived (or refreshed) → re-derive pending batches for the new active float
+            recomputePendingBatches(from: appState.myBatches)
+        }
+    }
+
+    /// Filter myBatches to those against the current active float that are still
+    /// in the pipeline (not POSTED / REJECTED / CLOSED). These reduce the
+    /// effective balance used to derive the primary settlement.
+    private func recomputePendingBatches(from batches: [ClaimBatch]) {
+        guard let floatId = activeFloat?.id else {
+            pendingBatches = []
+            return
+        }
+        let terminal: Set<String> = ["POSTED", "REJECTED", "CLOSED"]
+        pendingBatches = batches.filter { b in
+            b.floatRequestId == floatId && !terminal.contains(b.status.uppercased())
+        }
     }
 
     // MARK: - Receipt Card
@@ -1824,7 +3047,7 @@ struct SubmitClaimFormView: View {
                     VStack(spacing: 10) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("COST CODE").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
-                            SearchableCostCodeField(selectedCode: receiptBinding(itemId, \.costCode))
+                            CostCodePickerButton(selectedCode: receiptBinding(itemId, \.costCode))
                         }
                         HStack(spacing: 10) {
                             VStack(alignment: .leading, spacing: 4) {
@@ -1847,7 +3070,7 @@ struct SubmitClaimFormView: View {
             .cornerRadius(8)
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
         }
-        .padding(12).background(Color.white).cornerRadius(10)
+        .padding(12).background(Color.bgSurface).cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 
@@ -1912,9 +3135,306 @@ struct SubmitClaimFormView: View {
                             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [5])).foregroundColor(Color.goldDark.opacity(0.4)))
                     }.buttonStyle(BorderlessButtonStyle())
                 }
-                .padding(12).background(Color.white).cornerRadius(10)
+                .padding(12).background(Color.bgSurface).cornerRadius(10)
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
             }
+        }
+    }
+
+    // ── Info banner ──────────────────────────────────────────────────
+    private var claimInfoBanner: some View {
+        let info: Text = {
+            let plain  = Font.system(size: 11)
+            let bold   = Font.system(size: 11, weight: .bold)
+            var t = Text("Your claim goes to your ").font(plain)
+            t = t + Text("Department Coordinator").font(bold)
+            t = t + Text(" for budget coding, then ").font(plain)
+            t = t + Text("Accountants").font(bold)
+            t = t + Text(" for auditing purposes. You'll be notified at each stage.").font(plain)
+            return t
+        }()
+        return HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "info.circle.fill").font(.system(size: 12)).foregroundColor(.blue)
+            info.foregroundColor(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.blue.opacity(0.06))
+        .cornerRadius(8)
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.blue.opacity(0.2), lineWidth: 1))
+    }
+
+    // ── Current user's active float (for balance display) ────────────
+    /// Match the web's allow-list of statuses (any spendable / pre-spendable state).
+    private var activeFloat: FloatRequest? {
+        let allowed: Set<String> = [
+            "READY_TO_COLLECT", "COLLECTED", "ACTIVE", "SPENDING",
+            "APPROVED", "ACCT_OVERRIDE", "AWAITING_APPROVAL",
+            "SPENT", "PENDING_RETURN"
+        ]
+        return appState.myFloats.first { allowed.contains($0.status.uppercased()) }
+    }
+
+    /// Live float balance from the server — the running cash remaining on the float.
+    /// Mirrors the web's `parseFloat(activeFloat?.balance || 0)`.
+    private var floatBalance: Double {
+        // FloatRequest exposes `remaining` as a derived property; the server's
+        // authoritative `balance` field is set during issue/return/topup, so use
+        // remaining as a stand-in (issuedFloat − receiptsAmount − returnAmount).
+        activeFloat?.remaining ?? 0
+    }
+
+    /// Effective balance = live balance − pending batches not yet posted.
+    /// This is what determines whether THIS new batch overdraws the float.
+    private var effectiveBalance: Double {
+        max(0, floatBalance - pendingBatchesTotal)
+    }
+
+    /// Auto-derive the primary settlement: reimburse only if this batch would
+    /// overdraw the *effective* balance (live balance − pending batches).
+    /// Mirrors web logic `newBatchTotal > effectiveBalance ? "reimburse" : "reduce"`.
+    private var autoPrimarySettlement: String {
+        batchTotal > effectiveBalance ? "reimb" : "reduce"
+    }
+
+    /// Overdraft amount (only meaningful when primary == "reimb").
+    private var overdraftAmount: Double {
+        max(0, batchTotal - floatBalance)
+    }
+
+    // Primary card always reflects the auto-derived settlement — it does NOT
+    // change when the user taps an "optional also do one of" pill.
+    // Copy mirrors the web's PCSettlementSection.
+    private var primaryTitle: String {
+        autoPrimarySettlement == "reimb" ? "Reimburse Me" : "Reduce My Float"
+    }
+
+    private var primaryDescription: String {
+        autoPrimarySettlement == "reimb"
+            ? "This batch overdraws your float. The overdraft will be reimbursed to you."
+            : "Batch is within float balance — this will reduce your remaining float."
+    }
+
+    private var primaryIcon: String {
+        autoPrimarySettlement == "reimb"
+            ? "arrow.uturn.backward.circle.fill"
+            : "chart.line.downtrend.xyaxis"
+    }
+
+    // ── Settlement stats banner ──────────────────────────────────────
+    private var settlementStatsBanner: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Batch total:").font(.system(size: 10)).foregroundColor(.secondary)
+                HStack(spacing: 4) {
+                    Text(FormatUtils.formatGBP(batchTotal))
+                        .font(.system(size: 14, weight: .bold, design: .monospaced)).foregroundColor(.primary)
+                    Text("· \(receipts.count) receipt\(receipts.count == 1 ? "" : "s")")
+                        .font(.system(size: 10)).foregroundColor(.secondary)
+                }
+            }
+            Divider().frame(height: 28)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Float balance:").font(.system(size: 10)).foregroundColor(.secondary)
+                Text(FormatUtils.formatGBP(floatBalance))
+                    .font(.system(size: 14, weight: .bold, design: .monospaced)).foregroundColor(.primary)
+            }
+            Spacer()
+            Text("PENDING SUBMISSION")
+                .font(.system(size: 8, weight: .bold)).tracking(0.5).foregroundColor(.orange)
+                .padding(.horizontal, 6).padding(.vertical, 3)
+                .background(Color.orange.opacity(0.12)).cornerRadius(4)
+        }
+        .padding(12).background(Color.bgSurface).cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+    }
+
+    // ── Primary settlement card (auto-selected, highlighted) ─────────
+    private var primarySettlementCard: some View {
+        let orange = Color(red: 0.95, green: 0.55, blue: 0.15)
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: primaryIcon).font(.system(size: 18)).foregroundColor(orange)
+                    .frame(width: 32, height: 32)
+                    .background(orange.opacity(0.12)).cornerRadius(6)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(primaryTitle).font(.system(size: 14, weight: .bold))
+                    Text(primaryDescription).font(.system(size: 11)).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Image(systemName: "checkmark.circle.fill").font(.system(size: 18)).foregroundColor(orange)
+            }
+
+            // Cream-colored impact banner — shows overdraft breakdown for reimburse,
+            // or the simple "£X will reduce the float" message for reduce.
+            HStack {
+                Text(primaryImpactText)
+                    .font(.system(size: 11, design: .monospaced)).foregroundColor(Color(red: 0.55, green: 0.35, blue: 0.05))
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(orange.opacity(0.08)).cornerRadius(6)
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(orange.opacity(0.2), lineWidth: 1))
+        }
+        .padding(14)
+        .background(Color.bgSurface).cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(orange, lineWidth: 1.5))
+    }
+
+    /// Impact strip text shown inside the primary card's cream banner.
+    /// - reimburse → "Overdraft £X reimbursed · £Y float consumed"
+    /// - reduce    → "£X will reduce the float"
+    private var primaryImpactText: String {
+        if autoPrimarySettlement == "reimb" {
+            return "Overdraft \(FormatUtils.formatGBP(overdraftAmount)) reimbursed · "
+                + "\(FormatUtils.formatGBP(floatBalance)) float consumed"
+        }
+        return "\(FormatUtils.formatGBP(batchTotal)) will reduce the float"
+    }
+
+    // ── Optional follow-up pills ─────────────────────────────────────
+    /// Pills are additive to the primary — tapping toggles selection on/off.
+    /// followUp values map to web's: "top_up" (reimburse to float) | "close" (close the float).
+    private var optionalSettlementPills: some View {
+        let pills: [(String, String)] = [
+            ("top_up", "Reimburse to Float"),
+            ("close",  "Close the Float"),
+        ]
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("OPTIONAL — ALSO DO ONE OF:")
+                .font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.5)
+            HStack(spacing: 8) {
+                ForEach(pills, id: \.0) { opt in
+                    pillButton(id: opt.0, label: opt.1)
+                }
+                Spacer()
+            }
+        }
+    }
+
+    private func pillButton(id: String, label: String) -> some View {
+        let orange = Color(red: 0.95, green: 0.55, blue: 0.15)
+        let active = followUp == id
+        return Button(action: {
+            // Toggle: tapping the active pill deselects it
+            followUp = active ? nil : id
+        }) {
+            Text(label)
+                .font(.system(size: 12, weight: active ? .semibold : .medium))
+                .foregroundColor(active ? orange : .primary)
+                .padding(.horizontal, 14).padding(.vertical, 8)
+                .background(active ? orange.opacity(0.05) : Color.bgSurface)
+                .cornerRadius(20)
+                .overlay(RoundedRectangle(cornerRadius: 20).stroke(active ? orange : Color.borderColor, lineWidth: 1))
+        }.buttonStyle(BorderlessButtonStyle())
+    }
+
+    // ── Optional detail card (shown below pills when a pill is active) ──
+    @ViewBuilder
+    private var optionalSettlementDetail: some View {
+        if followUp == "top_up" {
+            reimburseToFloatBanner
+        } else if followUp == "close" {
+            closeFloatBreakdown
+        }
+    }
+
+    private var reimburseToFloatBanner: some View {
+        let teal = Color(red: 0.0, green: 0.6, blue: 0.5)
+        return HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "checkmark.circle.fill").font(.system(size: 14)).foregroundColor(teal)
+            (Text(FormatUtils.formatGBP(batchTotal)).font(.system(size: 12, weight: .bold, design: .monospaced)).foregroundColor(.primary)
+             + Text(" will be reimbursed back to your float balance after this batch is posted.")
+                .font(.system(size: 12)).foregroundColor(.primary))
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        .background(teal.opacity(0.06)).cornerRadius(8)
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(teal.opacity(0.3), lineWidth: 1))
+    }
+
+    private var closeFloatBreakdown: some View {
+        // Mirrors web logic exactly:
+        //   returnAmount = balance − batchTotal − pendingBatchesTotal
+        //   > 0.005     → amber: "Return £X cash to the accountant"
+        //   ≈ 0         → green: "No cash to return — this batch will zero out the float"
+        //   < -0.005    → red warning: pending batches exceed balance, may be overdrawn
+        let amber = Color(red: 0.85, green: 0.5, blue: 0.05)
+        let green = Color(red: 0.0, green: 0.55, blue: 0.3)
+        let returnAmount = floatBalance - batchTotal - pendingBatchesTotal
+        let needsReturn = returnAmount > 0.005
+        let isOverdrawn = returnAmount < -0.005
+        let bannerColor = needsReturn ? amber : (isOverdrawn ? .red : green)
+
+        return VStack(alignment: .leading, spacing: 10) {
+            Text("Close Float").font(.system(size: 14, weight: .bold))
+
+            VStack(alignment: .leading, spacing: 8) {
+                // Status line
+                HStack(spacing: 6) {
+                    Image(systemName: needsReturn ? "exclamationmark.triangle.fill" : "checkmark.seal.fill")
+                        .font(.system(size: 11)).foregroundColor(bannerColor)
+                    Text(needsReturn
+                         ? "Return \(FormatUtils.formatGBP(returnAmount)) cash to the accountant"
+                         : "No cash to return — this batch will zero out the float")
+                        .font(.system(size: 11, weight: .bold)).foregroundColor(bannerColor)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                // Breakdown rows (mirrors web's exact lines)
+                VStack(spacing: 4) {
+                    breakdownRow(label: "Current float balance", value: FormatUtils.formatGBP(floatBalance), sign: "")
+                    breakdownRow(label: "This batch total", value: "−\(FormatUtils.formatGBP(batchTotal))", sign: "−")
+                    if pendingBatches.count > 0 {
+                        let pluralS = pendingBatches.count == 1 ? "" : "es"
+                        breakdownRow(
+                            label: "\(pendingBatches.count) pending batch\(pluralS) not yet posted",
+                            value: "−\(FormatUtils.formatGBP(pendingBatchesTotal))",
+                            sign: "−"
+                        )
+                    }
+                    Divider()
+                    breakdownRow(
+                        label: "Cash to return",
+                        value: FormatUtils.formatGBP(max(0, returnAmount)),
+                        sign: "=",
+                        bold: true
+                    )
+                }
+
+                if isOverdrawn {
+                    Text("Warning: pending batches exceed the current balance by \(FormatUtils.formatGBP(abs(returnAmount))). You may be overdrawn.")
+                        .font(.system(size: 11)).foregroundColor(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 4)
+                }
+            }
+            .padding(12)
+            .background(bannerColor.opacity(0.08)).cornerRadius(8)
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(bannerColor.opacity(0.3), lineWidth: 1))
+        }
+        .padding(14).background(Color.bgSurface).cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+    }
+
+    private func breakdownRow(label: String, value: String, sign: String, bold: Bool = false) -> some View {
+        HStack(spacing: 6) {
+            if !sign.isEmpty {
+                Text(sign).font(.system(size: 11, weight: .bold, design: .monospaced)).foregroundColor(.secondary)
+                    .frame(width: 10, alignment: .leading)
+            }
+            Text(label)
+                .font(.system(size: 11, weight: bold ? .bold : .regular, design: .monospaced))
+                .foregroundColor(bold ? .primary : .secondary)
+            Spacer()
+            Text(value)
+                .font(.system(size: 11, weight: bold ? .bold : .regular, design: .monospaced))
+                .foregroundColor(.primary)
         }
     }
 
@@ -1931,7 +3451,7 @@ struct SubmitClaimFormView: View {
                 }
                 Spacer()
             }
-            .padding(12).background(Color.white).cornerRadius(10)
+            .padding(12).background(Color.bgSurface).cornerRadius(10)
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(active ? color : Color.borderColor, lineWidth: active ? 2 : 1))
         }.buttonStyle(PlainButtonStyle())
     }
@@ -1968,7 +3488,7 @@ struct SubmitClaimFormView: View {
                 Text(subtitle).font(.system(size: 9)).foregroundColor(.secondary).multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity).padding(.vertical, 12)
-            .background(Color.white).cornerRadius(8)
+            .background(Color.bgSurface).cornerRadius(8)
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(active ? Color.gold : Color.borderColor, lineWidth: active ? 2 : 1))
         }.buttonStyle(PlainButtonStyle())
     }
@@ -1990,25 +3510,39 @@ struct SubmitClaimFormView: View {
             return item
         }
 
-        let settleMap: [String: String] = ["reimb": "REIMBURSE", "reduce": "REDUCE_FLOAT", "topup": "TOP_UP_FLOAT", "close": "CLOSE_FLOAT"]
-        let settleType = settleMap[settlementType] ?? "REIMBURSE"
+        // settlement_type is ALWAYS the auto-derived primary (REIMBURSE or REDUCE_FLOAT for PC).
+        // The optional follow-up pill is sent separately as `settlement_details.follow_up`.
+        // Mirrors web payload exactly.
+        let settleType: String = {
+            if expenseType == "pc" {
+                return autoPrimarySettlement == "reimb" ? "REIMBURSE" : "REDUCE_FLOAT"
+            }
+            // OOP: always reimburse
+            return "REIMBURSE"
+        }()
 
         var settlementDetails: [String: Any] = [:]
-        if settlementType == "reimb" {
+        let isPrimaryReimburse = (settleType == "REIMBURSE")
+
+        if isPrimaryReimburse {
             settlementDetails["payment_method"] = reimbMethod == "bacs" ? "BACS" : "PAYROLL"
             if reimbMethod == "bacs" {
                 var bd: [String: Any] = ["account_name": accountName, "sort_code": sortCode, "account_number": accountNumber]
                 let extras = extraFields.filter { !$0.label.isEmpty && !$0.value.isEmpty }.map { ["label": $0.label, "value": $0.value] }
                 if !extras.isEmpty { bd["additional_details"] = extras }
                 settlementDetails["bank_details"] = bd
-                if let amt = Double(reimbAmount), amt > 0 { settlementDetails["amount"] = amt }
             }
         }
-        if settlementType == "topup", let amt = Double(topUpAmount), amt > 0 {
-            settlementDetails["top_up_amount"] = amt
-        }
-        if settlementType == "close" {
-            settlementDetails["close_float_option"] = "CASH_TO_ACCOUNTANT"
+
+        // Optional follow-up action (independent of primary)
+        if let fu = followUp {
+            settlementDetails["follow_up"] = fu
+            if fu == "top_up" {
+                // Reimburse the batch back into the float
+                settlementDetails["top_up_amount"] = (batchTotal * 100).rounded() / 100
+            }
+        } else {
+            settlementDetails["follow_up"] = NSNull()
         }
 
         // Promote first receipt's coding info to batch level so the detail view can display it
@@ -2016,6 +3550,7 @@ struct SubmitClaimFormView: View {
         var body: [String: Any] = [
             "expense_type": expenseType,
             "department_id": user.departmentId,
+            "float_request_id": activeFloat?.id ?? NSNull(),
             "settlement_type": settleType,
             "settlement_details": settlementDetails,
             "notes": notes,
@@ -2063,7 +3598,7 @@ struct ClaimFilePickerPage: View {
                         Text("Upload Receipt").font(.system(size: 20, weight: .bold))
                         Text("Select a receipt photo or PDF").font(.system(size: 13)).foregroundColor(.secondary)
                     }
-                    .frame(maxWidth: .infinity).padding(.vertical, 40).background(Color.white).cornerRadius(12)
+                    .frame(maxWidth: .infinity).padding(.vertical, 40).background(Color.bgSurface).cornerRadius(12)
                     .overlay(
                         RoundedRectangle(cornerRadius: 12).stroke(Color.gold.opacity(0.3), lineWidth: 1)
                             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [8])).foregroundColor(Color.gold.opacity(0.4)))
@@ -2114,12 +3649,12 @@ struct ClaimFilePickerPage: View {
                 Image(systemName: icon).font(.system(size: 20)).foregroundColor(.goldDark)
                     .frame(width: 36, height: 36).background(Color.gold.opacity(0.15)).cornerRadius(8)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.system(size: 15, weight: .semibold)).foregroundColor(.black)
+                    Text(title).font(.system(size: 15, weight: .semibold)).foregroundColor(.primary)
                     Text(sub).font(.system(size: 12)).foregroundColor(.secondary)
                 }
                 Spacer()
                 Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(.gray)
-            }.padding(14).background(Color.white).cornerRadius(12)
+            }.padding(14).background(Color.bgSurface).cornerRadius(12)
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
             .contentShape(Rectangle())
         }.buttonStyle(BorderlessButtonStyle())
@@ -2249,7 +3784,7 @@ struct SignOffListView: View {
             Text(sub).font(.system(size: 9)).foregroundColor(.gray).lineLimit(2)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(10)
-        .background(Color.white).cornerRadius(8)
+        .background(Color.bgSurface).cornerRadius(8)
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
     }
 
@@ -2328,7 +3863,7 @@ struct SignOffListView: View {
                     Text("Confirm coding decisions and any notes for the audit trail…")
                         .font(.system(size: 11)).foregroundColor(.gray).italic()
                         .padding(8).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.white).cornerRadius(6)
+                        .background(Color.bgSurface).cornerRadius(6)
                         .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
                 }.padding(14)
 
@@ -2348,7 +3883,7 @@ struct SignOffListView: View {
                 }.padding(.horizontal, 14).padding(.bottom, 12)
             }
         }
-        .background(Color.white).cornerRadius(10)
+        .background(Color.bgSurface).cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 
@@ -2478,7 +4013,7 @@ struct ReconciliationView: View {
                         denomRow(i)
                     }
                 }
-                .background(Color.white).cornerRadius(10)
+                .background(Color.bgSurface).cornerRadius(10)
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
 
                 // ── Reconciling Items ──
@@ -2529,7 +4064,7 @@ struct ReconciliationView: View {
                         .background(Color.gold.opacity(0.06))
                     }
                 }
-                .background(Color.white).cornerRadius(10)
+                .background(Color.bgSurface).cornerRadius(10)
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
 
                 // ── Reconciliation ──
@@ -2557,7 +4092,7 @@ struct ReconciliationView: View {
                             .foregroundColor(variance == 0 ? .green : .red)
                     }.padding(.horizontal, 14).padding(.vertical, 10)
                 }
-                .background(Color.white).cornerRadius(10)
+                .background(Color.bgSurface).cornerRadius(10)
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
 
                 // Variance warning
@@ -2576,7 +4111,7 @@ struct ReconciliationView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("SIGN-OFF NOTES").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.5)
                     TextField("Notes will be attached to this period's reconciliation…", text: $signOffNotes)
-                        .font(.system(size: 12)).padding(10).background(Color.white).cornerRadius(8)
+                        .font(.system(size: 12)).padding(10).background(Color.bgSurface).cornerRadius(8)
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                 }
 
@@ -2615,7 +4150,7 @@ struct ReconciliationView: View {
                             Divider().padding(.horizontal, 14)
                         }
                     }
-                    .background(Color.white).cornerRadius(10)
+                    .background(Color.bgSurface).cornerRadius(10)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
                 }
 
@@ -2735,6 +4270,7 @@ struct PaymentRoutingView: View {
     @EnvironmentObject var appState: POViewModel
     @State private var bacsGenerated = false
     @State private var showBacsAlert = false
+    @State private var activeSection = "bacs"   // "bacs" | "payroll"
 
     private var routing: PaymentRoutingResponse { appState.paymentRouting }
     private var bacsBatches: [PaymentRoutingBatch]    { routing.bacsBatches }
@@ -2743,84 +4279,95 @@ struct PaymentRoutingView: View {
     private var payrollTotal: Double { routing.stats.payrollTotal }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                // Header banner
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "arrow.down.circle.fill").font(.system(size: 14)).foregroundColor(.goldDark)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Payment Routing").font(.system(size: 13, weight: .bold))
-                        Text("Approved BACS claims batched for export. Payroll claims auto-add to the payroll run on approval.")
-                            .font(.system(size: 11)).foregroundColor(.secondary)
-                    }
-                    Spacer()
-                }
-                .padding(12).background(Color.gold.opacity(0.06)).cornerRadius(8)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gold.opacity(0.25), lineWidth: 1))
-
-                // Stat cards
-                HStack(spacing: 8) {
-                    statCard(label: "BACS READY", value: FormatUtils.formatGBP(bacsTotal),
-                             sub: "\(bacsBatches.count) claims · ready to generate",
-                             valueColor: .green, bg: Color.green.opacity(0.06), border: Color.green.opacity(0.3))
-                    statCard(label: "PAYROLL AUTO-ADDED", value: FormatUtils.formatGBP(payrollTotal),
-                             sub: "\(payrollBatches.count) claims",
-                             valueColor: Color(red: 0.2, green: 0.5, blue: 0.85),
-                             bg: Color.white, border: Color.borderColor)
-                    statCard(label: "BACS FILE",
-                             value: bacsGenerated ? "Generated" : "Not generated",
-                             sub: bacsGenerated ? "Ready to upload" : "Awaiting action",
-                             valueColor: bacsGenerated ? .green : .primary,
-                             valueFont: .system(size: 14, weight: .bold),
-                             bg: Color.white, border: Color.borderColor)
-                }
-                .frame(height: 86)
-
-                // BACS Payments card
-                sectionCard(
-                    icon: "building.columns.fill",
-                    title: "BACS Payments",
-                    subtitle: "\(bacsBatches.count) claims · \(FormatUtils.formatGBP(bacsTotal))",
-                    badge: bacsGenerated ? "Generated" : "Ready",
-                    badgeColor: .green,
-                    emptyText: "No BACS claims to process.",
-                    isEmpty: bacsBatches.isEmpty,
-                    footerValue: FormatUtils.formatGBP(bacsTotal),
-                    footerSub: "\(Set(bacsBatches.map { $0.userId }).count) payees",
-                    actionTitle: bacsGenerated ? "BACS File Ready" : "Generate BACS File",
-                    actionEnabled: !bacsGenerated,
-                    onAction: { generateBACS() }
-                )
-
-                // Payroll Additions card
-                sectionCard(
-                    icon: "calendar.badge.plus",
-                    title: "Payroll Additions",
-                    subtitle: "Auto-added to payroll run on approval",
-                    badge: "Auto-routed",
-                    badgeColor: .gray,
-                    emptyText: "No payroll claims.",
-                    isEmpty: payrollBatches.isEmpty,
-                    footerValue: FormatUtils.formatGBP(payrollTotal),
-                    footerSub: "\(payrollBatches.count) additions",
-                    actionTitle: nil,
-                    actionEnabled: false,
-                    onAction: {}
-                )
-
-                // Footer info
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "info.circle").font(.system(size: 12)).foregroundColor(.blue)
-                    (Text("Once BACS file is uploaded and payroll additions are confirmed, all claims will be marked ")
-                        + Text("Processed").bold()
-                        + Text(" and crew notified automatically."))
+        VStack(alignment: .leading, spacing: 0) {
+            // Header banner
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "arrow.down.circle.fill").font(.system(size: 14)).foregroundColor(.goldDark)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Payment Routing").font(.system(size: 13, weight: .bold))
+                    Text("Approved BACS claims batched for export. Payroll claims auto-add to the payroll run on approval.")
                         .font(.system(size: 11)).foregroundColor(.secondary)
                 }
-                .padding(10)
-                .background(Color.blue.opacity(0.06)).cornerRadius(8)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.blue.opacity(0.2), lineWidth: 1))
+                Spacer()
             }
-            .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 20)
+            .padding(12).background(Color.gold.opacity(0.06))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gold.opacity(0.25), lineWidth: 1))
+            .cornerRadius(8).padding(.horizontal, 16).padding(.top, 12)
+
+            // Tappable section cards — mirrors the Approval Queue pattern
+            HStack(spacing: 10) {
+                Button(action: { activeSection = "bacs" }) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "building.columns.fill").font(.system(size: 14)).foregroundColor(.goldDark)
+                            Text("BACS Payments").font(.system(size: 13, weight: .bold)).lineLimit(1)
+                        }
+                        Text("\(bacsBatches.count) claims · \(FormatUtils.formatGBP(bacsTotal))")
+                            .font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(12)
+                    .background(Color.bgSurface).cornerRadius(10)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(activeSection == "bacs" ? Color.goldDark : Color.borderColor, lineWidth: activeSection == "bacs" ? 2 : 1))
+                }.buttonStyle(PlainButtonStyle())
+
+                Button(action: { activeSection = "payroll" }) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "calendar.badge.plus").font(.system(size: 14)).foregroundColor(.goldDark)
+                            Text("Payroll Additions").font(.system(size: 13, weight: .bold)).lineLimit(1).minimumScaleFactor(0.8)
+                        }
+                        Text("\(payrollBatches.count) additions · \(FormatUtils.formatGBP(payrollTotal))")
+                            .font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(12)
+                    .background(Color.bgSurface).cornerRadius(10)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(activeSection == "payroll" ? Color.goldDark : Color.borderColor, lineWidth: activeSection == "payroll" ? 2 : 1))
+                }.buttonStyle(PlainButtonStyle())
+            }
+            .frame(height: 64)
+            .padding(.horizontal, 16).padding(.top, 12)
+
+            // Active section content
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    if activeSection == "bacs" {
+                        // Previous BACS Payments section card — icon header,
+                        // badge, batch body, footer with total + Generate BACS.
+                        sectionCard(
+                            icon: "building.columns.fill",
+                            title: "BACS Payments",
+                            subtitle: "\(bacsBatches.count) claims · \(FormatUtils.formatGBP(bacsTotal))",
+                            badge: bacsGenerated ? "Generated" : "Ready",
+                            badgeColor: .green,
+                            emptyText: "No BACS claims to process.",
+                            batches: bacsBatches,
+                            kind: .bacs,
+                            footerValue: FormatUtils.formatGBP(bacsTotal),
+                            footerSub: "\(Set(bacsBatches.map { $0.userId }).count) payees",
+                            actionTitle: bacsGenerated ? "BACS File Ready" : "Generate BACS File",
+                            actionEnabled: !bacsGenerated && !bacsBatches.isEmpty,
+                            onAction: { generateBACS() }
+                        )
+                    } else {
+                        // Previous Payroll Additions section card.
+                        sectionCard(
+                            icon: "calendar.badge.plus",
+                            title: "Payroll Additions",
+                            subtitle: "Auto-added to payroll run on approval",
+                            badge: "Auto-routed",
+                            badgeColor: .gray,
+                            emptyText: "No payroll claims.",
+                            batches: payrollBatches,
+                            kind: .payroll,
+                            footerValue: FormatUtils.formatGBP(payrollTotal),
+                            footerSub: "\(payrollBatches.count) additions",
+                            actionTitle: nil,
+                            actionEnabled: false,
+                            onAction: {}
+                        )
+                    }
+                }.padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 20)
+            }
         }
         .background(Color.bgBase)
         .onAppear { appState.loadPaymentRouting() }
@@ -2833,29 +4380,55 @@ struct PaymentRoutingView: View {
         }
     }
 
+    // MARK: - Batch row
+
+    private enum RoutingKind { case bacs, payroll }
+
+    private func routingBatchRow(_ b: PaymentRoutingBatch, kind: RoutingKind) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text("#\(b.batchReference.isEmpty ? String(b.id.suffix(6)).uppercased() : b.batchReference)")
+                        .font(.system(size: 13, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
+                    let (fg, bg): (Color, Color) = kind == .bacs
+                        ? (.green, Color.green.opacity(0.12))
+                        : (Color(red: 0.2, green: 0.5, blue: 0.85), Color.blue.opacity(0.1))
+                    Text(kind == .bacs ? "BACS" : "PAYROLL")
+                        .font(.system(size: 8, weight: .bold)).foregroundColor(fg)
+                        .padding(.horizontal, 6).padding(.vertical, 2).background(bg).cornerRadius(3)
+                }
+                Text(b.holderName).font(.system(size: 12, weight: .medium))
+                Text("\(b.claimCount) claim\(b.claimCount == 1 ? "" : "s")")
+                    .font(.system(size: 10)).foregroundColor(.gray)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(FormatUtils.formatGBP(b.totalGross))
+                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                if let pa = b.postedAt, pa > 0 {
+                    Text(FormatUtils.formatTimestamp(pa))
+                        .font(.system(size: 9)).foregroundColor(.gray)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private func generateBACS() {
         guard !bacsBatches.isEmpty else { return }
         bacsGenerated = true
         showBacsAlert = true
     }
 
-    private func statCard(label: String, value: String, sub: String,
-                          valueColor: Color = .primary,
-                          valueFont: Font = .system(size: 18, weight: .bold, design: .monospaced),
-                          bg: Color = .white, border: Color = Color.borderColor) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(.system(size: 8, weight: .bold)).foregroundColor(.secondary).tracking(0.4).lineLimit(1).minimumScaleFactor(0.7)
-            Text(value).font(valueFont).foregroundColor(valueColor).lineLimit(1).minimumScaleFactor(0.6)
-            Text(sub).font(.system(size: 9)).foregroundColor(.gray).lineLimit(2)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(10)
-        .background(bg).cornerRadius(8)
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(border, lineWidth: 1))
-    }
+    // MARK: - Section card (restored from previous design)
+    // Renders the full card: gold-circle icon header + badge, body (batch
+    // list or empty state), footer with total + optional action button.
 
     private func sectionCard(icon: String, title: String, subtitle: String,
                              badge: String, badgeColor: Color,
-                             emptyText: String, isEmpty: Bool,
+                             emptyText: String,
+                             batches: [PaymentRoutingBatch],
+                             kind: RoutingKind,
                              footerValue: String, footerSub: String,
                              actionTitle: String?, actionEnabled: Bool,
                              onAction: @escaping () -> Void) -> some View {
@@ -2875,10 +4448,18 @@ struct PaymentRoutingView: View {
 
             Divider()
 
-            // Body / empty state
-            if isEmpty {
+            // Body — either a list of batch rows or the empty state
+            if batches.isEmpty {
                 Text(emptyText).font(.system(size: 11)).foregroundColor(.gray)
                     .frame(maxWidth: .infinity).padding(.vertical, 28)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(batches.enumerated()), id: \.element.id) { idx, b in
+                        routingBatchRow(b, kind: kind)
+                            .padding(.horizontal, 12).padding(.vertical, 10)
+                        if idx < batches.count - 1 { Divider().padding(.leading, 12) }
+                    }
+                }
             }
 
             Divider()
@@ -2900,7 +4481,7 @@ struct PaymentRoutingView: View {
                 }
             }.padding(12)
         }
-        .background(Color.white).cornerRadius(10)
+        .background(Color.bgSurface).cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 }
@@ -2976,7 +4557,7 @@ struct AuditQueuePage: View {
                         Text(activeFilter).font(.system(size: 12, weight: .semibold)).foregroundColor(.primary).lineLimit(1)
                         Image(systemName: "chevron.down").font(.system(size: 8, weight: .medium)).foregroundColor(.gray)
                     }
-                    .padding(.horizontal, 12).padding(.vertical, 8).background(Color.white).cornerRadius(6)
+                    .padding(.horizontal, 12).padding(.vertical, 8).background(Color.bgSurface).cornerRadius(6)
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
                     .contentShape(Rectangle())
                 }
@@ -3036,6 +4617,15 @@ struct ApprovalQueuePage: View {
         }
     }
 
+    /// How many approval tiers this float needs, for the "Pending X/Y" badge.
+    /// Falls back to the number of approvals + 1 when the tier config hasn't
+    /// loaded yet, with a minimum of 2 so we never show "0/0".
+    fileprivate func totalTiers(for f: FloatRequest) -> Int {
+        // Most projects use 2-tier approval on floats. If your model already
+        // carries a `totalTiers` field per float, prefer that.
+        max(2, f.approvals.count + 1)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header banner
@@ -3064,7 +4654,7 @@ struct ApprovalQueuePage: View {
                         Text("\(pendingFloats.count) pending approval").font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(12)
-                    .background(Color.white).cornerRadius(10)
+                    .background(Color.bgSurface).cornerRadius(10)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(activeSection == "floats" ? Color.goldDark : Color.borderColor, lineWidth: activeSection == "floats" ? 2 : 1))
                 }.buttonStyle(PlainButtonStyle())
 
@@ -3077,7 +4667,7 @@ struct ApprovalQueuePage: View {
                         Text("\(pendingClaims.count) items").font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(12)
-                    .background(Color.white).cornerRadius(10)
+                    .background(Color.bgSurface).cornerRadius(10)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(activeSection == "batches" ? Color.goldDark : Color.borderColor, lineWidth: activeSection == "batches" ? 2 : 1))
                 }.buttonStyle(PlainButtonStyle())
             }
@@ -3102,7 +4692,12 @@ struct ApprovalQueuePage: View {
                                 Spacer(minLength: 0)
                             }.frame(maxWidth: .infinity, minHeight: 480)
                         } else {
-                            ForEach(pendingFloats) { f in FloatCard(float: f, batches: []) }
+                            ForEach(pendingFloats) { f in
+                                NavigationLink(destination: FloatApprovalDetailPage(float: f).environmentObject(appState)) {
+                                    ApprovalFloatRow(float: f, totalTiers: totalTiers(for: f))
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
                         }
                     } else {
                         HStack(spacing: 8) {
@@ -3112,7 +4707,7 @@ struct ApprovalQueuePage: View {
                                     Text(batchFilter).font(.system(size: 12, weight: .semibold)).foregroundColor(.primary).lineLimit(1)
                                     Image(systemName: "chevron.down").font(.system(size: 8, weight: .medium)).foregroundColor(.gray)
                                 }
-                                .padding(.horizontal, 12).padding(.vertical, 8).background(Color.white).cornerRadius(6)
+                                .padding(.horizontal, 12).padding(.vertical, 8).background(Color.bgSurface).cornerRadius(6)
                                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
                                 .contentShape(Rectangle())
                             }
@@ -3137,7 +4732,11 @@ struct ApprovalQueuePage: View {
                                 Spacer(minLength: 0)
                             }.frame(maxWidth: .infinity, minHeight: 480)
                         } else {
-                            ForEach(filteredClaims) { claim in ClaimRow(claim: claim) }
+                            ForEach(filteredClaims) { claim in
+                                NavigationLink(destination: ClaimApprovalDetailPage(claim: claim).environmentObject(appState)) {
+                                    ApprovalClaimRow(claim: claim)
+                                }.buttonStyle(PlainButtonStyle())
+                            }
                         }
                     }
                 }.padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 20)
@@ -3148,6 +4747,519 @@ struct ApprovalQueuePage: View {
         .onAppear {
             appState.loadApprovalQueueFloats()
             appState.loadApprovalQueueClaims()
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MARK: - Approval Queue — compact float row
+// Matches the web screenshot: avatar + name + role + ref/date on the left;
+// pending badge + amount on the right. No ISSUED/SPENT/BALANCE (the float
+// hasn't been issued yet when it's in the approval queue).
+// ═══════════════════════════════════════════════════════════════════
+
+struct ApprovalFloatRow: View {
+    let float: FloatRequest
+    let totalTiers: Int
+
+    private var user: AppUser? { UsersData.byId[float.userId] }
+
+    private var roleLine: String {
+        let role = user?.displayDesignation ?? ""
+        let dept = float.department.isEmpty ? (user?.displayDepartment ?? "") : float.department
+        switch (role.isEmpty, dept.isEmpty) {
+        case (false, false): return "\(role) · \(dept)"
+        case (false, true):  return role
+        case (true, false):  return dept
+        default:             return ""
+        }
+    }
+
+    private var submittedLine: String {
+        let ref = "#\(float.reqNumber)"
+        let stamp = FormatUtils.formatDateTime(float.createdAt)
+        return "\(ref) · \(stamp)"
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            // Avatar initials
+            ZStack {
+                Circle().fill(Color.gold.opacity(0.18)).frame(width: 36, height: 36)
+                Text(user?.initials ?? "—")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.goldDark)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(user?.fullName ?? "Unknown")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                if !roleLine.isEmpty {
+                    Text(roleLine)
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+                Text(submittedLine)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(.gray)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+
+            // Right: Pending badge + Amount
+            VStack(alignment: .trailing, spacing: 4) {
+                Text("Pending \(float.approvals.count)/\(totalTiers)")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.goldDark)
+                    .padding(.horizontal, 8).padding(.vertical, 3)
+                    .background(Color.gold.opacity(0.15))
+                    .cornerRadius(4)
+                Text(FormatUtils.formatGBP(float.reqAmount))
+                    .font(.system(size: 15, weight: .bold, design: .monospaced))
+                    .foregroundColor(.goldDark)
+            }
+        }
+        .padding(12)
+        .background(Color.bgSurface).cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MARK: - Approval Queue — compact claim batch row
+// Mirrors the web design: avatar + name + role + ref/date on the left;
+// "Awaiting Approval" badge + amount + "N receipts" on the right.
+// ═══════════════════════════════════════════════════════════════════
+
+struct ApprovalClaimRow: View {
+    let claim: ClaimBatch
+
+    private var user: AppUser? { UsersData.byId[claim.userId] }
+
+    private var roleLine: String {
+        let role = user?.displayDesignation ?? ""
+        let dept = claim.department.isEmpty ? (user?.displayDepartment ?? "") : claim.department
+        switch (role.isEmpty, dept.isEmpty) {
+        case (false, false): return "\(role) · \(dept)"
+        case (false, true):  return role
+        case (true, false):  return dept
+        default:             return ""
+        }
+    }
+
+    private var submittedLine: String {
+        let ref = claim.batchReference.isEmpty ? "—" : "#\(claim.batchReference)"
+        let stamp = FormatUtils.formatDateTime(claim.createdAt)
+        return "\(ref) · \(stamp)"
+    }
+
+    private var statusBadge: (label: String, fg: Color, bg: Color) {
+        switch claim.status.uppercased() {
+        case "CODING", "CODED":           return ("Awaiting Coding",    .blue,     Color.blue.opacity(0.1))
+        case "IN_AUDIT":                  return ("Awaiting Audit",     .purple,   Color.purple.opacity(0.1))
+        case "AWAITING_APPROVAL":         return ("Awaiting Approval",  .goldDark, Color.gold.opacity(0.15))
+        case "ACCT_OVERRIDE":             return ("Override",           .green,    Color.green.opacity(0.1))
+        case "READY_TO_POST":             return ("Ready to Post",      .blue,     Color.blue.opacity(0.1))
+        case "POSTED":                    return ("Posted",             .green,    Color.green.opacity(0.1))
+        case "REJECTED":                  return ("Rejected",           .red,      Color.red.opacity(0.1))
+        case "ESCALATED":                 return ("Escalated",          .orange,   Color.orange.opacity(0.1))
+        default:                          return (claim.statusDisplay,  .goldDark, Color.gold.opacity(0.15))
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            // Avatar initials — pink/rose tint to match the screenshot
+            ZStack {
+                Circle()
+                    .fill(Color(red: 0.98, green: 0.83, blue: 0.80))
+                    .frame(width: 36, height: 36)
+                Text(user?.initials ?? "—")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(Color(red: 0.78, green: 0.30, blue: 0.33))
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(user?.fullName ?? "Unknown")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                if !roleLine.isEmpty {
+                    Text(roleLine)
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+                Text(submittedLine)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(.gray)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+
+            // Right: status badge + amount + receipts count
+            VStack(alignment: .trailing, spacing: 4) {
+                let s = statusBadge
+                Text(s.label)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(s.fg)
+                    .padding(.horizontal, 8).padding(.vertical, 3)
+                    .background(s.bg)
+                    .cornerRadius(4)
+                Text(FormatUtils.formatGBP(claim.totalGross))
+                    .font(.system(size: 15, weight: .bold, design: .monospaced))
+                    .foregroundColor(.goldDark)
+                if claim.claimCount > 0 {
+                    Text("\(claim.claimCount) receipt\(claim.claimCount == 1 ? "" : "s")")
+                        .font(.system(size: 10))
+                        .foregroundColor(.gray)
+                }
+            }
+        }
+        .padding(12)
+        .background(Color.bgSurface).cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MARK: - Claim Approval Detail Page
+// Full-page detail for a receipt batch in the approval queue — mirrors
+// the FloatApprovalDetailPage layout: header (name + role + date +
+// status), 2-column grid of details, notes panel, approval progress,
+// and a role-aware action footer (Override for accountants, Approve/
+// Reject for approvers).
+// ═══════════════════════════════════════════════════════════════════
+
+struct ClaimApprovalDetailPage: View {
+    let claim: ClaimBatch
+    @EnvironmentObject var appState: POViewModel
+    @Environment(\.presentationMode) var presentationMode
+
+    @State private var actioning = false
+    @State private var showRejectSheet = false
+    @State private var rejectReason = ""
+
+    private var isAccountant: Bool { appState.currentUser?.isAccountant == true }
+    private var isApprover: Bool { appState.cashMeta?.is_approver == true }
+    private var canAct: Bool {
+        claim.status.uppercased() == "AWAITING_APPROVAL" && (isApprover || isAccountant)
+    }
+    private var totalApprovalTiers: Int { 2 }
+    private var approvalsCount: Int { 0 } // ClaimBatch doesn't carry an approvals[] list
+
+    private var user: AppUser? { UsersData.byId[claim.userId] }
+
+    private var roleLine: String {
+        let role = user?.displayDesignation ?? ""
+        let dept = claim.department.isEmpty ? (user?.displayDepartment ?? "") : claim.department
+        switch (role.isEmpty, dept.isEmpty) {
+        case (false, false): return "\(role) · \(dept)"
+        case (false, true):  return role
+        case (true, false):  return dept
+        default:             return ""
+        }
+    }
+
+    private var typeLabel: String {
+        if claim.isPettyCash { return "Petty Cash" }
+        if claim.isOutOfPocket { return "Out of Pocket" }
+        return claim.expenseType.isEmpty ? "—" : claim.expenseType.uppercased()
+    }
+
+    private var categoryLabel: String {
+        if claim.category.isEmpty { return "—" }
+        if let m = claimCategories.first(where: { $0.0 == claim.category }) { return m.1 }
+        return claim.category.capitalized
+    }
+
+    private var settlementLabel: String {
+        let s = claim.settlementType.lowercased()
+        switch s {
+        case "":                       return "—"
+        case "reduce", "reduce_float": return "Reduce Float"
+        case "reimb", "reimburse":     return "Reimburse"
+        case "reimburse_bacs", "bacs": return "Reimburse BACS"
+        case "payroll":                return "Payroll"
+        case "float":                  return "Float"
+        default:                       return s.replacingOccurrences(of: "_", with: " ").capitalized
+        }
+    }
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            Color.bgSurface.edgesIgnoringSafeArea(.all)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    pendingHeader
+                        .padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 14)
+                    Divider()
+
+                    detailsGrid
+                        .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 14)
+                    Divider()
+
+                    notesPanel
+                        .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 14)
+                    Divider()
+
+                    approvalProgressPanel
+                        .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 14)
+
+                    if let reason = claim.rejectionReason, !reason.isEmpty {
+                        Divider()
+                        rejectionBanner(reason: reason)
+                            .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 14)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, canAct ? 100 : 24)
+            }
+            if canAct { actionFooter }
+        }
+        .navigationBarTitle(Text("\(claim.batchReference) — Receipt Batch"), displayMode: .inline)
+        .sheet(isPresented: $showRejectSheet) { rejectSheet }
+    }
+
+    // MARK: - Header
+    private var pendingHeader: some View {
+        let name = user?.fullName ?? "—"
+        let (badgeLabel, badgeFg, badgeBg) = statusBadge
+        return HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(name).font(.system(size: 16, weight: .bold))
+                if !roleLine.isEmpty {
+                    Text(roleLine).font(.system(size: 12)).foregroundColor(.secondary)
+                }
+                Text(FormatUtils.formatDateTime(claim.createdAt))
+                    .font(.system(size: 11, design: .monospaced)).foregroundColor(.gray)
+            }
+            Spacer(minLength: 8)
+            Text(badgeLabel.uppercased())
+                .font(.system(size: 10, weight: .bold)).foregroundColor(badgeFg)
+                .padding(.horizontal, 10).padding(.vertical, 5)
+                .background(badgeBg).cornerRadius(6)
+        }
+    }
+
+    private var statusBadge: (String, Color, Color) {
+        switch claim.status.uppercased() {
+        case "AWAITING_APPROVAL": return ("Awaiting Approval", .goldDark, Color.gold.opacity(0.15))
+        case "ACCT_OVERRIDE":     return ("Override",          .green,    Color.green.opacity(0.1))
+        case "APPROVED":          return ("Approved",          .green,    Color.green.opacity(0.1))
+        case "REJECTED":          return ("Rejected",          .red,      Color.red.opacity(0.1))
+        case "POSTED":            return ("Posted",            .green,    Color.green.opacity(0.1))
+        case "ESCALATED":         return ("Escalated",         .orange,   Color.orange.opacity(0.1))
+        default:                  return (claim.statusDisplay, .goldDark, Color.gold.opacity(0.15))
+        }
+    }
+
+    // MARK: - Grid
+    private var detailsGrid: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 16) {
+                gridCell("TOTAL GROSS", FormatUtils.formatGBP(claim.totalGross), valueColor: .goldDark, mono: true)
+                gridCell("TOTAL NET", FormatUtils.formatGBP(claim.totalNet), mono: true)
+            }
+            HStack(alignment: .top, spacing: 16) {
+                gridCell("VAT", FormatUtils.formatGBP(claim.totalVat), mono: true)
+                gridCell("SETTLEMENT", settlementLabel)
+            }
+            HStack(alignment: .top, spacing: 16) {
+                gridCell("TYPE", typeLabel)
+                gridCell("CATEGORY", categoryLabel)
+            }
+            HStack(alignment: .top, spacing: 16) {
+                gridCell("COST CODE", claim.costCode.isEmpty ? "—" : claim.costCode.uppercased())
+                gridCell("RECEIPTS", "\(claim.claimCount)")
+            }
+            HStack(alignment: .top, spacing: 16) {
+                gridCell("BATCH REF", claim.batchReference.isEmpty ? "—" : "#\(claim.batchReference)", mono: true)
+                gridCell("DEPARTMENT", claim.department.isEmpty ? "—" : claim.department)
+            }
+        }
+    }
+
+    private func gridCell(_ label: String, _ value: String,
+                          valueColor: Color = .primary, mono: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
+            Text(value)
+                .font(mono
+                      ? .system(size: 15, weight: .bold, design: .monospaced)
+                      : .system(size: 13, weight: .semibold))
+                .foregroundColor(valueColor)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Notes panel
+    private var notesPanel: some View {
+        let text: String = {
+            if !claim.codingDescription.isEmpty { return claim.codingDescription }
+            if !claim.notes.isEmpty { return claim.notes }
+            return "—"
+        }()
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("NOTES / CODING DESCRIPTION")
+                .font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
+            Text(text).font(.system(size: 13)).foregroundColor(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(Color.bgRaised)
+                .cornerRadius(8)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Approval progress
+    private var approvalProgressPanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("APPROVAL PROGRESS (\(approvalsCount)/\(totalApprovalTiers))")
+                .font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
+            switch claim.status.uppercased() {
+            case "AWAITING_APPROVAL":
+                Text("Awaiting approval").font(.system(size: 13)).foregroundColor(.secondary)
+            case "APPROVED", "ACCT_OVERRIDE":
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill").foregroundColor(.green).font(.system(size: 12))
+                    Text("Approved").font(.system(size: 13, weight: .semibold)).foregroundColor(.green)
+                }
+            case "REJECTED":
+                HStack(spacing: 8) {
+                    Image(systemName: "xmark.circle.fill").foregroundColor(.red).font(.system(size: 12))
+                    Text("Rejected").font(.system(size: 13, weight: .semibold)).foregroundColor(.red)
+                }
+            default:
+                Text(claim.statusDisplay).font(.system(size: 13)).foregroundColor(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Rejection banner
+    private func rejectionBanner(reason: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("REJECTION REASON")
+                .font(.system(size: 9, weight: .bold)).foregroundColor(.red).tracking(0.6)
+            Text(reason).font(.system(size: 12)).foregroundColor(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 0)
+    }
+
+    // MARK: - Action footer (role-aware)
+    @ViewBuilder
+    private var actionFooter: some View {
+        Group {
+            if isAccountant {
+                HStack {
+                    Spacer()
+                    Button(action: overrideBatch) {
+                        HStack(spacing: 6) {
+                            if actioning {
+                                ActivityIndicator(isAnimating: true).frame(width: 14, height: 14)
+                            }
+                            Text(actioning ? "Overriding…" : "Override")
+                                .font(.system(size: 14, weight: .bold))
+                        }
+                        .foregroundColor(.black)
+                        .padding(.horizontal, 28).padding(.vertical, 12)
+                        .background(Color.gold).cornerRadius(8)
+                    }.buttonStyle(BorderlessButtonStyle()).disabled(actioning)
+                }
+            } else {
+                HStack(spacing: 10) {
+                    Button(action: { showRejectSheet = true }) {
+                        Text("Reject").font(.system(size: 14, weight: .bold)).foregroundColor(.white)
+                            .frame(maxWidth: .infinity).padding(.vertical, 14)
+                            .background(Color.red).cornerRadius(10)
+                    }.buttonStyle(BorderlessButtonStyle()).disabled(actioning)
+                    Button(action: approveBatch) {
+                        HStack(spacing: 6) {
+                            if actioning { ActivityIndicator(isAnimating: true).frame(width: 14, height: 14) }
+                            Text(actioning ? "Approving…" : "Approve").font(.system(size: 14, weight: .bold))
+                        }
+                        .foregroundColor(.white).frame(maxWidth: .infinity).padding(.vertical, 14)
+                        .background(Color.green).cornerRadius(10)
+                    }.buttonStyle(BorderlessButtonStyle()).disabled(actioning)
+                }
+            }
+        }
+        .padding(.horizontal, 16).padding(.vertical, 12)
+        .background(Color.bgSurface)
+        .overlay(Rectangle().fill(Color.borderColor).frame(height: 1), alignment: .top)
+    }
+
+    private var rejectSheet: some View {
+        NavigationView {
+            ZStack {
+                Color.bgBase.edgesIgnoringSafeArea(.all)
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Reject batch from \(user?.fullName ?? "—")")
+                        .font(.system(size: 15, weight: .semibold))
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Reason").font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
+                        TextField("Enter reason…", text: $rejectReason)
+                            .font(.system(size: 14)).padding(10)
+                            .background(Color.bgSurface).cornerRadius(8)
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                    }
+                    Spacer()
+                }.padding()
+            }
+            .navigationBarTitle(Text("Reject Batch"), displayMode: .inline)
+            .navigationBarItems(
+                leading: Button("Cancel") { showRejectSheet = false; rejectReason = "" }.foregroundColor(.goldDark),
+                trailing: Button("Reject") {
+                    let r = rejectReason.trimmingCharacters(in: .whitespaces)
+                    guard !r.isEmpty else { return }
+                    showRejectSheet = false
+                    rejectBatch(reason: r)
+                }.foregroundColor(.red).font(.system(size: 16, weight: .bold))
+            )
+        }
+    }
+
+    // MARK: - Actions
+    //
+    // Claim-batch approval endpoints aren't wired in the current API layer;
+    // these handlers are placeholders that flip the loader, pop the page,
+    // and refresh the approval queue so the list updates when the backend
+    // routes are added later.
+    private func approveBatch() {
+        actioning = true
+        print("⚠️ approveBatch: no endpoint wired yet for batch \(claim.id)")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            actioning = false
+            appState.loadApprovalQueueClaims()
+            presentationMode.wrappedValue.dismiss()
+        }
+    }
+
+    private func rejectBatch(reason: String) {
+        actioning = true
+        print("⚠️ rejectBatch(\(reason)): no endpoint wired yet for batch \(claim.id)")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            actioning = false
+            appState.loadApprovalQueueClaims()
+            presentationMode.wrappedValue.dismiss()
+        }
+    }
+
+    private func overrideBatch() {
+        actioning = true
+        print("⚠️ overrideBatch: no endpoint wired yet for batch \(claim.id)")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            actioning = false
+            appState.loadApprovalQueueClaims()
+            presentationMode.wrappedValue.dismiss()
         }
     }
 }
@@ -3173,21 +5285,31 @@ let costCodeOptions = [
 
 struct FloatRequestFormView: View {
     @EnvironmentObject var appState: POViewModel
+    @Environment(\.presentationMode) var presentationMode
 
     @State private var reqAmount = ""
-    @State private var duration = "7 days"
-    @State private var costCode = "art_4100"
     @State private var startDate: Date?
-    @State private var showDatePicker = false
+    @State private var howLongMode: String = ""       // "" | "run_of_show" | "days"
+    @State private var durationDays: String = ""
     @State private var collectionMethod = "production_office"
+    @State private var collectDate: Date?
+    @State private var collectTime: Date?
     @State private var purpose = ""
-    @State private var largePurchaseNote = ""
     @State private var submitting = false
     @State private var submitted = false
     @State private var submitError: String?
-    @State private var showDurationSheet = false
-    @State private var showCostCodeSheet = false
+    @State private var showHowLongSheet = false
     @State private var showCollectionSheet = false
+
+    private let howLongOptions: [(String, String)] = [
+        ("run_of_show", "Run of Show"),
+        ("days", "Days")
+    ]
+
+    private var howLongDisplay: String {
+        if howLongMode.isEmpty { return "— Select —" }
+        return howLongOptions.first { $0.0 == howLongMode }?.1 ?? "— Select —"
+    }
 
     var body: some View {
         ScrollView {
@@ -3209,27 +5331,6 @@ struct FloatRequestFormView: View {
                         .font(.system(size: 12)).foregroundColor(.secondary)
                 }
 
-                // Previous Floats
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Previous Floats").font(.system(size: 14, weight: .bold))
-                    if appState.myFloats.isEmpty {
-                        Text("No previous float requests").font(.system(size: 12)).foregroundColor(.gray)
-                            .frame(maxWidth: .infinity).padding(.vertical, 20)
-                    } else {
-                        ForEach(appState.myFloats) { f in
-                            HStack {
-                                Text(f.reqNumber).font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundColor(.goldDark)
-                                Spacer()
-                                Text(FormatUtils.formatGBP(f.reqAmount)).font(.system(size: 12, design: .monospaced))
-                                Text(f.statusDisplay).font(.system(size: 9, weight: .bold)).foregroundColor(.green)
-                                    .padding(.horizontal, 6).padding(.vertical, 2).background(Color.green.opacity(0.1)).cornerRadius(3)
-                            }.padding(.vertical, 4)
-                        }
-                    }
-                }
-                .padding(12).background(Color.white).cornerRadius(10)
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
-
                 // Float Details form
                 VStack(alignment: .leading, spacing: 14) {
                     HStack {
@@ -3239,83 +5340,77 @@ struct FloatRequestFormView: View {
                     }
 
                     // User + Department (read-only)
-                    HStack(spacing: 10) {
+                    HStack(alignment: .top, spacing: 10) {
                         formReadOnly("USER *", appState.currentUser?.fullName ?? "—")
+                            .frame(maxWidth: .infinity)
                         formReadOnly("DEPARTMENT *", appState.currentUser?.displayDepartment ?? "—")
+                            .frame(maxWidth: .infinity)
                     }
                     Text("Pre-filled from your Zillit profile").font(.system(size: 10)).foregroundColor(.gray)
 
-                    // Amount + Duration
-                    HStack(spacing: 10) {
+                    // Requested Amount + Start Date
+                    HStack(alignment: .top, spacing: 10) {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("REQUESTED AMOUNT *").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
+                            labelRequired("REQUESTED AMOUNT")
                             TextField("£0.00", text: $reqAmount)
                                 .font(.system(size: 14, design: .monospaced)).keyboardType(.decimalPad)
-                                .padding(10).background(Color.bgRaised).cornerRadius(6)
+                                .padding(.horizontal, 10)
+                                .frame(height: 40)
+                                .background(Color.bgRaised).cornerRadius(6)
                                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
-                            Text("Max single float: £500").font(.system(size: 9)).foregroundColor(.gray)
+                            Text("Max single float: £500 · your dept limit: £400")
+                                .font(.system(size: 9)).foregroundColor(.gray)
+                                .lineLimit(2).fixedSize(horizontal: false, vertical: true)
                         }
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("DURATION *").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
-                            Button(action: { showDurationSheet = true }) {
-                                HStack {
-                                    Text(duration).font(.system(size: 14))
-                                    Spacer()
-                                    Image(systemName: "chevron.down").font(.system(size: 10)).foregroundColor(.gray)
-                                }.padding(10).background(Color.bgRaised).cornerRadius(6)
-                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
-                            }.buttonStyle(BorderlessButtonStyle())
-                            .compatActionSheet(title: "Duration", isPresented: $showDurationSheet, buttons:
-                                durationOptions.map { d in CompatActionSheetButton.default(d == duration ? "\(d) ✓" : d) { duration = d } } + [.cancel()]
-                            )
-                            Text("Submit receipts before end date").font(.system(size: 9)).foregroundColor(.gray)
-                        }
-                    }
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                    // Cost Code + Start Date
-                    HStack(spacing: 10) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("COST CODE").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
-                            Button(action: { showCostCodeSheet = true }) {
-                                HStack {
-                                    Text(costCodeOptions.first { $0.0 == costCode }?.1 ?? "Select")
-                                        .font(.system(size: 12)).foregroundColor(.primary).lineLimit(1)
-                                    Spacer()
-                                    Image(systemName: "chevron.down").font(.system(size: 10)).foregroundColor(.gray)
-                                }.padding(10).background(Color.bgRaised).cornerRadius(6)
-                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
-                            }.buttonStyle(BorderlessButtonStyle())
-                            .compatActionSheet(title: "Cost Code", isPresented: $showCostCodeSheet, buttons:
-                                costCodeOptions.map { c in CompatActionSheetButton.default(c.0 == costCode ? "\(c.1) ✓" : c.1) { costCode = c.0 } } + [.cancel()]
-                            )
-                        }
                         VStack(alignment: .leading, spacing: 4) {
                             Text("START DATE").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
-                            if startDate != nil {
-                                HStack {
-                                    DatePicker("", selection: Binding(
-                                        get: { startDate ?? Date() },
-                                        set: { startDate = $0 }
-                                    ), displayedComponents: .date)
-                                    .labelsHidden()
-                                    Button(action: { startDate = nil }) {
-                                        Image(systemName: "xmark.circle.fill").font(.system(size: 14)).foregroundColor(.gray)
-                                    }.buttonStyle(BorderlessButtonStyle())
-                                }
-                            } else {
-                                Button(action: { startDate = Date() }) {
-                                    HStack {
-                                        Text("dd/mm/yyyy").font(.system(size: 14)).foregroundColor(.gray)
-                                        Spacer()
-                                        Image(systemName: "calendar").font(.system(size: 12)).foregroundColor(.goldDark)
-                                    }.padding(10).background(Color.bgRaised).cornerRadius(6)
-                                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
-                                }.buttonStyle(BorderlessButtonStyle())
-                            }
+                            datePickerCell(date: $startDate)
+                                .frame(maxWidth: .infinity, minHeight: 40)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
-                    // Collection Method
+                    // How Long (Run of Show / Days)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("HOW LONG").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
+                        HStack(spacing: 10) {
+                            Button(action: { showHowLongSheet = true }) {
+                                HStack {
+                                    Text(howLongDisplay)
+                                        .font(.system(size: 14))
+                                        .foregroundColor(howLongMode.isEmpty ? .secondary : .primary)
+                                    Spacer()
+                                    Image(systemName: "chevron.down").font(.system(size: 10)).foregroundColor(.gray)
+                                }
+                                .padding(10).background(Color.bgRaised).cornerRadius(6)
+                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+                            .frame(maxWidth: .infinity)
+                            .compatActionSheet(title: "How Long", isPresented: $showHowLongSheet, buttons:
+                                howLongOptions.map { opt in
+                                    CompatActionSheetButton.default(opt.0 == howLongMode ? "\(opt.1) ✓" : opt.1) {
+                                        howLongMode = opt.0
+                                    }
+                                } + [.cancel()]
+                            )
+
+                            if howLongMode == "days" {
+                                TextField("e.g. 7", text: $durationDays)
+                                    .font(.system(size: 14, design: .monospaced)).keyboardType(.numberPad)
+                                    .multilineTextAlignment(.center)
+                                    .padding(10).background(Color.bgRaised).cornerRadius(6)
+                                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
+                                    .frame(width: 90)
+                            }
+                        }
+                        Text("Run of Show = open until production wraps")
+                            .font(.system(size: 9)).foregroundColor(.gray)
+                    }
+
+                    // Preferred Collection Method
                     VStack(alignment: .leading, spacing: 4) {
                         Text("PREFERRED COLLECTION METHOD").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
                         Button(action: { showCollectionSheet = true }) {
@@ -3324,32 +5419,47 @@ struct FloatRequestFormView: View {
                                     .font(.system(size: 14)).foregroundColor(.primary)
                                 Spacer()
                                 Image(systemName: "chevron.down").font(.system(size: 10)).foregroundColor(.gray)
-                            }.padding(10).background(Color.bgRaised).cornerRadius(6)
+                            }
+                            .padding(10).background(Color.bgRaised).cornerRadius(6)
                             .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
-                        }.buttonStyle(BorderlessButtonStyle())
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
+                        .frame(maxWidth: .infinity)
                         .compatActionSheet(title: "Collection Method", isPresented: $showCollectionSheet, buttons:
                             collectionOptions.map { c in CompatActionSheetButton.default(c.0 == collectionMethod ? "\(c.1) ✓" : c.1) { collectionMethod = c.0 } } + [.cancel()]
                         )
                     }
 
-                    // Purpose
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("PURPOSE/REASON").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
-                        TextField("Please be specific. Vague descriptions may delay approval.", text: $purpose)
-                            .font(.system(size: 13)).padding(10).background(Color.bgRaised).cornerRadius(6)
-                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
+                    // Collect Date + Collect Time
+                    HStack(alignment: .top, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("COLLECT DATE").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
+                            datePickerCell(date: $collectDate)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .frame(maxWidth: .infinity)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("COLLECT TIME").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
+                            timePickerCell(time: $collectTime)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .frame(maxWidth: .infinity)
                     }
 
-                    // Large purchases
+                    // Purpose / Reason
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("ANY LARGE INDIVIDUAL PURCHASES EXPECTED?").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
-                        TextField("e.g. specialist paint £80, period fabric £60 — list anything over £50", text: $largePurchaseNote)
-                            .font(.system(size: 13)).padding(10).background(Color.bgRaised).cornerRadius(6)
+                        labelRequired("PURPOSE/REASON")
+                        MultilineTextView(text: $purpose, placeholder: "Please be specific. Vague descriptions may delay approval.")
+                            .frame(maxWidth: .infinity, minHeight: 80)
+                            .background(Color.bgRaised)
+                            .cornerRadius(6)
                             .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
-                        Text("Receipts over £200 require senior accountant sign-off.").font(.system(size: 9)).foregroundColor(.gray)
+                        Text("Please be specific. Vague descriptions may delay approval.")
+                            .font(.system(size: 9)).foregroundColor(.gray)
                     }
                 }
-                .padding(14).background(Color.white).cornerRadius(10)
+                .padding(14).background(Color.bgSurface).cornerRadius(10)
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
 
                 // Info
@@ -3368,24 +5478,27 @@ struct FloatRequestFormView: View {
                         .background(Color.red.opacity(0.06)).cornerRadius(8)
                 }
 
-                // Buttons
-                HStack(spacing: 12) {
-                    Spacer()
-                    Button(action: submitFloat) {
-                        HStack(spacing: 6) {
-                            if submitting { ActivityIndicator(isAnimating: true).frame(width: 16, height: 16) }
-                            Text(submitted ? "Submitted" : submitting ? "Submitting..." : "Submit Float Request")
-                        }
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(submitted ? .white : .black)
-                        .padding(.horizontal, 24).padding(.vertical, 12)
-                        .background(submitted ? Color.green : Color.gold).cornerRadius(10)
+                // Submit button (full-width)
+                Button(action: submitFloat) {
+                    HStack(spacing: 6) {
+                        if submitting { ActivityIndicator(isAnimating: true).frame(width: 16, height: 16) }
+                        Text(submitted ? "Submitted" : submitting ? "Submitting..." : "Submit Float Request")
                     }
-                    .buttonStyle(BorderlessButtonStyle())
-                    .disabled(submitting || submitted)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(submitted ? Color.green : Color.orange).cornerRadius(10)
                 }
+                .buttonStyle(BorderlessButtonStyle())
+                .disabled(submitting || submitted)
 
             }.padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 20)
+        }
+        .onAppear {
+            // Fetch the float request form template so dynamic fields reflect the
+            // latest server configuration (GET /form-templates?module=float_requests).
+            appState.loadFloatFormTemplate()
         }
     }
 
@@ -3399,6 +5512,82 @@ struct FloatRequestFormView: View {
         }
     }
 
+    /// Label with a small red asterisk to indicate a required field.
+    @ViewBuilder
+    private func labelRequired(_ text: String) -> some View {
+        HStack(spacing: 2) {
+            Text(text).font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
+            Text("*").font(.system(size: 9, weight: .bold)).foregroundColor(.red)
+        }
+    }
+
+    /// Inline date picker cell — placeholder "dd/mm/yyyy" when unset, native picker when set.
+    /// Uses a fixed 40pt height so it vertically aligns with adjacent TextField cells.
+    @ViewBuilder
+    private func datePickerCell(date: Binding<Date?>) -> some View {
+        if date.wrappedValue != nil {
+            HStack(spacing: 6) {
+                DatePicker("", selection: Binding(
+                    get: { date.wrappedValue ?? Date() },
+                    set: { date.wrappedValue = $0 }
+                ), displayedComponents: .date).labelsHidden()
+                Spacer(minLength: 0)
+                Button(action: { date.wrappedValue = nil }) {
+                    Image(systemName: "xmark.circle.fill").font(.system(size: 14)).foregroundColor(.gray)
+                }.buttonStyle(BorderlessButtonStyle())
+            }
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
+            .background(Color.bgRaised).cornerRadius(6)
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
+        } else {
+            Button(action: { date.wrappedValue = Date() }) {
+                HStack {
+                    Text("dd/mm/yyyy").font(.system(size: 14)).foregroundColor(.gray)
+                    Spacer()
+                    Image(systemName: "calendar").font(.system(size: 12)).foregroundColor(.goldDark)
+                }
+                .padding(.horizontal, 10)
+                .frame(maxWidth: .infinity, minHeight: 40)
+                .background(Color.bgRaised).cornerRadius(6)
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
+            }.buttonStyle(BorderlessButtonStyle())
+        }
+    }
+
+    /// Inline time picker cell — placeholder "--:-- --" when unset.
+    @ViewBuilder
+    private func timePickerCell(time: Binding<Date?>) -> some View {
+        if time.wrappedValue != nil {
+            HStack(spacing: 6) {
+                DatePicker("", selection: Binding(
+                    get: { time.wrappedValue ?? Date() },
+                    set: { time.wrappedValue = $0 }
+                ), displayedComponents: .hourAndMinute).labelsHidden()
+                Spacer(minLength: 0)
+                Button(action: { time.wrappedValue = nil }) {
+                    Image(systemName: "xmark.circle.fill").font(.system(size: 14)).foregroundColor(.gray)
+                }.buttonStyle(BorderlessButtonStyle())
+            }
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
+            .background(Color.bgRaised).cornerRadius(6)
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
+        } else {
+            Button(action: { time.wrappedValue = Date() }) {
+                HStack {
+                    Text("--:-- --").font(.system(size: 14)).foregroundColor(.gray)
+                    Spacer()
+                    Image(systemName: "clock").font(.system(size: 12)).foregroundColor(.goldDark)
+                }
+                .padding(.horizontal, 10)
+                .frame(maxWidth: .infinity, minHeight: 40)
+                .background(Color.bgRaised).cornerRadius(6)
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
+            }.buttonStyle(BorderlessButtonStyle())
+        }
+    }
+
     private func formatDate(_ d: Date) -> String {
         let df = DateFormatter(); df.dateFormat = "dd/MM/yyyy"; return df.string(from: d)
     }
@@ -3406,25 +5595,43 @@ struct FloatRequestFormView: View {
     private func submitFloat() {
         guard let user = appState.currentUser else { return }
         guard let amount = Double(reqAmount), amount > 0 else { submitError = "Enter a valid amount"; return }
+        guard !purpose.trimmingCharacters(in: .whitespaces).isEmpty else { submitError = "Purpose is required"; return }
         submitting = true; submitError = nil
 
-        let durationVal = duration.replacingOccurrences(of: " days", with: "")
         var body: [String: Any] = [
             "department_id": user.departmentId,
             "req_amount": amount,
-            "duration": durationVal,
-            "cost_code": costCode,
             "collection_method": collectionMethod,
-            "purpose": purpose,
-            "large_purchase_note": largePurchaseNote,
+            "purpose": purpose
         ]
+
+        // How long: either "run_of_show" (open-ended) or explicit day count
+        if howLongMode == "run_of_show" {
+            body["duration"] = "run_of_show"
+        } else if howLongMode == "days", let days = Int(durationDays), days > 0 {
+            body["duration"] = String(days)
+        }
+
         if let d = startDate {
             body["start_date"] = Int64(d.timeIntervalSince1970 * 1000)
+        }
+        if let d = collectDate {
+            body["collect_date"] = Int64(d.timeIntervalSince1970 * 1000)
+        }
+        if let t = collectTime {
+            let df = DateFormatter(); df.dateFormat = "HH:mm"
+            body["collect_time"] = df.string(from: t)
         }
 
         appState.submitFloatRequest(body) { success, error in
             submitting = false
-            if success { submitted = true }
+            if success {
+                submitted = true
+                // Give the user a brief "Submitted" confirmation then pop back
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                    presentationMode.wrappedValue.dismiss()
+                }
+            }
             else { submitError = error ?? "Failed to submit" }
         }
     }
@@ -3532,7 +5739,7 @@ struct BatchStatusSheet: View {
                             Text("\(batch.claimCount) receipt\(batch.claimCount == 1 ? "" : "s")").font(.system(size: 10)).foregroundColor(.gray)
                         }
                     }
-                    .padding(14).background(Color.white).cornerRadius(10)
+                    .padding(14).background(Color.bgSurface).cornerRadius(10)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
 
                     // Status Flow
@@ -3590,7 +5797,7 @@ struct BatchStatusSheet: View {
                         }
                     }
                     .padding(.bottom, 8)
-                    .background(Color.white).cornerRadius(10)
+                    .background(Color.bgSurface).cornerRadius(10)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
 
                     // Details
@@ -3611,7 +5818,7 @@ struct BatchStatusSheet: View {
                             detailRow("Posted", FormatUtils.formatDateTime(postedAt))
                         }
                     }
-                    .background(Color.white).cornerRadius(10)
+                    .background(Color.bgSurface).cornerRadius(10)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
 
                     // Rejection
@@ -3702,7 +5909,7 @@ struct CodingQueueListView: View {
                         Text(activeFilter).font(.system(size: 12, weight: .semibold)).foregroundColor(.primary).lineLimit(1)
                         Image(systemName: "chevron.down").font(.system(size: 8, weight: .medium)).foregroundColor(.gray)
                     }
-                    .padding(.horizontal, 12).padding(.vertical, 8).background(Color.white).cornerRadius(6)
+                    .padding(.horizontal, 12).padding(.vertical, 8).background(Color.bgSurface).cornerRadius(6)
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
                 }
                 .buttonStyle(BorderlessButtonStyle())
@@ -3796,7 +6003,7 @@ struct CodingDetailPage: View {
                             Text("Submitted \(FormatUtils.formatDateTime(claim.createdAt))").font(.system(size: 10)).foregroundColor(.gray)
                         }
                     }
-                    .padding(14).background(Color.white).cornerRadius(10)
+                    .padding(14).background(Color.bgSurface).cornerRadius(10)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
 
                     // Amounts
@@ -3813,7 +6020,7 @@ struct CodingDetailPage: View {
                             codingAmtRow("Settlement", claim.settlementType.replacingOccurrences(of: "_", with: " ").capitalized, .secondary)
                         }
                     }
-                    .background(Color.white).cornerRadius(10)
+                    .background(Color.bgSurface).cornerRadius(10)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
 
                     // Budget Coding
@@ -3841,7 +6048,7 @@ struct CodingDetailPage: View {
                                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
                         }
                     }
-                    .padding(14).background(Color.white).cornerRadius(10)
+                    .padding(14).background(Color.bgSurface).cornerRadius(10)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
 
                     if !claim.notes.isEmpty {
@@ -3849,7 +6056,7 @@ struct CodingDetailPage: View {
                             Text("SUBMITTER NOTES").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
                             Text(claim.notes).font(.system(size: 13))
                         }
-                        .padding(14).background(Color.white).cornerRadius(10)
+                        .padding(14).background(Color.bgSurface).cornerRadius(10)
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
                     }
 
@@ -3884,7 +6091,7 @@ struct CodingDetailPage: View {
                 }.buttonStyle(BorderlessButtonStyle()).disabled(saving || forwarding)
             }
             .padding(.horizontal, 16).padding(.vertical, 12)
-            .background(Color.white)
+            .background(Color.bgSurface)
             .overlay(Rectangle().fill(Color.borderColor).frame(height: 1), alignment: .top)
         }
         .navigationBarTitle(Text("#\(claim.batchReference)"), displayMode: .inline)
@@ -3933,6 +6140,40 @@ struct CodingDetailPage: View {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// MARK: - Cost Code Picker Button (opens compact action sheet)
+// ═══════════════════════════════════════════════════════════════════
+
+struct CostCodePickerButton: View {
+    @Binding var selectedCode: String
+    @State private var showSheet = false
+
+    private var displayText: String {
+        if selectedCode.isEmpty { return "Select cost code" }
+        return costCodeOptions.first { $0.0 == selectedCode }?.1 ?? selectedCode
+    }
+
+    var body: some View {
+        Button(action: { showSheet = true }) {
+            HStack {
+                Text(displayText)
+                    .font(.system(size: 13))
+                    .foregroundColor(selectedCode.isEmpty ? .gray : .primary)
+                    .lineLimit(1)
+                Spacer()
+                Image(systemName: "chevron.down").font(.system(size: 10)).foregroundColor(.gray)
+            }
+            .padding(10).background(Color.bgRaised).cornerRadius(6)
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
+        }
+        .buttonStyle(BorderlessButtonStyle())
+        .compatActionSheet(title: "Cost Code", isPresented: $showSheet, buttons:
+            costCodeOptions.map { c in
+                CompatActionSheetButton.default(c.0 == selectedCode ? "\(c.1) ✓" : c.1) { selectedCode = c.0 }
+            } + [.cancel()]
+        )
+    }
+}
+
 // MARK: - Searchable Cost Code Field
 // ═══════════════════════════════════════════════════════════════════
 
@@ -4011,7 +6252,7 @@ struct SearchableCostCodeField: View {
                             .padding(10)
                     }
                 }
-                .background(Color.white)
+                .background(Color.bgSurface)
                 .cornerRadius(8)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                 .shadow(color: Color.black.opacity(0.08), radius: 8, y: 4)

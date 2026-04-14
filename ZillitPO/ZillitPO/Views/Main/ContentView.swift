@@ -1,7 +1,108 @@
 import SwiftUI
 
+// MARK: - Theme Manager (singleton, drives all Color.xxx tokens)
+
+final class ThemeManager: ObservableObject {
+    static let shared = ThemeManager()
+
+    @Published var isDark: Bool {
+        didSet { UserDefaults.standard.set(isDark, forKey: "app-theme-dark") }
+    }
+
+    private init() {
+        self.isDark = UserDefaults.standard.bool(forKey: "app-theme-dark")
+    }
+
+    func toggleTheme() { isDark.toggle() }
+
+    // ── Brand colors (matching web ThemeContext.jsx) ──────────────
+
+    var primary: Color {                                             // gold
+        Color(red: 252/255, green: 148/255, blue: 4/255)            // #FC9404
+    }
+
+    var primaryDark: Color {                                         // goldDark
+        Color(red: 224/255, green: 134/255, blue: 0/255)            // #E08600
+    }
+
+    // ── Full palette (light / dark from ThemeContext.jsx) ─────────
+
+    var bgBase: Color {          // --bg-base
+        isDark ? Color(hex: "#14161B") : Color(hex: "#F8F9FB")
+    }
+
+    var bgSurface: Color {       // --bg-surface  (cards, rows)
+        isDark ? Color(hex: "#1A1D23") : Color.white
+    }
+
+    var bgRaised: Color {        // --bg-raised
+        isDark ? Color(hex: "#22262E") : Color(hex: "#F3F4F6")
+    }
+
+    var borderColor: Color {     // --border
+        isDark ? Color.white.opacity(0.08) : Color(hex: "#E2E4E9")
+    }
+
+    var borderSubtle: Color {    // --border-subtle
+        isDark ? Color(hex: "#2A2E38") : Color(hex: "#EDF0F4")
+    }
+
+    var textPrimary: Color {     // --text
+        isDark ? Color(hex: "#E5E7EB") : Color(UIColor.label)
+    }
+
+    var textSecondary: Color {   // --text-dim
+        isDark ? Color(hex: "#9CA3AF") : Color(UIColor.secondaryLabel)
+    }
+
+    var textMuted: Color {       // --text-muted
+        isDark ? Color(hex: "#6B7280") : Color(UIColor.tertiaryLabel)
+    }
+}
+
+// MARK: - Color(hex:) initialiser
+
+extension Color {
+    init(hex: String) {
+        let h = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: h).scanHexInt64(&int)
+        let r, g, b, a: UInt64
+        switch h.count {
+        case 6: // RGB
+            (r, g, b, a) = (int >> 16, int >> 8 & 0xFF, int & 0xFF, 255)
+        case 8: // ARGB
+            (r, g, b, a) = (int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF, int >> 24)
+        default:
+            (r, g, b, a) = (252, 148, 4, 255) // fallback to gold
+        }
+        self.init(
+            .sRGB,
+            red: Double(r) / 255,
+            green: Double(g) / 255,
+            blue: Double(b) / 255,
+            opacity: Double(a) / 255
+        )
+    }
+}
+
+// MARK: - Theme-aware Color tokens
+
+extension Color {
+    static var gold: Color       { ThemeManager.shared.primary }
+    static var goldDark: Color   { ThemeManager.shared.primaryDark }
+    static var bgBase: Color     { ThemeManager.shared.bgBase }
+    static var bgRaised: Color   { ThemeManager.shared.bgRaised }
+    static var bgSurface: Color  { ThemeManager.shared.bgSurface }
+    static var borderColor: Color { ThemeManager.shared.borderColor }
+    static var borderSubtle: Color { ThemeManager.shared.borderSubtle }
+}
+
+// MARK: - Content View
+
 struct ContentView: View {
     @ObservedObject var appState: POViewModel
+    @ObservedObject private var theme = ThemeManager.shared
 
     @State private var showUserPicker = false
     @State private var showPurchaseOrders = false
@@ -14,11 +115,24 @@ struct ContentView: View {
                 Color.bgBase.edgesIgnoringSafeArea(.all)
 
                 VStack(spacing: 0) {
+                    // ── Theme toggle (top-right) ─────────────────
+                    HStack {
+                        Spacer()
+                        Button(action: { theme.toggleTheme() }) {
+                            Image(systemName: theme.isDark ? "sun.max.fill" : "moon.fill")
+                                .font(.system(size: 18))
+                                .foregroundColor(.goldDark)
+                                .frame(width: 36, height: 36)
+                                .background(Color.gold.opacity(0.12))
+                                .cornerRadius(10)
+                        }.buttonStyle(BorderlessButtonStyle())
+                    }.padding(.horizontal, 20).padding(.top, 12)
+
                     VStack(spacing: 6) {
                         Image(systemName: "building.2.fill").font(.system(size: 36)).foregroundColor(.goldDark)
                         Text("Zillit Coda").font(.system(size: 24, weight: .bold))
                         Text("Account Hub").font(.system(size: 13)).foregroundColor(.secondary)
-                    }.padding(.top, 60).padding(.bottom, 30)
+                    }.padding(.top, 20).padding(.bottom, 30)
 
                     if let user = appState.currentUser {
                         VStack(spacing: 4) {
@@ -44,7 +158,7 @@ struct ContentView: View {
                                 }
                                 Spacer()
                                 Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(.gray)
-                            }.padding(14).background(Color.white).cornerRadius(12)
+                            }.padding(14).background(Color.bgSurface).cornerRadius(12)
                             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
                             .contentShape(Rectangle())
                         }.buttonStyle(BorderlessButtonStyle())
@@ -59,7 +173,7 @@ struct ContentView: View {
                                 }
                                 Spacer()
                                 Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(.goldDark)
-                            }.padding(14).background(Color.white).cornerRadius(12)
+                            }.padding(14).background(Color.bgSurface).cornerRadius(12)
                             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.gold.opacity(0.3), lineWidth: 1))
                             .contentShape(Rectangle())
                         }.buttonStyle(BorderlessButtonStyle())
@@ -74,7 +188,7 @@ struct ContentView: View {
                                 }
                                 Spacer()
                                 Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(Color(red: 0.56, green: 0.27, blue: 0.68))
-                            }.padding(14).background(Color.white).cornerRadius(12)
+                            }.padding(14).background(Color.bgSurface).cornerRadius(12)
                             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.56, green: 0.27, blue: 0.68).opacity(0.3), lineWidth: 1))
                             .contentShape(Rectangle())
                         }.buttonStyle(BorderlessButtonStyle())
@@ -89,7 +203,7 @@ struct ContentView: View {
                                 }
                                 Spacer()
                                 Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(Color(red: 0.2, green: 0.7, blue: 0.45))
-                            }.padding(14).background(Color.white).cornerRadius(12)
+                            }.padding(14).background(Color.bgSurface).cornerRadius(12)
                             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.2, green: 0.7, blue: 0.45).opacity(0.3), lineWidth: 1))
                             .contentShape(Rectangle())
                         }.buttonStyle(BorderlessButtonStyle())
@@ -104,7 +218,11 @@ struct ContentView: View {
         }
         .navigationViewStyle(StackNavigationViewStyle())
         .accentColor(Color.gold)
-        .sheet(isPresented: $showUserPicker) { SidebarView().environmentObject(appState) }
+        .environment(\.colorScheme, theme.isDark ? .dark : .light)
+        .sheet(isPresented: $showUserPicker) {
+            SidebarView().environmentObject(appState)
+                .environment(\.colorScheme, theme.isDark ? .dark : .light)
+        }
     }
 }
 
@@ -121,7 +239,6 @@ struct POHubPage: View {
             Color.bgBase.edgesIgnoringSafeArea(.all)
 
             VStack(spacing: 10) {
-                // All Purchase Orders tile
                 NavigationLink(destination: DepartmentPOModule(), isActive: $navigateToAllPOs) { EmptyView() }.hidden()
                 Button(action: { navigateToAllPOs = true }) {
                     HStack(spacing: 12) {
@@ -133,12 +250,11 @@ struct POHubPage: View {
                         }
                         Spacer()
                         Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(.goldDark)
-                    }.padding(14).background(Color.white).cornerRadius(12)
+                    }.padding(14).background(Color.bgSurface).cornerRadius(12)
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.gold.opacity(0.3), lineWidth: 1))
                     .contentShape(Rectangle())
                 }.buttonStyle(BorderlessButtonStyle())
 
-                // Vendors tile
                 NavigationLink(destination: VendorsModuleView().environmentObject(appState), isActive: $navigateToVendors) { EmptyView() }.hidden()
                 Button(action: { navigateToVendors = true }) {
                     HStack(spacing: 12) {
@@ -150,12 +266,11 @@ struct POHubPage: View {
                         }
                         Spacer()
                         Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(Color(red: 0.35, green: 0.72, blue: 0.36))
-                    }.padding(14).background(Color.white).cornerRadius(12)
+                    }.padding(14).background(Color.bgSurface).cornerRadius(12)
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.35, green: 0.72, blue: 0.36).opacity(0.3), lineWidth: 1))
                     .contentShape(Rectangle())
                 }.buttonStyle(BorderlessButtonStyle())
 
-                // Invoices tile
                 NavigationLink(destination: InvoicesModuleView().environmentObject(appState), isActive: $navigateToInvoices) { EmptyView() }.hidden()
                 Button(action: { navigateToInvoices = true }) {
                     HStack(spacing: 12) {
@@ -167,7 +282,7 @@ struct POHubPage: View {
                         }
                         Spacer()
                         Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(Color(red: 0.2, green: 0.6, blue: 0.86))
-                    }.padding(14).background(Color.white).cornerRadius(12)
+                    }.padding(14).background(Color.bgSurface).cornerRadius(12)
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.2, green: 0.6, blue: 0.86).opacity(0.3), lineWidth: 1))
                     .contentShape(Rectangle())
                 }.buttonStyle(BorderlessButtonStyle())
@@ -179,13 +294,4 @@ struct POHubPage: View {
         }
         .navigationBarTitle(Text("Account Hub"), displayMode: .inline)
     }
-}
-
-extension Color {
-    static let gold = Color(red: 252/255, green: 148/255, blue: 4/255)
-    static let goldDark = Color(red: 224/255, green: 134/255, blue: 0/255)
-    static let bgBase = Color(red: 248/255, green: 249/255, blue: 251/255)
-    static let bgRaised = Color(red: 243/255, green: 244/255, blue: 246/255)
-    static let borderColor = Color(red: 226/255, green: 228/255, blue: 233/255)
-    static let borderSubtle = Color(red: 237/255, green: 240/255, blue: 244/255)
 }

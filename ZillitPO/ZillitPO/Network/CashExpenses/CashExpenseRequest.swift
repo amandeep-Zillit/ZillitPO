@@ -6,7 +6,7 @@
 import Foundation
 
 enum CashExpenseRequest {
-    static let baseURL = "http://192.168.1.3:3006" 
+    static let baseURL = "http://192.168.29.92:3006" 
     
 
     // Metadata (roles, settings)
@@ -17,6 +17,10 @@ enum CashExpenseRequest {
     case fetchActiveFloats
     case fetchApprovalQueue
     case createFloatRequest([String: Any])
+    case fetchFloatDetails(String)                // id → /float-requests/{id}/details
+    case getFloat(String)                         // id → /float-requests/{id}
+    case approveFloat(String, [String: Any])      // id, body → /float-requests/{id}/approve
+    case rejectFloat(String, [String: Any])       // id, body → /float-requests/{id}/reject
     // Claims
     case fetchMyClaims
     case fetchMyBatches
@@ -61,6 +65,14 @@ extension CashExpenseRequest: POURLRequestProtocol {
         case .fetchApprovalQueue:    return buildLocal(.get, "/api/v2/cash-expenses/float-requests/approval-queue")
         case .createFloatRequest(let body):
             return buildLocal(.post, "/api/v2/cash-expenses/float-requests", body: body)
+        case .fetchFloatDetails(let id):
+            return buildLocal(.get, "/api/v2/cash-expenses/float-requests/\(id)/details")
+        case .getFloat(let id):
+            return buildLocal(.get, "/api/v2/cash-expenses/float-requests/\(id)")
+        case .approveFloat(let id, let body):
+            return buildLocal(.post, "/api/v2/cash-expenses/float-requests/\(id)/approve", body: body)
+        case .rejectFloat(let id, let body):
+            return buildLocal(.post, "/api/v2/cash-expenses/float-requests/\(id)/reject", body: body)
         case .fetchMyClaims:         return buildLocal(.get, "/api/v2/cash-expenses/claims/my-claims")
         case .fetchMyBatches:        return buildLocal(.get, "/api/v2/cash-expenses/claims/my-batches")
         case .fetchAllClaims:        return buildLocal(.get, "/api/v2/cash-expenses/claims")

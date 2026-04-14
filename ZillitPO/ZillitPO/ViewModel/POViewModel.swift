@@ -23,8 +23,13 @@ class POViewModel: ObservableObject {
     @Published var invoiceHistoryLoading: Bool = false
     @Published var invoiceTierConfigRows: [ApprovalTierConfig] = []
     @Published var formTemplate: FormTemplateResponse?
+    @Published var floatFormTemplate: FormTemplateResponse?
 
     @Published var isLoading = false
+    /// Per-module loader flags (the global `isLoading` only covers the
+    /// initial `loadAllData` sweep). Tile-scoped loaders check these so
+    /// that tapping an individual module triggers a visible spinner.
+    @Published var isLoadingInvoices = false
     @Published var activeTab: DeptTab = .all
     @Published var showCreatePO = false
     @Published var editingPO: PurchaseOrder?
@@ -85,6 +90,8 @@ class POViewModel: ObservableObject {
     @Published var cardApprovalQueueItems: [CardTransaction] = []
     @Published var myCardReceipts: [CardTransaction] = []
     @Published var topUpQueue: [TopUpItem] = []
+    @Published var cashTopUpQueue: [TopUpItem] = []
+    @Published var isLoadingCashTopUps: Bool = false
     @Published var smartAlerts: [SmartAlert] = []
     @Published var cardHistory: [CardTransaction] = []
     @Published var userCards: [ExpenseCard] = []

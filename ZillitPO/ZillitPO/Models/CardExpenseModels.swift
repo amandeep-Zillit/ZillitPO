@@ -96,6 +96,105 @@ struct ReceiptHistoryEntry: Codable, Equatable {
     }
 }
 
+// MARK: - Card History Entry (full detail)
+
+struct CardHistoryEntry: Identifiable, Equatable {
+    var id: String = UUID().uuidString
+    var action: String = ""
+    var details: String = ""
+    var actionBy: String = ""       // user id
+    var actionByName: String = ""   // resolved name (from UsersData)
+    var timestamp: Int64 = 0
+    var tierNumber: Int? = nil
+    var reason: String = ""
+    var oldValue: String = ""
+    var newValue: String = ""
+    var field: String = ""
+
+    static func == (lhs: CardHistoryEntry, rhs: CardHistoryEntry) -> Bool {
+        lhs.id == rhs.id && lhs.timestamp == rhs.timestamp
+    }
+}
+
+struct CardHistoryEntryRaw: Decodable {
+    var action: String?
+    var details: String?
+    var action_by: String?
+    var action_at: Int64?
+    var timestamp: Int64?
+    var tier_number: Int?
+    var reason: String?
+    var old_value: String?
+    var new_value: String?
+    var field: String?
+
+    struct AnyKey: CodingKey {
+        var stringValue: String; var intValue: Int? = nil
+        init?(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { self.stringValue = "\(intValue)"; self.intValue = intValue }
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: AnyKey.self)
+        func str(_ keys: String...) -> String? {
+            for k in keys {
+                guard let key = AnyKey(stringValue: k) else { continue }
+                if let v = try? c.decode(String.self, forKey: key), !v.isEmpty { return v }
+                if let v = try? c.decode(Int64.self, forKey: key) { return String(v) }
+                if let v = try? c.decode(Double.self, forKey: key) { return String(v) }
+            }
+            return nil
+        }
+        func int64(_ keys: String...) -> Int64? {
+            for k in keys {
+                guard let key = AnyKey(stringValue: k) else { continue }
+                if let v = try? c.decode(Int64.self, forKey: key) { return v }
+                if let d = try? c.decode(Double.self, forKey: key) { return Int64(d) }
+                if let s = try? c.decode(String.self, forKey: key), let v = Int64(s) { return v }
+            }
+            return nil
+        }
+        func int(_ keys: String...) -> Int? {
+            for k in keys {
+                guard let key = AnyKey(stringValue: k) else { continue }
+                if let v = try? c.decode(Int.self, forKey: key) { return v }
+                if let d = try? c.decode(Double.self, forKey: key) { return Int(d) }
+                if let s = try? c.decode(String.self, forKey: key), let v = Int(s) { return v }
+            }
+            return nil
+        }
+
+        action      = str("action")
+        details     = str("details", "description")
+        action_by   = str("action_by", "actionBy", "user_id", "userId", "by")
+        action_at   = int64("action_at", "actionAt", "timestamp")
+        timestamp   = int64("timestamp", "action_at")
+        tier_number = int("tier_number", "tierNumber", "tier")
+        reason      = str("reason")
+        old_value   = str("old_value", "oldValue", "from")
+        new_value   = str("new_value", "newValue", "to")
+        field       = str("field", "key")
+    }
+
+    func toEntry() -> CardHistoryEntry {
+        var e = CardHistoryEntry()
+        e.action = action ?? ""
+        e.details = details ?? ""
+        e.actionBy = action_by ?? ""
+        e.timestamp = action_at ?? timestamp ?? 0
+        e.tierNumber = tier_number
+        e.reason = reason ?? ""
+        e.oldValue = old_value ?? ""
+        e.newValue = new_value ?? ""
+        e.field = field ?? ""
+        // Resolve user name
+        if !e.actionBy.isEmpty {
+            e.actionByName = UsersData.byId[e.actionBy]?.fullName ?? e.actionBy
+        }
+        return e
+    }
+}
+
 // MARK: - Receipt Raw (API response)
 
 struct ReceiptRaw: Decodable {

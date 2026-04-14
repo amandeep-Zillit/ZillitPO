@@ -144,7 +144,7 @@ struct DepartmentPOModule: View {
             Spacer()
             Text(appState.currentUser?.displayDepartment ?? "").font(.system(size: 9, weight: .bold)).lineLimit(1)
                 .foregroundColor(.blue).padding(.horizontal, 8).padding(.vertical, 4).background(Color.blue.opacity(0.1)).cornerRadius(4)
-        }.padding(10).background(Color.white).cornerRadius(10)
+        }.padding(10).background(Color.bgSurface).cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 
@@ -410,7 +410,7 @@ struct EditTemplateFormView: View {
             TextField(placeholder, text: text)
                 .font(.system(size: 13)).keyboardType(keyboard)
                 .padding(.horizontal, 10).padding(.vertical, 9)
-                .background(Color.white).cornerRadius(6)
+                .background(Color.bgSurface).cornerRadius(6)
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(hasErr ? Color.red : Color.borderColor, lineWidth: 1))
             if hasErr {
                 Text("\(label.lowercased().capitalizingFirst()) is required").font(.system(size: 10)).foregroundColor(.red)
@@ -664,7 +664,7 @@ struct EditTemplateFormView: View {
                                 }
                                 .foregroundColor(.secondary)
                                 .frame(maxWidth: .infinity).padding(.vertical, 12)
-                                .background(Color.white).cornerRadius(8)
+                                .background(Color.bgSurface).cornerRadius(8)
                                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                             }.buttonStyle(BorderlessButtonStyle())
 
@@ -1349,7 +1349,7 @@ struct CreateTemplateFormView: View {
                             }
                             .foregroundColor(.secondary)
                             .frame(maxWidth: .infinity).padding(.vertical, 12)
-                            .background(Color.white).cornerRadius(8)
+                            .background(Color.bgSurface).cornerRadius(8)
                             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                         }.buttonStyle(BorderlessButtonStyle())
 
@@ -1401,7 +1401,7 @@ struct CreateTemplateFormView: View {
                                 TextField("e.g. Weekly Catering Order", text: $templateName)
                                     .font(.system(size: 14))
                                     .padding(.horizontal, 12).padding(.vertical, 10)
-                                    .background(Color.white).cornerRadius(8)
+                                    .background(Color.bgSurface).cornerRadius(8)
                                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                                 Button(action: {
                                     guard !templateName.trimmingCharacters(in: .whitespaces).isEmpty else { return }

@@ -104,6 +104,8 @@ extension POViewModel {
                 if case .success(let r) = result {
                     let all = (r?.data ?? []).map { $0.toTopUpItem() }
                     self?.topUpQueue = all.filter { $0.entityType.lowercased() == "card" }
+                    // Also populate the cash queue for reuse across modules
+                    self?.cashTopUpQueue = all.filter { $0.entityType.lowercased() == "cash" }
                 } else if case .failure(let e) = result { print("❌ Top-ups failed: \(e)") }
             }
         }.urlDataTask?.resume()
@@ -122,15 +124,103 @@ extension POViewModel {
     }
 
     func resolveSmartAlert(_ id: String) {
+        // Optimistic local update
         guard let idx = smartAlerts.firstIndex(where: { $0.id == id }) else { return }
         var a = smartAlerts[idx]
         a.status = "resolved"
         a.resolvedAt = Int64(Date().timeIntervalSince1970 * 1000)
         smartAlerts[idx] = a
+        // Persist to backend
+        let body: [String: Any] = ["user_id": userId]
+        CardExpenseCodableTask.resolveAlert(id, body) { result in
+            DispatchQueue.main.async {
+                if case .success = result { print("✅ Smart alert resolved: \(id)") }
+                else if case .failure(let e) = result { print("❌ Resolve alert failed: \(e)") }
+            }
+        }.urlDataTask?.resume()
     }
 
     func dismissSmartAlert(_ id: String) {
+        // Optimistic local removal
         smartAlerts.removeAll { $0.id == id }
+        // Persist to backend
+        CardExpenseCodableTask.dismissAlert(id) { result in
+            DispatchQueue.main.async {
+                if case .success = result { print("✅ Smart alert dismissed: \(id)") }
+                else if case .failure(let e) = result { print("❌ Dismiss alert failed: \(e)") }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    func investigateSmartAlert(_ id: String) {
+        guard let idx = smartAlerts.firstIndex(where: { $0.id == id }) else { return }
+        var a = smartAlerts[idx]
+        a.status = "under_investigation"
+        smartAlerts[idx] = a
+        print("✅ Smart alert under investigation: \(id)")
+    }
+
+    func revertSmartAlert(_ id: String) {
+        guard let idx = smartAlerts.firstIndex(where: { $0.id == id }) else { return }
+        var a = smartAlerts[idx]
+        a.status = "active"
+        smartAlerts[idx] = a
+        print("✅ Smart alert reverted to active: \(id)")
+    }
+
+    // MARK: - Manual Receipt Matching
+
+    func matchReceipt(_ receiptId: String, transactionId: String, completion: @escaping (Bool) -> Void) {
+        let body: [String: Any] = ["transaction_id": transactionId, "user_id": userId]
+        CardExpenseCodableTask.matchReceipt(receiptId, body) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    print("✅ Receipt matched: \(receiptId) → txn \(transactionId)")
+                    self?.loadInboxReceipts()
+                    self?.loadCardExpenseMeta()
+                    completion(true)
+                case .failure(let e):
+                    print("❌ Match receipt failed: \(e)")
+                    completion(false)
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    // MARK: - Top-Up Actions
+
+    func markTopUpCompleted(_ id: String, amount: Double? = nil, note: String = "") {
+        var body: [String: Any] = ["status": "completed", "user_id": userId]
+        if let amt = amount { body["amount"] = amt }
+        if !note.isEmpty { body["note"] = note }
+        CardExpenseCodableTask.markTopUp(id, body) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    self?.topUpQueue.removeAll { $0.id == id }
+                    self?.loadCardExpenseMeta()
+                    print("✅ Top-up marked completed: \(id)")
+                case .failure(let e):
+                    print("❌ Mark top-up failed: \(e)")
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    func skipTopUp(_ id: String) {
+        CardExpenseCodableTask.skipTopUp(id) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    self?.topUpQueue.removeAll { $0.id == id }
+                    self?.loadCardExpenseMeta()
+                    print("✅ Top-up skipped: \(id)")
+                case .failure(let e):
+                    print("❌ Skip top-up failed: \(e)")
+                }
+            }
+        }.urlDataTask?.resume()
     }
 
     func overrideApprovalItem(_ id: String, reason: String, completion: @escaping (Bool) -> Void) {
@@ -259,7 +349,12 @@ extension POViewModel {
     func confirmReceipt(_ receipt: Receipt) {
         CardExpenseCodableTask.confirmReceipt(receipt.id) { [weak self] result in
             DispatchQueue.main.async {
-                if case .success = result { print("✅ Receipt confirmed"); self?.loadCardExpenseReceipts() }
+                if case .success = result {
+                    print("✅ Receipt confirmed")
+                    self?.loadCardExpenseReceipts()
+                    self?.loadInboxReceipts()
+                    self?.loadCardExpenseMeta()
+                }
                 else if case .failure(let e) = result { print("❌ Confirm receipt failed: \(e)") }
             }
         }.urlDataTask?.resume()
@@ -269,7 +364,11 @@ extension POViewModel {
     func attachInboxReceipt(_ id: String) {
         CardExpenseCodableTask.confirmReceipt(id) { [weak self] result in
             DispatchQueue.main.async {
-                if case .success = result { print("✅ Inbox receipt attached: \(id)"); self?.loadInboxReceipts() }
+                if case .success = result {
+                    print("✅ Inbox receipt attached: \(id)")
+                    self?.loadInboxReceipts()
+                    self?.loadCardExpenseMeta()
+                }
                 else if case .failure(let e) = result { print("❌ Attach inbox receipt failed: \(e)") }
             }
         }.urlDataTask?.resume()
@@ -278,7 +377,12 @@ extension POViewModel {
     func flagReceiptPersonal(_ receipt: Receipt) {
         CardExpenseCodableTask.flagReceiptPersonal(receipt.id) { [weak self] result in
             DispatchQueue.main.async {
-                if case .success = result { print("✅ Flagged personal"); self?.loadCardExpenseReceipts() }
+                if case .success = result {
+                    print("✅ Flagged personal")
+                    self?.loadCardExpenseReceipts()
+                    self?.loadInboxReceipts()
+                    self?.loadCardExpenseMeta()
+                }
                 else if case .failure(let e) = result { print("❌ Flag failed: \(e)") }
             }
         }.urlDataTask?.resume()
@@ -301,7 +405,12 @@ extension POViewModel {
     func deleteReceipt(_ receipt: Receipt) {
         CardExpenseCodableTask.deleteReceipt(receipt.id) { [weak self] result in
             DispatchQueue.main.async {
-                if case .success = result { print("✅ Receipt deleted"); self?.loadCardExpenseReceipts() }
+                if case .success = result {
+                    print("✅ Receipt deleted")
+                    self?.loadCardExpenseReceipts()
+                    self?.loadInboxReceipts()
+                    self?.loadCardExpenseMeta()
+                }
                 else if case .failure(let e) = result { print("❌ Delete receipt failed: \(e)") }
             }
         }.urlDataTask?.resume()
@@ -312,8 +421,17 @@ extension POViewModel {
     func loadCard(_ id: String, completion: @escaping (ExpenseCard) -> Void) {
         CardExpenseCodableTask.fetchCard(id) { result in
             DispatchQueue.main.async {
-                if case .success(let response) = result, let raw = response?.data {
-                    completion(raw.toCard())
+                switch result {
+                case .success(let response):
+                    if let raw = response?.data {
+                        let card = raw.toCard()
+                        print("✅ Loaded card \(id): holder=\(card.holderFullName) status=\(card.status) limit=\(card.monthlyLimit) balance=\(card.currentBalance) dept=\(card.department) bank=\(card.bankName)")
+                        completion(card)
+                    } else {
+                        print("⚠️ Load card \(id): empty response body")
+                    }
+                case .failure(let error):
+                    print("❌ Load card \(id) failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -423,6 +541,210 @@ extension POViewModel {
         }.urlDataTask?.resume()
     }
 
+    func loadCardHistoryById(_ id: String, completion: @escaping ([CardHistoryEntry]) -> Void) {
+        CardExpenseCodableTask.fetchCardHistoryById(id) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let r):
+                    let entries = (r?.data ?? []).map { $0.toEntry() }
+                    completion(entries)
+                case .failure(let e):
+                    print("❌ Fetch card history failed: \(e)")
+                    completion([])
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    func suspendCard(id: String, reason: String = "", completion: @escaping (Bool) -> Void) {
+        var body: [String: Any] = ["user_id": userId]
+        if !reason.isEmpty { body["reason"] = reason }
+
+        // Optimistic update — replace whole struct so SwiftUI diffing sees the change.
+        // (ExpenseCard.== only compares ids, so mutating a property in place
+        // wouldn't trigger list re-renders.)
+        applyStatusChange(id: id, newStatus: "suspended")
+
+        CardExpenseCodableTask.suspendCard(id, body) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    print("✅ Card suspended: \(id)")
+                    self?.objectWillChange.send()
+                    completion(true)
+                case .failure(let e):
+                    print("❌ Suspend card failed: \(e)")
+                    completion(false)
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    enum CardType: String { case digital, physical }
+
+    func activateCard(id: String, cardNumber: String = "", cardType: CardType = .physical, completion: @escaping (Bool) -> Void) {
+        var body: [String: Any] = ["user_id": userId, "card_type": cardType.rawValue]
+        if !cardNumber.isEmpty {
+            switch cardType {
+            case .physical: body["physical_card_number"] = cardNumber
+            case .digital:  body["digital_card_number"]  = cardNumber
+            }
+        }
+
+        applyStatusChange(id: id, newStatus: "active")
+        if !cardNumber.isEmpty {
+            // Optimistically set the card number on the matching field so detail/list shows it.
+            func patch(_ c: ExpenseCard) -> ExpenseCard {
+                var m = c
+                switch cardType {
+                case .physical: m.physicalCardNumber = cardNumber
+                case .digital:  m.digitalCardNumber  = cardNumber
+                }
+                if cardNumber.count >= 4 { m.lastFour = String(cardNumber.suffix(4)) }
+                return m
+            }
+            if let idx = userCards.firstIndex(where: { $0.id == id }) { userCards[idx] = patch(userCards[idx]) }
+            if let idx = allCards.firstIndex(where: { $0.id == id })  { allCards[idx]  = patch(allCards[idx]) }
+        }
+
+        CardExpenseCodableTask.activateCard(id, body) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    print("✅ Card activated (\(cardType.rawValue)): \(id)")
+                    self?.objectWillChange.send()
+                    completion(true)
+                case .failure(let e):
+                    print("❌ Activate card failed: \(e)")
+                    completion(false)
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    func reactivateCard(id: String, completion: @escaping (Bool) -> Void) {
+        let body: [String: Any] = ["user_id": userId]
+
+        applyStatusChange(id: id, newStatus: "active")
+
+        CardExpenseCodableTask.reactivateCard(id, body) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    print("✅ Card reactivated: \(id)")
+                    self?.objectWillChange.send()
+                    completion(true)
+                case .failure(let e):
+                    print("❌ Reactivate card failed: \(e)")
+                    completion(false)
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    /// Replace the card at `id` in both userCards and allCards with a copy whose
+    /// `status` has been updated. Whole-struct replacement forces SwiftUI's
+    /// ForEach to re-render each row (bypassing the id-only Equatable check).
+    private func applyStatusChange(id: String, newStatus: String) {
+        if let idx = userCards.firstIndex(where: { $0.id == id }) {
+            var c = userCards[idx]
+            c.status = newStatus
+            userCards[idx] = c
+        }
+        if let idx = allCards.firstIndex(where: { $0.id == id }) {
+            var c = allCards[idx]
+            c.status = newStatus
+            allCards[idx] = c
+        }
+        objectWillChange.send()
+    }
+
+    func deleteCardRequest(id: String, completion: @escaping (Bool) -> Void) {
+        CardExpenseCodableTask.deleteCard(id) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    print("✅ Card request deleted: \(id)")
+                    self?.userCards.removeAll { $0.id == id }
+                    self?.allCards.removeAll { $0.id == id }
+                    self?.loadUserCards()
+                    completion(true)
+                case .failure(let e):
+                    print("❌ Delete card request failed: \(e)")
+                    completion(false)
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    func updateCardRequest(id: String, proposedLimit: Double, bsControlCode: String, justification: String, bankAccountId: String, completion: @escaping (Bool) -> Void) {
+        // Re-submit uses PATCH /cards/{id}. The backend keys on `card_limit`
+        // for the actual limit field (not `monthly_limit` / `proposed_limit`,
+        // which map to other fields). Include all three for safety.
+        var body: [String: Any] = [
+            "card_limit":     proposedLimit,
+            "monthly_limit":  proposedLimit,
+            "proposed_limit": proposedLimit,
+            "user_id":        userId
+        ]
+        body["bs_control_code"] = bsControlCode
+        body["justification"]   = justification
+        if !bankAccountId.isEmpty  { body["bank_account_id"] = bankAccountId }
+
+        // Optimistic local update FIRST so UI shows new values immediately.
+        // Build a new struct instance and replace the element wholesale — this
+        // ensures the @Published array emits cleanly and any view observing
+        // userCards/allCards (including CardDetailPage.liveCard via onReceive)
+        // re-renders with the new values.
+        func mutated(_ c: ExpenseCard) -> ExpenseCard {
+            var m = c
+            m.monthlyLimit   = proposedLimit
+            m.proposedLimit  = proposedLimit
+            m.bsControlCode  = bsControlCode
+            m.justification  = justification
+            m.status         = "requested"
+            m.approvals      = []
+            m.approvedBy     = nil
+            m.approvedAt     = nil
+            return m
+        }
+        if let idx = userCards.firstIndex(where: { $0.id == id }) {
+            userCards[idx] = mutated(userCards[idx])
+        }
+        if let idx = allCards.firstIndex(where: { $0.id == id }) {
+            allCards[idx] = mutated(allCards[idx])
+        }
+        // Explicit publisher nudge in case SwiftUI's diffing relies on Equatable
+        // (which on ExpenseCard only compares id).
+        objectWillChange.send()
+
+        CardExpenseCodableTask.updateCard(id, body) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    print("✅ Card resubmitted: \(id)")
+                    // Re-fetch the specific card so local state matches the
+                    // authoritative server truth (server-side fields like
+                    // updated_at, cleared approvals, etc. come through).
+                    self?.loadCard(id) { fresh in
+                        guard let self = self else { return }
+                        if let idx = self.userCards.firstIndex(where: { $0.id == id }) {
+                            self.userCards[idx] = fresh
+                        }
+                        if let idx = self.allCards.firstIndex(where: { $0.id == id }) {
+                            self.allCards[idx] = fresh
+                        }
+                        self.objectWillChange.send()
+                    }
+                    completion(true)
+                case .failure(let e):
+                    print("❌ Resubmit card failed: \(e)")
+                    completion(false)
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
     func loadBankAccounts() {
         CardExpenseCodableTask.fetchBankAccounts { [weak self] result in
             DispatchQueue.main.async {
@@ -438,5 +760,8 @@ extension POViewModel {
     func loadAllCardExpenseData() {
         // Lightweight hub loader — only metadata. Each tile/page loads its own data on appear.
         loadCardExpenseMeta()
+        // Also load approval queue so the "Approval Queue" tab visibility can be determined.
+        // isCardApprover flips to true when allCards is non-empty, which enables the tab.
+        loadAllRequestedCards()
     }
 }

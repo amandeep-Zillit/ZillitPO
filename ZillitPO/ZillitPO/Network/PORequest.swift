@@ -32,6 +32,7 @@ enum PORequest {
 
     // MARK: - Form Template
     case fetchFormTemplate
+    case fetchFloatFormTemplate
 
     // MARK: - Invoices
     case fetchInvoices(String)
@@ -54,6 +55,7 @@ enum PORequest {
     case getPaymentRun(String)                       // runId
     case approvePaymentRun(String, [String: Any])   // id, body
     case rejectPaymentRun(String, [String: Any])    // id, body
+
 }
 
 extension PORequest: POURLRequestProtocol {
@@ -130,6 +132,10 @@ extension PORequest: POURLRequestProtocol {
         // MARK: Form Template
         case .fetchFormTemplate:
             let endPoint = "/api/v2/account-hub/form-templates?module=purchase_orders"
+            return APIClient.shared.buildRequest(.get, endPoint)
+
+        case .fetchFloatFormTemplate:
+            let endPoint = "/api/v2/account-hub/form-templates?module=cash_expenses"
             return APIClient.shared.buildRequest(.get, endPoint)
 
         // MARK: Invoices

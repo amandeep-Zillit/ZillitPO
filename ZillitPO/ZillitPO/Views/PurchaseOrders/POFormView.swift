@@ -302,7 +302,7 @@ struct POFormView: View {
                 HStack(spacing: 2) {
                     Text(field.name.uppercased())
                         .font(.system(size: 9, weight: .bold)).tracking(0.3)
-                        .foregroundColor(hasErr ? .red : Color(red: 0.45, green: 0.47, blue: 0.5))
+                        .foregroundColor(hasErr ? .red : Color.secondary)
                         .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                 }
                 VendorSearchField(vendorId: $vendorId, vendors: appState.vendors, hasError: hasErr)
@@ -315,7 +315,7 @@ struct POFormView: View {
                     .foregroundColor(vendorId.isEmpty ? .gray : .primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 10).padding(.vertical, 9)
-                    .background(Color(red: 0.97, green: 0.97, blue: 0.98))
+                    .background(Color.bgRaised)
                     .cornerRadius(6)
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
             }
@@ -368,7 +368,7 @@ struct POFormView: View {
             HStack(spacing: 2) {
                 Text(label)
                     .font(.system(size: 9, weight: .bold)).tracking(0.3)
-                    .foregroundColor(hasErr ? .red : Color(red: 0.45, green: 0.47, blue: 0.5))
+                    .foregroundColor(hasErr ? .red : Color.secondary)
                     .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                 if !required {
                     Text("(optional)").font(.system(size: 8)).foregroundColor(.gray).italic().lineLimit(1)
@@ -377,7 +377,7 @@ struct POFormView: View {
             TextField(placeholder, text: text)
                 .font(.system(size: 13)).keyboardType(keyboard)
                 .padding(.horizontal, 10).padding(.vertical, 9)
-                .background(Color.white).cornerRadius(6)
+                .background(Color.bgSurface).cornerRadius(6)
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(hasErr ? Color.red : Color.borderColor, lineWidth: 1))
             if hasErr {
                 Text("\(label.lowercased().capitalizingFirst()) is required").font(.system(size: 10)).foregroundColor(.red)
@@ -693,7 +693,7 @@ struct POFormView: View {
                     Image(systemName: "paperclip").font(.system(size: 13))
                     Text("Attach").font(.system(size: 13, weight: .semibold))
                 }.foregroundColor(.secondary).frame(maxWidth: .infinity).padding(.vertical, 12)
-                .background(Color.white).cornerRadius(8)
+                .background(Color.bgSurface).cornerRadius(8)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                 .contentShape(Rectangle())
                 .onTapGesture { showAttachSheet = true }
@@ -1171,7 +1171,7 @@ struct LineItemsPage: View {
             }
         }
         .padding(14)
-        .background(Color.white)
+        .background(Color.bgSurface)
         .cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
@@ -1188,14 +1188,14 @@ struct LineItemsPage: View {
             FieldGroup(label: field.name.uppercased()) {
                 TextField("1", text: liBindQty(itemId))
                     .font(.system(size: 14)).keyboardType(.numberPad).padding(10)
-                    .background(Color.white).cornerRadius(6)
+                    .background(Color.bgSurface).cornerRadius(6)
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
             }
         } else if field.label == "line_unit_price" {
             FieldGroup(label: field.name.uppercased()) {
                 TextField("0.00", text: liBindPrice(itemId))
                     .font(.system(size: 14, design: .monospaced)).keyboardType(.decimalPad).padding(10)
-                    .background(Color.white).cornerRadius(6)
+                    .background(Color.bgSurface).cornerRadius(6)
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
             }
         } else if field.label == "account_code" {
@@ -1270,12 +1270,12 @@ struct LineItemsPage: View {
         HStack(spacing: 10) {
             FieldGroup(label: "QTY") {
                 TextField("1", text: liBindQty(item.id))
-                    .font(.system(size: 14)).keyboardType(.numberPad).padding(10).background(Color.white).cornerRadius(6)
+                    .font(.system(size: 14)).keyboardType(.numberPad).padding(10).background(Color.bgSurface).cornerRadius(6)
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
             }
             FieldGroup(label: "UNIT PRICE") {
                 TextField("0.00", text: liBindPrice(item.id))
-                    .font(.system(size: 14, design: .monospaced)).keyboardType(.decimalPad).padding(10).background(Color.white).cornerRadius(6)
+                    .font(.system(size: 14, design: .monospaced)).keyboardType(.decimalPad).padding(10).background(Color.bgSurface).cornerRadius(6)
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
             }
         }
@@ -1396,11 +1396,11 @@ struct TemplateNameSheet: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("TEMPLATE NAME").font(.system(size: 9, weight: .bold)).tracking(0.3)
-                        .foregroundColor(Color(red: 0.45, green: 0.47, blue: 0.5))
+                        .foregroundColor(Color.secondary)
                     TextField("e.g. Weekly Catering Order", text: $templateName)
                         .font(.system(size: 14))
                         .padding(.horizontal, 12).padding(.vertical, 10)
-                        .background(Color.white).cornerRadius(8)
+                        .background(Color.bgSurface).cornerRadius(8)
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                 }
 
@@ -1441,7 +1441,7 @@ struct CardView<Content: View>: View {
     init(@ViewBuilder content: @escaping () -> Content) { self.content = content }
     var body: some View {
         VStack(alignment: .leading, spacing: 0) { content() }
-            .background(Color.white)
+            .background(Color.bgSurface)
             .cornerRadius(12)
             .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
@@ -1481,7 +1481,7 @@ struct FieldGroup<Content: View>: View {
                     Text(label)
                         .font(.system(size: 9, weight: .bold))
                         .tracking(0.3)
-                        .foregroundColor(Color(red: 0.45, green: 0.47, blue: 0.5))
+                        .foregroundColor(Color.secondary)
                         .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
                     if optional {
@@ -1510,7 +1510,7 @@ struct InputField: View {
             .disableAutocorrection(keyboard == .emailAddress || keyboard == .phonePad || keyboard == .decimalPad || keyboard == .numberPad)
             .padding(.horizontal, 10)
             .padding(.vertical, 9)
-            .background(Color.white)
+            .background(Color.bgSurface)
             .cornerRadius(6)
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
     }
@@ -1564,7 +1564,7 @@ struct PickerField: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 9)
-            .background(Color.white)
+            .background(Color.bgSurface)
             .cornerRadius(6)
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
         }
@@ -1595,7 +1595,7 @@ struct PickerSheetView: View {
                         Image(systemName: "magnifyingglass").foregroundColor(.gray).font(.system(size: 12))
                         TextField("Search...", text: $searchText).font(.system(size: 13))
                     }
-                    .padding(10).background(Color.white).cornerRadius(8)
+                    .padding(10).background(Color.bgSurface).cornerRadius(8)
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                     .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 4)
                 }
@@ -1738,7 +1738,7 @@ struct PhoneField: View {
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 9)
-                .background(Color.white)
+                .background(Color.bgSurface)
                 .cornerRadius(6)
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
             }
@@ -1751,7 +1751,7 @@ struct PhoneField: View {
                 .keyboardType(.phonePad)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 9)
-                .background(Color.white)
+                .background(Color.bgSurface)
                 .cornerRadius(6)
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
         }
@@ -1780,7 +1780,7 @@ struct CountryCodePickerSheet: View {
                     Image(systemName: "magnifyingglass").foregroundColor(.gray).font(.system(size: 12))
                     TextField("Search country or code...", text: $searchText).font(.system(size: 13))
                 }
-                .padding(10).background(Color.white).cornerRadius(8)
+                .padding(10).background(Color.bgSurface).cornerRadius(8)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                 .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 4)
 
@@ -1850,7 +1850,7 @@ struct VendorSearchField: View {
                 }
             }
             .padding(.horizontal, 10).padding(.vertical, 9)
-            .background(Color.white).cornerRadius(6)
+            .background(Color.bgSurface).cornerRadius(6)
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(hasError && vendorId.isEmpty ? Color.red : isEditing ? Color.goldDark : Color.borderColor, lineWidth: hasError && vendorId.isEmpty ? 1 : isEditing ? 1.5 : 1))
             .contentShape(Rectangle())
             .onTapGesture {
@@ -1895,7 +1895,7 @@ struct VendorSearchField: View {
                                 }
                                 .padding(.horizontal, 10).padding(.vertical, 8)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color.white)
+                                .background(Color.bgSurface)
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(BorderlessButtonStyle())
@@ -1904,7 +1904,7 @@ struct VendorSearchField: View {
                     }
                 }
                 .frame(maxHeight: 220)
-                .background(Color.white).cornerRadius(8)
+                .background(Color.bgSurface).cornerRadius(8)
                 .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                 .padding(.top, 4)

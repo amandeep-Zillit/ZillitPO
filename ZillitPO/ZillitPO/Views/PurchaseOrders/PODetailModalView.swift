@@ -114,7 +114,7 @@ struct PODetailContentView: View {
                         }
                     }
                     .padding(14)
-                    .background(Color.white)
+                    .background(Color.bgSurface)
                     .cornerRadius(10)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
 
@@ -126,7 +126,7 @@ struct PODetailContentView: View {
                         }
                         .padding(14)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.white)
+                        .background(Color.bgSurface)
                         .cornerRadius(10)
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
                     }
@@ -183,7 +183,7 @@ struct PODetailContentView: View {
                             }
                             .padding(.horizontal, 14).padding(.vertical, 6)
                         }
-                        .background(Color.white)
+                        .background(Color.bgSurface)
                         .cornerRadius(10)
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
                     }
@@ -227,7 +227,7 @@ struct PODetailContentView: View {
                             }
                         }
                         .padding(14)
-                        .background(Color.white)
+                        .background(Color.bgSurface)
                         .cornerRadius(10)
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
                     }
@@ -402,7 +402,7 @@ struct PODetailContentView: View {
                     .padding(.horizontal, 14).padding(.vertical, 8)
                     .background(Color(UIColor.systemGray6).opacity(0.5))
                 }
-                .background(Color.white)
+                .background(Color.bgSurface)
                 .cornerRadius(10)
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
             }

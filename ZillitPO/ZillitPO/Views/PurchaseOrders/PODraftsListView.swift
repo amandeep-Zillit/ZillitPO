@@ -37,7 +37,7 @@ struct PODraftsListView: View {
                             .contentShape(Rectangle())
                             .onTapGesture { appState.deleteDraftId = draft.id }
                     }.padding(12)
-                    .background(Color.white).cornerRadius(8)
+                    .background(Color.bgSurface).cornerRadius(8)
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                 }
             }

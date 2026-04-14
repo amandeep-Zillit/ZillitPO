@@ -22,7 +22,7 @@ struct StatCard: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title.uppercased()).font(.system(size: 9, weight: .semibold)).foregroundColor(.secondary)
             Text(value).font(.system(size: 22, design: .monospaced)).foregroundColor(color).lineLimit(1).minimumScaleFactor(0.6)
-        }.frame(maxWidth: .infinity, alignment: .leading).padding(12).background(Color.white).cornerRadius(10)
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(12).background(Color.bgSurface).cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 }

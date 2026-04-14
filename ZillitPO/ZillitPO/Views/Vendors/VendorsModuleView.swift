@@ -34,7 +34,7 @@ struct VendorsPinnedHeader: View {
                         Text(filter.rawValue).font(.system(size: 12, weight: state.activeFilter == filter ? .semibold : .regular))
                             .foregroundColor(state.activeFilter == filter ? .black : .secondary)
                             .padding(.horizontal, 10).padding(.vertical, 5)
-                            .background(state.activeFilter == filter ? Color.gold : Color.white).cornerRadius(6)
+                            .background(state.activeFilter == filter ? Color.gold : Color.bgSurface).cornerRadius(6)
                             .overlay(RoundedRectangle(cornerRadius: 6).stroke(state.activeFilter == filter ? Color.gold : Color.borderColor, lineWidth: 1))
                             .contentShape(Rectangle())
                     }.buttonStyle(BorderlessButtonStyle())
@@ -45,7 +45,7 @@ struct VendorsPinnedHeader: View {
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").foregroundColor(.gray).font(.system(size: 12))
                 TextField("Search vendors by name, email...", text: $state.search).font(.system(size: 13))
-            }.padding(10).background(Color.white).cornerRadius(8)
+            }.padding(10).background(Color.bgSurface).cornerRadius(8)
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
         }
     }
@@ -108,7 +108,7 @@ struct VendorsScrollableList: View {
                                 .contentShape(Rectangle())
                                 .onTapGesture { appState.deleteVendorId = vendor.id }
                         }.padding(12)
-                        .background(Color.white).cornerRadius(8)
+                        .background(Color.bgSurface).cornerRadius(8)
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                     }
                 }
@@ -209,7 +209,7 @@ struct VendorDetailPage: View {
                             }
                         }
                         Spacer()
-                    }.padding(14).background(Color.white).cornerRadius(10)
+                    }.padding(14).background(Color.bgSurface).cornerRadius(10)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
 
                     // Details card
@@ -225,7 +225,7 @@ struct VendorDetailPage: View {
                             Divider()
                             detailRow(label: "VAT Number", value: vat)
                         }
-                    }.background(Color.white).cornerRadius(10)
+                    }.background(Color.bgSurface).cornerRadius(10)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
 
                     // Create PO button
@@ -248,7 +248,7 @@ struct VendorDetailPage: View {
                             Image(systemName: "trash").font(.system(size: 13))
                             Text("Delete Vendor").font(.system(size: 14, weight: .medium))
                         }.foregroundColor(.red).frame(maxWidth: .infinity).padding(.vertical, 14)
-                        .background(Color.white).cornerRadius(10)
+                        .background(Color.bgSurface).cornerRadius(10)
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.red.opacity(0.3), lineWidth: 1))
                     }
                 }.padding(16)
@@ -437,7 +437,7 @@ struct VendorFormView: View {
                 .disableAutocorrection(keyboard == .emailAddress || keyboard == .phonePad)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 9)
-                .background(Color.white)
+                .background(Color.bgSurface)
                 .cornerRadius(6)
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(hasError ? Color.red : Color.borderColor, lineWidth: 1))
             if hasError {

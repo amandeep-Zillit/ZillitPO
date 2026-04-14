@@ -65,15 +65,46 @@ struct FloatRequest: Identifiable, Equatable {
     static func == (lhs: FloatRequest, rhs: FloatRequest) -> Bool { lhs.id == rhs.id }
 
     var remaining: Double { issuedFloat - receiptsAmount - returnAmount }
+    // Status values (mirrors backend FloatRequestService STATUS enum):
+    //   AWAITING_APPROVAL → APPROVED (all tiers) | REJECTED | ACCT_OVERRIDE
+    //   APPROVED / ACCT_OVERRIDE → READY_TO_COLLECT → COLLECTED
+    //   COLLECTED / ACTIVE / SPENDING / SPENT / PENDING_RETURN → CLOSED | CANCELLED
     var statusDisplay: String {
         switch status.uppercased() {
-        case "AWAITING_APPROVAL": return "Awaiting Approval"
-        case "APPROVED": return "Approved"
-        case "ACTIVE": return "Active"
-        case "SPENDING": return "Spending"
-        case "CLOSED": return "Closed"
-        case "REJECTED": return "Rejected"
-        default: return status.capitalized
+        case "AWAITING_APPROVAL":   return "Awaiting Approval"
+        case "APPROVED":            return "Approved"
+        case "ACCT_OVERRIDE":       return "Override Approved"
+        case "REJECTED":            return "Rejected"
+        case "READY_TO_COLLECT":    return "Ready to Collect"
+        case "COLLECTED":           return "Collected"
+        case "ACTIVE":              return "Active"
+        case "SPENDING":            return "Spending"
+        case "SPENT":               return "Spent"
+        case "PENDING_RETURN":      return "Pending Return"
+        case "CANCELLED":           return "Cancelled"
+        case "CLOSED":              return "Closed"
+        default: return status.replacingOccurrences(of: "_", with: " ").capitalized
+        }
+    }
+
+    /// Short action-oriented guidance shown under or alongside the status badge.
+    /// Aligned with backend workflow: Awaiting → Approved → Ready to Collect →
+    /// Collected → Spending → Spent → Pending Return → Closed/Cancelled.
+    var statusSubtitle: String {
+        switch status.uppercased() {
+        case "AWAITING_APPROVAL":   return "Float request submitted — awaiting approval"
+        case "APPROVED":            return "Float approved — awaiting cash preparation"
+        case "ACCT_OVERRIDE":       return "Override approved — awaiting cash preparation"
+        case "REJECTED":            return "Float rejected — see notes"
+        case "READY_TO_COLLECT":    return "Cash ready — collect from the accountant"
+        case "COLLECTED":           return "Cash collected — ready to spend"
+        case "ACTIVE":              return "Float active — submit receipts against this float"
+        case "SPENDING":            return "Spending in progress — submit receipts as you go"
+        case "SPENT":               return "All cash spent — submit final receipts to close"
+        case "PENDING_RETURN":      return "Awaiting physical cash return to accountant"
+        case "CANCELLED":           return "Float cancelled"
+        case "CLOSED":              return "Float closed"
+        default: return ""
         }
     }
 }
@@ -394,5 +425,132 @@ struct RoutingBankDetails: Decodable {
         sortCode      = (try? c.decode(String.self, forKey: .sortCode))      ?? ""
         accountName   = (try? c.decode(String.self, forKey: .accountName))   ?? ""
         accountNumber = (try? c.decode(String.self, forKey: .accountNumber)) ?? ""
+    }
+}
+
+// MARK: - Float Details (full breakdown from /float-requests/{id}/details)
+
+struct FloatTopUpEntry: Decodable {
+    var id: String = ""
+    var amount: Double = 0
+    var issuedAmount: Double = 0
+    var status: String = ""
+    var note: String = ""
+    var createdAt: Int64 = 0
+
+    struct Keys: CodingKey { let stringValue: String; var intValue: Int? = nil
+        init?(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { self.stringValue = "\(intValue)"; self.intValue = intValue } }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        func str(_ keys: String...) -> String? {
+            for k in keys { guard let key = Keys(stringValue: k) else { continue }
+                if let v = try? c.decode(String.self, forKey: key), !v.isEmpty { return v }
+                if let v = try? c.decode(Int64.self, forKey: key) { return String(v) }
+                if let v = try? c.decode(Double.self, forKey: key) { return String(v) }
+            }
+            return nil
+        }
+        func dbl(_ keys: String...) -> Double? {
+            for k in keys { guard let key = Keys(stringValue: k) else { continue }
+                if let v = try? c.decode(Double.self, forKey: key) { return v }
+                if let s = try? c.decode(String.self, forKey: key), let v = Double(s) { return v } }
+            return nil
+        }
+        id           = str("id") ?? ""
+        amount       = dbl("amount") ?? 0
+        issuedAmount = dbl("issued_amount", "issuedAmount") ?? amount
+        status       = str("status") ?? ""
+        note         = str("note") ?? ""
+        if let s = str("created_at", "createdAt"), let v = Int64(s) { createdAt = v }
+    }
+}
+
+struct FloatReturnEntry: Decodable {
+    var id: String = ""
+    var returnAmount: Double = 0
+    var returnReason: String = ""
+    var reasonNotes: String = ""
+    var notes: String = ""
+    var receivedDate: Int64 = 0
+    var recordedAt: Int64 = 0
+    var recordedBy: String = ""
+
+    struct Keys: CodingKey { let stringValue: String; var intValue: Int? = nil
+        init?(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { self.stringValue = "\(intValue)"; self.intValue = intValue } }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        func str(_ keys: String...) -> String? {
+            for k in keys { guard let key = Keys(stringValue: k) else { continue }
+                if let v = try? c.decode(String.self, forKey: key), !v.isEmpty { return v }
+                if let v = try? c.decode(Int64.self, forKey: key) { return String(v) }
+                if let v = try? c.decode(Double.self, forKey: key) { return String(v) }
+            }
+            return nil
+        }
+        func dbl(_ keys: String...) -> Double? {
+            for k in keys { guard let key = Keys(stringValue: k) else { continue }
+                if let v = try? c.decode(Double.self, forKey: key) { return v }
+                if let s = try? c.decode(String.self, forKey: key), let v = Double(s) { return v } }
+            return nil
+        }
+        id           = str("id") ?? ""
+        returnAmount = dbl("return_amount", "returnAmount") ?? 0
+        returnReason = str("return_reason", "returnReason") ?? ""
+        reasonNotes  = str("reason_notes", "reasonNotes") ?? ""
+        notes        = str("notes") ?? ""
+        if let s = str("received_date", "receivedDate"), let v = Int64(s) { receivedDate = v }
+        if let s = str("recorded_at", "recordedAt"), let v = Int64(s) { recordedAt = v }
+        recordedBy   = str("recorded_by", "recordedBy") ?? ""
+    }
+}
+
+struct FloatTotals: Decodable {
+    var issued: Double = 0
+    var spent: Double = 0
+    var toppedUp: Double = 0
+    var finalBalance: Double = 0
+    var returned: Double = 0
+    var receiptsAmount: Double = 0
+    var requested: Double = 0
+
+    init() {}
+
+    enum CodingKeys: String, CodingKey {
+        case issued, spent, returned, requested
+        case toppedUp = "topped_up"
+        case finalBalance = "final_balance"
+        case receiptsAmount = "receipts_amount"
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func dbl(_ k: CodingKeys) -> Double {
+            if let v = try? c.decode(Double.self, forKey: k) { return v }
+            if let s = try? c.decode(String.self, forKey: k), let v = Double(s) { return v }
+            return 0
+        }
+        issued = dbl(.issued); spent = dbl(.spent); toppedUp = dbl(.toppedUp)
+        finalBalance = dbl(.finalBalance); returned = dbl(.returned)
+        receiptsAmount = dbl(.receiptsAmount); requested = dbl(.requested)
+    }
+}
+
+struct FloatDetailsResponse: Decodable {
+    var float: FloatRequestRaw?
+    var batches: [ClaimBatchRaw] = []
+    var topups: [FloatTopUpEntry] = []
+    var returns: [FloatReturnEntry] = []
+    var totals: FloatTotals = FloatTotals()
+
+    enum CodingKeys: String, CodingKey { case float, batches, topups, returns, totals }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        float   = try? c.decode(FloatRequestRaw.self, forKey: .float)
+        batches = (try? c.decode([ClaimBatchRaw].self, forKey: .batches)) ?? []
+        topups  = (try? c.decode([FloatTopUpEntry].self, forKey: .topups))  ?? []
+        returns = (try? c.decode([FloatReturnEntry].self, forKey: .returns)) ?? []
+        totals  = (try? c.decode(FloatTotals.self, forKey: .totals)) ?? FloatTotals()
     }
 }

@@ -31,7 +31,7 @@ struct POTemplatesListView: View {
                             .padding(10)
                             .contentShape(Rectangle())
                             .onTapGesture { appState.deleteTemplateId = tpl.id }
-                    }.padding(12).background(Color.white).cornerRadius(8)
+                    }.padding(12).background(Color.bgSurface).cornerRadius(8)
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                 }
             }

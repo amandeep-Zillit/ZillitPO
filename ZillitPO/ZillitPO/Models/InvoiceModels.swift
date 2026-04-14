@@ -10,7 +10,7 @@ import Foundation
 
 // MARK: - Invoice History Entry
 
-struct InvoiceHistoryEntry: Codable, Identifiable {
+struct InvoiceHistoryEntry: Decodable, Identifiable {
     var id: String { "\(timestamp ?? 0)-\(action ?? "")" }
     var action: String?
     var details: String?
@@ -18,22 +18,44 @@ struct InvoiceHistoryEntry: Codable, Identifiable {
     var userId: String?
     var userName: String?
 
+    /// Supports BOTH history shapes the backend returns:
+    /// - Separate history endpoint: `{ action, details, timestamp, user_id, user_name }`
+    /// - Inline on invoice rows:     `{ action, action_at, action_by }`
     enum CodingKeys: String, CodingKey {
         case action, details, timestamp
         case userId = "user_id"
         case userName = "user_name"
+        case action_at, action_by
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         action = try? c.decode(String.self, forKey: .action)
         details = try? c.decode(String.self, forKey: .details)
-        if let ts = try? c.decode(Int64.self, forKey: .timestamp) { timestamp = ts }
-        else if let ts = try? c.decode(Double.self, forKey: .timestamp) { timestamp = Int64(ts) }
-        else if let ts = try? c.decode(String.self, forKey: .timestamp) { timestamp = Int64(ts) }
-        else { timestamp = nil }
-        userId = try? c.decode(String.self, forKey: .userId)
+
+        // Timestamp: try both `timestamp` and `action_at`, and accept any of
+        // Int / Double / String representations (backend is inconsistent).
+        let tsKeys: [CodingKeys] = [.timestamp, .action_at]
+        var resolvedTs: Int64? = nil
+        for key in tsKeys {
+            if let v = try? c.decode(Int64.self, forKey: key) { resolvedTs = v; break }
+            if let v = try? c.decode(Double.self, forKey: key) { resolvedTs = Int64(v); break }
+            if let s = try? c.decode(String.self, forKey: key), let v = Int64(s) { resolvedTs = v; break }
+        }
+        timestamp = resolvedTs
+
+        // User id: `user_id` or `action_by`. User name: `user_name` (inline
+        // history doesn't ship a name — we resolve via UsersData at display).
+        userId = (try? c.decode(String.self, forKey: .userId))
+            ?? (try? c.decode(String.self, forKey: .action_by))
         userName = try? c.decode(String.self, forKey: .userName)
+    }
+
+    /// Plain memberwise init used when building entries from raw dictionaries
+    /// (e.g. when mirroring the inline `history` array from an invoice row).
+    init(action: String?, details: String?, timestamp: Int64?, userId: String?, userName: String?) {
+        self.action = action; self.details = details; self.timestamp = timestamp
+        self.userId = userId; self.userName = userName
     }
 }
 
@@ -240,7 +262,7 @@ struct PaymentRunDetail {
 
 // MARK: - Payment Run Detail Raw (for getPaymentRun API response)
 
-struct PaymentRunDetailRaw: Codable {
+struct PaymentRunDetailRaw: Decodable {
     var run: PaymentRunRaw?
     var invoices: [InvoiceRaw]?
 

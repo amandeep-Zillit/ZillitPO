@@ -22,6 +22,12 @@ enum CardExpenseCodableTask {
     case fetchAllCards((Result<APIResponse<[CardRaw]>?, Error>) -> Void)
     case fetchCard(String, (Result<APIResponse<CardRaw>?, Error>) -> Void)
     case createCard([String: Any], (Result<Data?, Error>) -> Void)
+    case updateCard(String, [String: Any], (Result<Data?, Error>) -> Void)
+    case deleteCard(String, (Result<Data?, Error>) -> Void)
+    case fetchCardHistoryById(String, (Result<APIResponse<[CardHistoryEntryRaw]>?, Error>) -> Void)
+    case suspendCard(String, [String: Any], (Result<Data?, Error>) -> Void)
+    case reactivateCard(String, [String: Any], (Result<Data?, Error>) -> Void)
+    case activateCard(String, [String: Any], (Result<Data?, Error>) -> Void)
     case approveCard(String, [String: Any], (Result<Data?, Error>) -> Void)
     case rejectCard(String, [String: Any], (Result<Data?, Error>) -> Void)
     case overrideCard(String, [String: Any], (Result<Data?, Error>) -> Void)
@@ -38,6 +44,19 @@ enum CardExpenseCodableTask {
     case fetchReceiptDetail(String, (Result<APIResponse<ReceiptRaw>?, Error>) -> Void)
     case fetchApprovalQueue((Result<APIResponse<[CardTransactionRaw]>?, Error>) -> Void)
     case overrideApproval(String, [String: Any], (Result<Data?, Error>) -> Void)
+
+    // Receipt matching
+    case matchReceipt(String, [String: Any], (Result<Data?, Error>) -> Void)
+
+    // Top-Up actions
+    case markTopUp(String, [String: Any], (Result<Data?, Error>) -> Void)
+    case skipTopUp(String, (Result<Data?, Error>) -> Void)
+
+    // Smart Alert actions
+    case resolveAlert(String, [String: Any], (Result<Data?, Error>) -> Void)
+    case dismissAlert(String, (Result<Data?, Error>) -> Void)
+    case investigateAlert(String, [String: Any], (Result<Data?, Error>) -> Void)
+    case revertAlert(String, [String: Any], (Result<Data?, Error>) -> Void)
 
     // Bank Accounts
     case fetchBankAccounts((Result<APIResponse<[ProductionBankAccountRaw]>?, Error>) -> Void)
@@ -101,6 +120,30 @@ case .fetchMyReceipts(let userId, let completion):
             guard let req = CardExpenseRequest.createCard(body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: req, completion: completion)
 
+        case .updateCard(let id, let body, let completion):
+            guard let req = CardExpenseRequest.updateCardReq(id, body).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: req, completion: completion)
+
+        case .deleteCard(let id, let completion):
+            guard let req = CardExpenseRequest.deleteCardReq(id).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: req, completion: completion)
+
+        case .fetchCardHistoryById(let id, let completion):
+            guard let req = CardExpenseRequest.fetchCardHistoryById(id).urlRequest else { return nil }
+            return APIClient.shared.codableResultTask(with: req, completion: completion)
+
+        case .suspendCard(let id, let body, let completion):
+            guard let req = CardExpenseRequest.suspendCardReq(id, body).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: req, completion: completion)
+
+        case .reactivateCard(let id, let body, let completion):
+            guard let req = CardExpenseRequest.reactivateCardReq(id, body).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: req, completion: completion)
+
+        case .activateCard(let id, let body, let completion):
+            guard let req = CardExpenseRequest.activateCardReq(id, body).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: req, completion: completion)
+
         case .approveCard(let id, let body, let completion):
             guard let req = CardExpenseRequest.approveCardReq(id, body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: req, completion: completion)
@@ -147,6 +190,37 @@ case .fetchMyReceipts(let userId, let completion):
 
         case .overrideApproval(let id, let body, let completion):
             guard let req = CardExpenseRequest.overrideApproval(id, body).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: req, completion: completion)
+
+        // Receipt matching
+        case .matchReceipt(let id, let body, let completion):
+            guard let req = CardExpenseRequest.matchReceipt(id, body).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: req, completion: completion)
+
+        // Top-Up actions
+        case .markTopUp(let id, let body, let completion):
+            guard let req = CardExpenseRequest.markTopUp(id, body).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: req, completion: completion)
+
+        case .skipTopUp(let id, let completion):
+            guard let req = CardExpenseRequest.skipTopUp(id).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: req, completion: completion)
+
+        // Smart Alert actions
+        case .resolveAlert(let id, let body, let completion):
+            guard let req = CardExpenseRequest.resolveAlert(id, body).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: req, completion: completion)
+
+        case .dismissAlert(let id, let completion):
+            guard let req = CardExpenseRequest.dismissAlert(id).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: req, completion: completion)
+
+        case .investigateAlert(let id, let body, let completion):
+            guard let req = CardExpenseRequest.investigateAlert(id, body).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: req, completion: completion)
+
+        case .revertAlert(let id, let body, let completion):
+            guard let req = CardExpenseRequest.revertAlert(id, body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: req, completion: completion)
 
         case .fetchBankAccounts(let completion):

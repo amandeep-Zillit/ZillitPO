@@ -55,4 +55,12 @@ struct FormatUtils {
         let df = DateFormatter(); df.dateFormat = "dd MMM yyyy | h:mm a"; df.locale = Locale(identifier: "en_GB")
         return df.string(from: Date(timeIntervalSince1970: Double(ms) / 1000))
     }
+
+    /// History-row style: "14 Apr 2026, 00:46"
+    /// Comma-separated date + 24-hour zero-padded time, used for audit trails.
+    static func formatHistoryDateTime(_ ms: Int64?) -> String {
+        guard let ms = ms, ms > 0 else { return "—" }
+        let df = DateFormatter(); df.dateFormat = "dd MMM yyyy, HH:mm"; df.locale = Locale(identifier: "en_GB")
+        return df.string(from: Date(timeIntervalSince1970: Double(ms) / 1000))
+    }
 }

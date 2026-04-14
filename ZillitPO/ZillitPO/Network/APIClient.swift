@@ -111,7 +111,17 @@ class APIClient {
             let decoded = tryDecode(T.self, from: data)
             if decoded == nil {
                 let raw = String(data: data, encoding: .utf8) ?? "<binary>"
-                print("  ⚠️ Decode failed for \(T.self). Raw: \(raw.prefix(500))")
+                // Suppress the noisy warning when the server explicitly returned
+                // `{"data":null}` or `{"data":[]}` — that's a valid "empty" response,
+                // not a schema mismatch.
+                let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                let isEmptyEnvelope = trimmed == "{\"data\":null}"
+                    || trimmed == "{\"data\": null}"
+                    || trimmed == "{\"data\":[]}"
+                    || trimmed == "{\"data\": []}"
+                if !isEmptyEnvelope {
+                    print("  ⚠️ Decode failed for \(T.self). Raw: \(raw.prefix(500))")
+                }
             }
             completion(.success(APIResponse<T>(data: decoded)))
         }
@@ -375,7 +385,7 @@ enum FlexibleCustomFields: Codable {
 
 // MARK: - Invoice Raw API type
 
-struct InvoiceRaw: Codable {
+struct InvoiceRaw: Decodable {
     var id: String
     var project_id: String?; var invoice_number: String?; var vendor_id: String?
     var department_id: String?; var description: String?
@@ -393,6 +403,18 @@ struct InvoiceRaw: Codable {
     var invoice_date: Int?; var due_date: Int?; var effective_date: Int?
     var created_at: Int?; var updated_at: Int?; var updated_by: String?
     var upload_id: String?; var file: String?
+    /// Directly-resolved vendor name the backend returns on new invoice rows.
+    /// Preferred over `supplier_name` when the client-side vendor lookup misses
+    /// (e.g. vendors haven't loaded yet).
+    var vendor_name: String?
+    /// Inline history array: `[{ action, action_at, action_by }]`
+    /// When present, we surface it to the InvoiceHistory view immediately
+    /// instead of waiting for the separate history endpoint.
+    var history: [InvoiceHistoryEntry]?
+    /// Rich per-link PO summary from the backend — includes po_number,
+    /// po_vendor_id, po_gross_total so we can render the "Linked POs"
+    /// section without needing the PO list to be loaded first.
+    var linked_pos: [LinkedPORaw]?
 
     enum CodingKeys: String, CodingKey {
         case id, project_id, invoice_number, vendor_id, department_id, description
@@ -405,6 +427,20 @@ struct InvoiceRaw: Codable {
         case tags, invoice_date, due_date, effective_date
         case created_at, updated_at, updated_by
         case upload_id, file
+        // Alternate field names the server may use for the uploaded document.
+        // We decode all of them and fall through to the first non-empty value.
+        case fileName, file_name, filePath, file_path, fileUrl, file_url
+        case documentUrl, document_url, attachment, attachment_url, attachmentUrl
+        case document_name, documentName, upload_file_name, original_name, uploadId
+        // Newer backend shape: attachments is an array of attachment objects
+        // Each has { filename, stored_filename, upload_id, path, mime_type, size }
+        case attachments
+        // Directly-resolved vendor name on the invoice row
+        case vendor_name
+        // Inline history array
+        case history
+        // Rich per-link PO summary array
+        case linked_pos
     }
 
     init(from decoder: Decoder) throws {
@@ -434,6 +470,9 @@ struct InvoiceRaw: Codable {
         rejection_reason = try? c.decode(String.self, forKey: .rejection_reason)
         rejected_by = try? c.decode(String.self, forKey: .rejected_by)
         updated_by = try? c.decode(String.self, forKey: .updated_by)
+        vendor_name = try? c.decode(String.self, forKey: .vendor_name)
+        history = try? c.decode([InvoiceHistoryEntry].self, forKey: .history)
+        linked_pos = try? c.decode([LinkedPORaw].self, forKey: .linked_pos)
         tags = try? c.decode([String].self, forKey: .tags)
         approvals = try? c.decode(FlexibleApprovals.self, forKey: .approvals)
         line_items = try? c.decode(FlexibleLineItems.self, forKey: .line_items)
@@ -446,8 +485,102 @@ struct InvoiceRaw: Codable {
         rejected_at = flexibleIntDecode(c, .rejected_at)
         created_at = flexibleIntDecode(c, .created_at)
         updated_at = flexibleIntDecode(c, .updated_at)
-        upload_id = try? c.decode(String.self, forKey: .upload_id)
-        file = try? c.decode(String.self, forKey: .file)
+        // First, try to decode the attachments array — this is what the
+        // current backend actually returns. Each entry has `filename`,
+        // `stored_filename`, `upload_id`, `path`, `mime_type`, `size`.
+        let firstAttachment: InvoiceAttachmentRaw? = {
+            if let arr = try? c.decode([InvoiceAttachmentRaw].self, forKey: .attachments),
+               let first = arr.first { return first }
+            return nil
+        }()
+
+        // upload_id — prefer the attachment's upload_id, then flat fields.
+        upload_id = (firstAttachment?.upload_id)
+            ?? (try? c.decode(String.self, forKey: .upload_id))
+            ?? (try? c.decode(String.self, forKey: .uploadId))
+
+        // Flexible file/document field — pick the first non-empty match the
+        // server sent back. Backends vary wildly here (some send `file`,
+        // some `fileName`, some `file_path`, some `documentUrl`, etc.)
+        let fileCandidates: [CodingKeys] = [
+            .file, .fileName, .file_name, .filePath, .file_path,
+            .fileUrl, .file_url, .documentUrl, .document_url,
+            .attachment, .attachment_url, .attachmentUrl,
+            .document_name, .documentName, .upload_file_name, .original_name
+        ]
+        var resolvedFile: String? = nil
+        for key in fileCandidates {
+            if let v = try? c.decode(String.self, forKey: key), !v.isEmpty {
+                resolvedFile = v; break
+            }
+        }
+        // If we didn't find a flat field, fall back to the attachment
+        // object's filename / stored_filename / path (in that order).
+        if resolvedFile == nil, let att = firstAttachment {
+            if let f = att.stored_filename, !f.isEmpty { resolvedFile = f }
+            else if let f = att.filename, !f.isEmpty { resolvedFile = f }
+            else if let p = att.path, !p.isEmpty {
+                // "/home/ubuntu/app/invoices-server/uploads/abc.png" → "abc.png"
+                resolvedFile = (p as NSString).lastPathComponent
+            }
+        }
+        file = resolvedFile
+    }
+}
+
+/// Element of the backend's `attachments: [...]` array on invoice rows.
+/// Example entry:
+/// {
+///   "path": "/home/ubuntu/app/invoices-server/uploads/1776107650863-975643146.png",
+///   "size": 31064,
+///   "filename": "1776107650863-975643146.png",
+///   "mime_type": "image/png",
+///   "upload_id": "0bfe910c-cb42-43a3-9074-f5aaf33e8c0d",
+///   "stored_filename": "1776107650863-975643146.png"
+/// }
+struct InvoiceAttachmentRaw: Decodable {
+    var path: String?
+    var size: Int?
+    var filename: String?
+    var mime_type: String?
+    var upload_id: String?
+    var stored_filename: String?
+}
+
+/// Element of the backend's `linked_pos: [...]` array on invoice rows.
+/// Example entry:
+/// {
+///   "po_id": "ef6d3e96-...",
+///   "po_number": "PO-0003",
+///   "po_vendor_id": "c2864cac-...",
+///   "po_gross_total": 440,
+///   "invoice_number": "45345",
+///   "invoice_vendor_id": "c2864cac-...",
+///   "invoice_gross_amount": 230
+/// }
+struct LinkedPORaw: Decodable {
+    var po_id: String?
+    var po_number: String?
+    var po_vendor_id: String?
+    var po_gross_total: Double?
+    var invoice_number: String?
+    var invoice_vendor_id: String?
+    var invoice_gross_amount: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case po_id, po_number, po_vendor_id, po_gross_total
+        case invoice_number, invoice_vendor_id, invoice_gross_amount
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        po_id = try? c.decode(String.self, forKey: .po_id)
+        po_number = try? c.decode(String.self, forKey: .po_number)
+        po_vendor_id = try? c.decode(String.self, forKey: .po_vendor_id)
+        invoice_number = try? c.decode(String.self, forKey: .invoice_number)
+        invoice_vendor_id = try? c.decode(String.self, forKey: .invoice_vendor_id)
+        po_gross_total = flexibleDoubleDecode(c, .po_gross_total)
+        invoice_gross_amount = flexibleDoubleDecode(c, .invoice_gross_amount)
     }
 }
 
@@ -474,7 +607,11 @@ extension InvoiceRaw {
         inv.grossAmount = gross_amount ?? 0
         inv.status = status ?? "draft"; inv.approvalStatus = approval_status ?? "pending"
         inv.payMethod = pay_method; inv.costCentre = cost_centre; inv.assignedTo = assigned_to
-        inv.supplierName = v?.name ?? supplier_name ?? ""; inv.reference = reference
+        // Prefer client-side vendor lookup → backend's direct vendor_name →
+        // legacy supplier_name, so the supplier column populates even if the
+        // vendors list hasn't loaded yet.
+        inv.supplierName = v?.name ?? vendor_name ?? supplier_name ?? ""
+        inv.reference = reference
         inv.vendorAddress = v?.address.formatted ?? ""
         inv.vendorEmail = v?.email ?? ""
         inv.vendorPhone = v != nil ? "\(v!.phone.countryCode) \(v!.phone.number)".trimmingCharacters(in: .whitespaces) : ""
@@ -482,6 +619,22 @@ extension InvoiceRaw {
         inv.vendorVatNumber = v?.vatNumber
         inv.holdReason = hold_reason; inv.holdNote = hold_note; inv.isOverdue = is_overdue ?? false
         inv.poId = po_id; inv.poNumber = po_number; inv.poIds = po_ids ?? []
+        // Build rich LinkedPOSummary entries, resolving each PO's vendor
+        // name from the vendors list (falls back to an empty string).
+        inv.linkedPOs = (linked_pos ?? []).map { lp -> LinkedPOSummary in
+            let vendorName: String = {
+                guard let vid = lp.po_vendor_id, !vid.isEmpty else { return "" }
+                return vendors.first { $0.id == vid }?.name ?? ""
+            }()
+            return LinkedPOSummary(
+                poId: lp.po_id ?? "",
+                poNumber: lp.po_number ?? "",
+                poVendorId: lp.po_vendor_id ?? "",
+                poVendorName: vendorName,
+                poGrossTotal: lp.po_gross_total ?? 0,
+                currency: currency ?? "GBP"
+            )
+        }
         inv.approvals = apps; inv.approvedBy = approved_by
         inv.approvedAt = approved_at.map { Int64($0) }
         inv.rejectedBy = rejected_by; inv.rejectedAt = rejected_at.map { Int64($0) }

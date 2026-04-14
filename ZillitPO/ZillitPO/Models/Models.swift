@@ -597,6 +597,19 @@ struct FormField: Codable, Identifiable {
 
 // MARK: - Invoices
 
+/// Lightweight per-link summary used in the "Linked POs" section of the
+/// invoice detail page. Built from the `linked_pos` array the backend
+/// returns alongside each invoice row.
+struct LinkedPOSummary: Identifiable, Equatable {
+    var id: String { poId.isEmpty ? poNumber : poId }
+    var poId: String
+    var poNumber: String
+    var poVendorId: String
+    var poVendorName: String   // resolved client-side via vendor lookup
+    var poGrossTotal: Double
+    var currency: String
+}
+
 struct Invoice: Identifiable, Equatable {
     var id: String = UUID().uuidString
     var projectId: String = ""
@@ -623,6 +636,10 @@ struct Invoice: Identifiable, Equatable {
     var poId: String?
     var poNumber: String?
     var poIds: [String] = []
+    /// Richer per-link metadata when the backend sends `linked_pos`: each entry
+    /// already has the PO number, the PO's vendor id, and the PO's gross total
+    /// — so we can render the "Linked POs" section without hitting the PO list.
+    var linkedPOs: [LinkedPOSummary] = []
     var lineItems: [LineItem] = []
     var approvals: [Approval] = []
     var approvedBy: String?

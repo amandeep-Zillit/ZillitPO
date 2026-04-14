@@ -113,6 +113,27 @@ extension POViewModel {
         // Each PO / Invoice / PaymentRuns page loads its own data on appear.
     }
 
+    func loadFloatFormTemplate() {
+        POCodableTask.fetchFloatFormTemplate { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let response):
+                    let tpl = response?.data
+                    self?.floatFormTemplate = tpl
+                    print("📋 Float form template: \(tpl?.template.count ?? 0) sections")
+                    if let sections = tpl?.template {
+                        for s in sections {
+                            let fieldLabels = s.fields.map { "\($0.name)[\($0.label ?? "nil")]sd=\($0.systemDefault ?? false)" }
+                            print("  📌 Section key=\(s.key) label=\(s.label) order=\(s.order) fields=\(fieldLabels)")
+                        }
+                    }
+                case .failure(let error):
+                    print("❌ Fetch float form template failed: \(error)")
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
     func loadFormTemplate() {
         POCodableTask.fetchFormTemplate { [weak self] result in
             DispatchQueue.main.async {
@@ -205,9 +226,11 @@ extension POViewModel {
     // MARK: - Invoices
 
     func loadInvoices() {
-        let path = "/api/v2/invoices?per_page=200"
+        isLoadingInvoices = true
+        let path = "/api/v2/invoices?perPage=200"
         POCodableTask.fetchInvoices(path) { [weak self] result in
             DispatchQueue.main.async {
+                self?.isLoadingInvoices = false
                 switch result {
                 case .success(let response):
                     let raw = response?.data ?? []
@@ -215,7 +238,18 @@ extension POViewModel {
                     let invoices = raw.map { $0.toInvoice(vendors: v, departments: d) }
                     self?.invoices = invoices
                     self?.updateInvoiceApproverStatus()
-                    print("✅ Loaded \(invoices.count) invoices")
+                    // Mirror the inline `history` array from each invoice row
+                    // into the per-invoice history cache so the History page
+                    // has data instantly, before (or instead of) the separate
+                    // /history endpoint returns.
+                    for (idx, r) in raw.enumerated() where !(r.history?.isEmpty ?? true) {
+                        let id = invoices[idx].id
+                        // Sort newest-first for display consistency
+                        let sorted = (r.history ?? []).sorted { ($0.timestamp ?? 0) > ($1.timestamp ?? 0) }
+                        self?.invoiceHistory[id] = sorted
+                    }
+                    let withFile = invoices.filter { ($0.file?.isEmpty == false) || ($0.uploadId?.isEmpty == false) }.count
+                    print("✅ Loaded \(invoices.count) invoices (\(withFile) with attachments)")
                 case .failure(let error):
                     print("❌ Fetch invoices failed: \(error)")
                 }
@@ -826,6 +860,10 @@ extension POViewModel {
         if let p = ext.po_number, !p.isEmpty { body["po_number"] = p }
         if !defaultDept.isEmpty { body["department_id"] = defaultDept }
         if let uid = uploadId { body["upload_id"] = uid }
+        // Persist the uploaded filename on the invoice itself so the View
+        // button (which keys off `invoice.file`) works immediately without
+        // relying on the backend to copy it from the upload record.
+        if let f = ext.file, !f.isEmpty { body["file"] = f }
         // Supplier details
         if let supplier = ext.supplier {
             var s: [String: Any] = [:]

@@ -196,7 +196,7 @@ struct CardExpensesAccountantHub: View {
                 Spacer()
                 Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(color)
             }
-            .padding(14).background(Color.white).cornerRadius(12)
+            .padding(14).background(Color.bgSurface).cornerRadius(12)
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(color.opacity(0.3), lineWidth: 1))
             .contentShape(Rectangle())
         }.buttonStyle(PlainButtonStyle())
@@ -264,7 +264,7 @@ struct AssignPhysicalCardPage: View {
                     }.frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(16)
-                .background(Color.white).cornerRadius(12)
+                .background(Color.bgSurface).cornerRadius(12)
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
 
                 // ── Current Digital Card preview ──
@@ -303,7 +303,7 @@ struct AssignPhysicalCardPage: View {
                         .font(.system(size: 16, weight: .medium, design: .monospaced))
                         .padding(14)
                     }
-                    .background(Color.white).cornerRadius(10)
+                    .background(Color.bgSurface).cornerRadius(10)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
                 }
 
@@ -360,12 +360,10 @@ struct AssignPhysicalCardPage: View {
     private func assignCard() {
         guard canSubmit else { return }
         isSubmitting = true
-        if let idx = appState.userCards.firstIndex(where: { $0.id == card.id }) {
-            appState.userCards[idx].physicalCardNumber = rawDigits
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+        // Call activateCard — this assigns the physical card number AND flips status to active.
+        appState.activateCard(id: card.id, cardNumber: rawDigits) { success in
             isSubmitting = false
-            showSuccess = true
+            if success { showSuccess = true }
         }
     }
 }
@@ -560,7 +558,7 @@ struct CoordinatorApprovalQueueView: View {
                             Text("Reason").font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
                             TextField("Enter reason…", text: $rejectReason)
                                 .font(.system(size: 14)).padding(10)
-                                .background(Color.white).cornerRadius(8)
+                                .background(Color.bgSurface).cornerRadius(8)
                                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                         }
                         Spacer()
@@ -606,7 +604,7 @@ struct CoordinatorApprovalQueueView: View {
             }
             .padding(10)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(Color.white).cornerRadius(10)
+            .background(Color.bgSurface).cornerRadius(10)
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(isActive ? Color.goldDark : Color.borderColor, lineWidth: isActive ? 2 : 1))
         }.buttonStyle(PlainButtonStyle())
     }
@@ -690,7 +688,7 @@ struct CardCodingQueuePage: View {
             }
         }
         .padding(12)
-        .background(Color.white).cornerRadius(10)
+        .background(Color.bgSurface).cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 }
@@ -707,6 +705,8 @@ struct ReceiptInboxPage: View {
     @State private var personalExpanded = true
     @State private var selectedReceipt: Receipt? = nil
     @State private var navigateToDetail = false
+    @State private var showManualMatch = false
+    @State private var matchingReceiptId = ""
 
     private var inboxItems: [Receipt] { appState.inboxReceipts }
 
@@ -723,12 +723,18 @@ struct ReceiptInboxPage: View {
         ReceiptInboxPage.suggestedStatuses.contains(r.matchStatus.lowercased())
     }
 
+    /// A confirmed receipt has history entries indicating the match was already acted on.
+    private func isAlreadyConfirmed(_ r: Receipt) -> Bool {
+        r.history.contains { entry in
+            let a = (entry.action ?? "").lowercased()
+            return a.contains("confirmed") || a.contains("match confirmed")
+        }
+    }
+
     private var systemMatched: [Receipt] {
         inboxItems.filter { isSystemMatch($0) }
     }
-    // No Match — match_status "unmatched" AND no transaction already linked.
-    // Records with a transaction_id set are either pending_receipt (awaiting file upload)
-    // or already manually matched — neither belongs in the No Match inbox section.
+    // No Match — unmatched receipts with no transaction link (user-uploaded, no match found).
     private var noMatch: [Receipt] {
         inboxItems.filter { r in
             r.matchStatus.lowercased() == "unmatched" &&
@@ -782,7 +788,7 @@ struct ReceiptInboxPage: View {
                             expanded: $duplicateExpanded,
                             emptyText: "No duplicate receipts detected.",
                             trailing: AnyView(EmptyView()),
-                            sectionKind: .other,
+                            sectionKind: .duplicate,
                             onTap: { r in selectedReceipt = r; navigateToDetail = true }
                         )
                         section(
@@ -794,7 +800,7 @@ struct ReceiptInboxPage: View {
                             expanded: $personalExpanded,
                             emptyText: "No personal receipts flagged.",
                             trailing: AnyView(EmptyView()),
-                            sectionKind: .other,
+                            sectionKind: .personal,
                             onTap: { r in selectedReceipt = r; navigateToDetail = true }
                         )
                     }
@@ -814,7 +820,11 @@ struct ReceiptInboxPage: View {
             }
         }
         .navigationBarTitle(Text("Receipt Inbox"), displayMode: .inline)
-        .onAppear { appState.loadInboxReceipts() }
+        .onAppear { appState.loadInboxReceipts(); appState.loadCardTransactions() }
+        .sheet(isPresented: $showManualMatch) {
+            ManualMatchSheet(receiptId: matchingReceiptId, isPresented: $showManualMatch)
+                .environmentObject(appState)
+        }
     }
 
     private var rerunButton: some View {
@@ -829,7 +839,7 @@ struct ReceiptInboxPage: View {
         }.buttonStyle(BorderlessButtonStyle())
     }
 
-    private enum InboxSectionKind { case systemMatched, noMatch, other }
+    private enum InboxSectionKind { case systemMatched, noMatch, duplicate, personal }
 
     @ViewBuilder
     private func section(icon: String, title: String, subtitle: String, color: Color, items: [Receipt], expanded: Binding<Bool>, emptyText: String, trailing: AnyView, sectionKind: InboxSectionKind, onTap: @escaping (Receipt) -> Void) -> some View {
@@ -873,9 +883,7 @@ struct ReceiptInboxPage: View {
                     }
                     .padding(.horizontal, 14).padding(.vertical, 14)
                 }
-                .background(Color(.systemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: expanded.wrappedValue ? 0 : 10))
-                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+                .background(Color.bgSurface)
                 .contentShape(Rectangle())
             }.buttonStyle(PlainButtonStyle())
 
@@ -896,7 +904,7 @@ struct ReceiptInboxPage: View {
                 }
             }
         }
-        .background(Color.white).cornerRadius(12)
+        .background(Color.bgSurface).cornerRadius(12)
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
     }
 
@@ -916,8 +924,13 @@ struct ReceiptInboxPage: View {
         }()
         let isSystemMatched = sectionKind == .systemMatched
         let isNoMatch = sectionKind == .noMatch
+        let isDuplicate = sectionKind == .duplicate
+        let isPersonal = sectionKind == .personal
         let hasLinkedTxn = !r.linkedMerchant.isEmpty || r.linkedAmount != nil
-        let isPosted = r.workflowStatus.lowercased() == "posted"
+        let wfLower = r.workflowStatus.lowercased()
+        let isPosted = wfLower == "posted" || wfLower == "approved" || wfLower == "confirmed"
+        let isConfirmed = isAlreadyConfirmed(r)
+        let showAttach = isSystemMatched && !isPosted && !isConfirmed
 
         return VStack(alignment: .leading, spacing: 0) {
 
@@ -1010,17 +1023,10 @@ struct ReceiptInboxPage: View {
             }
 
             // ── Action buttons ────────────────────────────────────
-            if isSystemMatched || isNoMatch {
-                Divider()
-                HStack(spacing: 10) {
-                    Button(action: { }) {
-                        Text("Manual Match")
-                            .font(.system(size: 12, weight: .semibold)).foregroundColor(.primary)
-                            .frame(maxWidth: .infinity).padding(.vertical, 9)
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
-                    }.buttonStyle(BorderlessButtonStyle())
-
-                    if isSystemMatched && !isPosted {
+            Divider()
+            HStack(spacing: 10) {
+                if isSystemMatched {
+                    if showAttach {
                         Button(action: { appState.attachInboxReceipt(r.id) }) {
                             HStack(spacing: 5) {
                                 Image(systemName: "paperclip").font(.system(size: 11, weight: .semibold))
@@ -1032,8 +1038,61 @@ struct ReceiptInboxPage: View {
                         }.buttonStyle(BorderlessButtonStyle())
                     }
                 }
-                .padding(.horizontal, 14).padding(.vertical, 10)
+
+                if isNoMatch {
+                    Button(action: { matchingReceiptId = r.id; showManualMatch = true }) {
+                        Text("Manual Match")
+                            .font(.system(size: 12, weight: .semibold)).foregroundColor(.primary)
+                            .frame(maxWidth: .infinity).padding(.vertical, 9)
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                    }.buttonStyle(BorderlessButtonStyle())
+                }
+
+                if isDuplicate {
+                    Button(action: { appState.confirmReceipt(r) }) {
+                        HStack(spacing: 5) {
+                            Image(systemName: "checkmark").font(.system(size: 11, weight: .semibold))
+                            Text("Keep").font(.system(size: 12, weight: .bold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity).padding(.vertical, 9)
+                        .background(Color(red: 0.0, green: 0.6, blue: 0.5)).cornerRadius(8)
+                    }.buttonStyle(BorderlessButtonStyle())
+
+                    Button(action: { appState.deleteReceipt(r) }) {
+                        HStack(spacing: 5) {
+                            Image(systemName: "trash").font(.system(size: 11, weight: .semibold))
+                            Text("Remove").font(.system(size: 12, weight: .bold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity).padding(.vertical, 9)
+                        .background(Color.red).cornerRadius(8)
+                    }.buttonStyle(BorderlessButtonStyle())
+                }
+
+                if isPersonal {
+                    Button(action: { appState.confirmReceipt(r) }) {
+                        HStack(spacing: 5) {
+                            Image(systemName: "briefcase").font(.system(size: 11, weight: .semibold))
+                            Text("Mark Business").font(.system(size: 12, weight: .bold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity).padding(.vertical, 9)
+                        .background(Color(red: 0.0, green: 0.6, blue: 0.5)).cornerRadius(8)
+                    }.buttonStyle(BorderlessButtonStyle())
+
+                    Button(action: { appState.flagReceiptPersonal(r) }) {
+                        HStack(spacing: 5) {
+                            Image(systemName: "person.fill").font(.system(size: 11, weight: .semibold))
+                            Text("Confirm Personal").font(.system(size: 12, weight: .bold))
+                        }
+                        .foregroundColor(.primary)
+                        .frame(maxWidth: .infinity).padding(.vertical, 9)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                    }.buttonStyle(BorderlessButtonStyle())
+                }
             }
+            .padding(.horizontal, 14).padding(.vertical, 10)
         }
     }
 
@@ -1076,7 +1135,7 @@ struct SmartAlertsPage: View {
     @State private var showFilterSheet = false
     @State private var navigateToAlertId: String? = nil
 
-    private let filters = ["All", "Anomaly", "Duplicate Risk", "Velocity", "Merchant", "Resolved"]
+    private let filters = ["All", "Anomaly", "Duplicate Risk", "Velocity", "Merchant", "Under Investigation", "Resolved"]
     private let pink   = Color(red: 0.91, green: 0.29, blue: 0.48)
     private let teal   = Color(red: 0.0,  green: 0.6,  blue: 0.5)
     private let orange = Color(red: 0.95, green: 0.55, blue: 0.15)
@@ -1089,6 +1148,7 @@ struct SmartAlertsPage: View {
         case "Duplicate Risk": return alerts.filter { ["duplicate_risk","duplicate"].contains($0.type.lowercased()) }
         case "Velocity":       return alerts.filter { $0.type.lowercased() == "velocity" }
         case "Merchant":       return alerts.filter { $0.type.lowercased() == "merchant" }
+        case "Under Investigation": return alerts.filter { $0.status.lowercased() == "under_investigation" }
         case "Resolved":       return alerts.filter { $0.status.lowercased() == "resolved" }
         default:               return alerts
         }
@@ -1116,7 +1176,7 @@ struct SmartAlertsPage: View {
                                         .font(.system(size: 8, weight: .medium)).foregroundColor(.gray)
                                 }
                                 .padding(.horizontal, 12).padding(.vertical, 8)
-                                .background(Color.white).cornerRadius(6)
+                                .background(Color.bgSurface).cornerRadius(6)
                                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
                             }
                             .buttonStyle(BorderlessButtonStyle())
@@ -1169,7 +1229,8 @@ struct SmartAlertsPage: View {
     private func alertCard(_ alert: SmartAlert) -> some View {
         let pink   = self.pink
         let orange = self.orange
-        let isActive = alert.status.lowercased() == "active"
+        let isActive = alert.status.lowercased() == "active" || alert.status.lowercased() == "under_investigation"
+        let isInvestigating = alert.status.lowercased() == "under_investigation"
         let isPendingTopUp = isTopUpAlert(alert)
         let headerColor: Color = isPendingTopUp ? .purple : pink
         let barColor: Color = {
@@ -1291,37 +1352,51 @@ struct SmartAlertsPage: View {
                             selection: $navigateToAlertId
                         ) { EmptyView() }.frame(width: 0, height: 0).hidden()
 
-                        Button(action: { navigateToAlertId = alert.id }) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "magnifyingglass").font(.system(size: 11, weight: .medium))
-                                Text("Investigate").font(.system(size: 12, weight: .semibold))
-                            }
-                            .foregroundColor(.primary)
-                            .padding(.horizontal, 12).padding(.vertical, 7)
-                            .background(Color.white)
-                            .cornerRadius(6)
-                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
-                        }.buttonStyle(BorderlessButtonStyle())
+                        if isInvestigating {
+                            // Under Investigation — tap to revert back to active
+                            Button(action: { appState.revertSmartAlert(alert.id) }) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "eye.fill").font(.system(size: 11, weight: .medium))
+                                    Text("Under Investigation").font(.system(size: 12, weight: .bold))
+                                }
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 12).padding(.vertical, 7)
+                                .background(Color.orange).cornerRadius(6)
+                            }.buttonStyle(BorderlessButtonStyle())
+                        } else {
+                            // Active state — show Investigate, Resolve, Dismiss
+                            Button(action: { appState.investigateSmartAlert(alert.id) }) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "magnifyingglass").font(.system(size: 11, weight: .medium))
+                                    Text("Investigate").font(.system(size: 12, weight: .semibold))
+                                }
+                                .foregroundColor(.primary)
+                                .padding(.horizontal, 12).padding(.vertical, 7)
+                                .background(Color.bgSurface)
+                                .cornerRadius(6)
+                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
+                            }.buttonStyle(BorderlessButtonStyle())
 
-                        Spacer().frame(width: 8)
+                            Spacer().frame(width: 8)
 
-                        Button(action: { appState.resolveSmartAlert(alert.id) }) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "checkmark.circle.fill").font(.system(size: 11, weight: .medium))
-                                Text("Resolve").font(.system(size: 12, weight: .semibold))
-                            }
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 12).padding(.vertical, 7)
-                            .background(teal).cornerRadius(6)
-                        }.buttonStyle(BorderlessButtonStyle())
+                            Button(action: { appState.resolveSmartAlert(alert.id) }) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "checkmark.circle.fill").font(.system(size: 11, weight: .medium))
+                                    Text("Resolve").font(.system(size: 12, weight: .semibold))
+                                }
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 12).padding(.vertical, 7)
+                                .background(teal).cornerRadius(6)
+                            }.buttonStyle(BorderlessButtonStyle())
 
-                        Spacer().frame(width: 12)
+                            Spacer().frame(width: 12)
 
-                        Button(action: { appState.dismissSmartAlert(alert.id) }) {
-                            Text("Dismiss")
-                                .font(.system(size: 12))
-                                .foregroundColor(.secondary)
-                        }.buttonStyle(BorderlessButtonStyle())
+                            Button(action: { appState.dismissSmartAlert(alert.id) }) {
+                                Text("Dismiss")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                            }.buttonStyle(BorderlessButtonStyle())
+                        }
 
                         Spacer()
                     }
@@ -1336,7 +1411,7 @@ struct SmartAlertsPage: View {
                 Spacer()
             }
         )
-        .background(Color.white)
+        .background(Color.bgSurface)
         .cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(barColor.opacity(0.2), lineWidth: 1))
     }
@@ -1372,6 +1447,8 @@ struct SmartAlertsPage: View {
             switch lower {
             case "active":
                 return ("Active", Color(red: 0.0, green: 0.6, blue: 0.3), Color(red: 0.0, green: 0.6, blue: 0.3).opacity(0.12))
+            case "investigating":
+                return ("Under Investigation", .orange, Color.orange.opacity(0.12))
             case "resolved":
                 return ("Resolved", teal, teal.opacity(0.12))
             case "dismissed":
@@ -1482,7 +1559,7 @@ struct SmartAlertDetailPage: View {
                     }
                     .padding(14)
                 }
-                .background(Color.white).cornerRadius(12)
+                .background(Color.bgSurface).cornerRadius(12)
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.91, green: 0.29, blue: 0.48).opacity(0.3), lineWidth: 1.5))
 
                 // Actions
@@ -1508,7 +1585,7 @@ struct SmartAlertDetailPage: View {
                             Text("Dismiss").font(.system(size: 13, weight: .bold)).foregroundColor(.gray)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 12)
-                                .background(Color.white)
+                                .background(Color.bgSurface)
                                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                                 .cornerRadius(8)
                         }.buttonStyle(BorderlessButtonStyle())
@@ -1561,6 +1638,8 @@ struct SmartAlertDetailPage: View {
             switch lower {
             case "active":
                 return ("Active", pink, pink.opacity(0.12))
+            case "investigating":
+                return ("Under Investigation", .orange, Color.orange.opacity(0.12))
             case "resolved":
                 return ("Resolved", Color(red: 0.0, green: 0.6, blue: 0.5), Color(red: 0.0, green: 0.6, blue: 0.5).opacity(0.12))
             case "dismissed":
@@ -1676,7 +1755,7 @@ struct PendingCodingPage: View {
                 }
             }
         }
-        .background(Color.white).cornerRadius(10)
+        .background(Color.bgSurface).cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 
@@ -1805,7 +1884,7 @@ struct PendingCodingDetailPage: View {
                         }
                     }
                 }
-                .padding(14).background(Color.white).cornerRadius(10)
+                .padding(14).background(Color.bgSurface).cornerRadius(10)
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
 
                 // Processing flags
@@ -1851,7 +1930,7 @@ struct PendingCodingDetailPage: View {
                             if idx < live.processingFlags.count - 1 { Divider().padding(.leading, 44) }
                         }
                     }
-                    .background(Color.white).cornerRadius(10)
+                    .background(Color.bgSurface).cornerRadius(10)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.orange.opacity(0.3), lineWidth: 1))
                 }
 
@@ -1883,7 +1962,7 @@ struct PendingCodingDetailPage: View {
                     Divider().padding(.leading, 14)
                     detailRow("Submitted", live.createdAt > 0 ? FormatUtils.formatTimestamp(live.createdAt) : "—")
                 }
-                .background(Color.white).cornerRadius(10)
+                .background(Color.bgSurface).cornerRadius(10)
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
 
                 // Receipt attachment
@@ -1894,7 +1973,7 @@ struct PendingCodingDetailPage: View {
                         Spacer()
                         Text("Attached").font(.system(size: 10, weight: .semibold)).foregroundColor(.green)
                     }
-                    .padding(14).background(Color.white).cornerRadius(10)
+                    .padding(14).background(Color.bgSurface).cornerRadius(10)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
                 }
 
@@ -1917,7 +1996,7 @@ struct PendingCodingDetailPage: View {
                             }.padding(.horizontal, 14).padding(.vertical, 6)
                         }
                     }
-                    .background(Color.white).cornerRadius(10)
+                    .background(Color.bgSurface).cornerRadius(10)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
                 }
             }
@@ -2053,7 +2132,7 @@ struct AccountantApprovalQueuePage: View {
                 if tx.id != group.items.last?.id { Divider().padding(.leading, 14) }
             }
         }
-        .background(Color.white).cornerRadius(10)
+        .background(Color.bgSurface).cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(group.color.opacity(0.25), lineWidth: 1))
         .clipped()
     }
@@ -2142,7 +2221,7 @@ struct AccountantApprovalQueuePage: View {
                         TextField("e.g. Approver unavailable, deadline critical…", text: $overrideReason)
                             .font(.system(size: 13))
                             .padding(12)
-                            .background(Color.white)
+                            .background(Color.bgSurface)
                             .cornerRadius(10)
                             .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
                     }
@@ -2195,6 +2274,9 @@ struct TopUpToDoPage: View {
     @EnvironmentObject var appState: POViewModel
     @State private var pendingExpanded = true
     @State private var historyExpanded = true
+    @State private var showPartialSheet = false
+    @State private var partialAmount = ""
+    @State private var partialItemId = ""
 
     private var pending: [TopUpItem] {
         appState.topUpQueue.filter { $0.status.lowercased() == "pending" }
@@ -2224,6 +2306,10 @@ struct TopUpToDoPage: View {
         }
         .navigationBarTitle(Text("Top-Up To Do"), displayMode: .inline)
         .onAppear { appState.loadTopUpQueue() }
+        .sheet(isPresented: $showPartialSheet) {
+            PartialTopUpSheet(itemId: partialItemId, isPresented: $showPartialSheet)
+                .environmentObject(appState)
+        }
     }
 
     private var pendingSection: some View {
@@ -2257,7 +2343,7 @@ struct TopUpToDoPage: View {
                 }
             }
         }
-        .background(Color.white).cornerRadius(10)
+        .background(Color.bgSurface).cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(red: 0.95, green: 0.55, blue: 0.15).opacity(0.3), lineWidth: 1))
     }
 
@@ -2328,7 +2414,7 @@ struct TopUpToDoPage: View {
 
             // Action buttons
             HStack(spacing: 8) {
-                Button(action: {}) {
+                Button(action: { appState.markTopUpCompleted(item.id, amount: item.amount) }) {
                     HStack(spacing: 4) {
                         Image(systemName: "checkmark.circle.fill").font(.system(size: 11))
                         Text("Mark Topped Up").font(.system(size: 11, weight: .bold))
@@ -2337,16 +2423,16 @@ struct TopUpToDoPage: View {
                     .padding(.horizontal, 12).padding(.vertical, 8)
                     .background(Color(red: 0.0, green: 0.6, blue: 0.5)).cornerRadius(6)
                 }.buttonStyle(BorderlessButtonStyle())
-                Button(action: {}) {
+                Button(action: { partialItemId = item.id; partialAmount = ""; showPartialSheet = true }) {
                     Text("Partial Top-Up").font(.system(size: 11, weight: .semibold)).foregroundColor(.primary)
                         .padding(.horizontal, 12).padding(.vertical, 8)
-                        .background(Color.white)
+                        .background(Color.bgSurface)
                         .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
                 }.buttonStyle(BorderlessButtonStyle())
-                Button(action: {}) {
+                Button(action: { appState.skipTopUp(item.id) }) {
                     Text("Skip").font(.system(size: 11, weight: .semibold)).foregroundColor(.gray)
                         .padding(.horizontal, 12).padding(.vertical, 8)
-                        .background(Color.white)
+                        .background(Color.bgSurface)
                         .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
                 }.buttonStyle(BorderlessButtonStyle())
                 Spacer()
@@ -2392,7 +2478,7 @@ struct TopUpToDoPage: View {
                 }
             }
         }
-        .background(Color.white).cornerRadius(10)
+        .background(Color.bgSurface).cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 
@@ -2433,6 +2519,147 @@ struct TopUpToDoPage: View {
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 10)
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MARK: - Manual Match Sheet
+// ═══════════════════════════════════════════════════════════════════
+
+struct ManualMatchSheet: View {
+    @EnvironmentObject var appState: POViewModel
+    let receiptId: String
+    @Binding var isPresented: Bool
+    @State private var searchText = ""
+    @State private var matching = false
+
+    private var transactions: [CardTransaction] {
+        let q = searchText.lowercased()
+        let all = appState.cardTransactions
+        guard !q.isEmpty else { return all }
+        return all.filter {
+            $0.merchant.lowercased().contains(q) ||
+            $0.description.lowercased().contains(q) ||
+            $0.cardLastFour.contains(q)
+        }
+    }
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass").foregroundColor(.gray).font(.system(size: 12))
+                    TextField("Search transactions...", text: $searchText).font(.system(size: 13))
+                }
+                .padding(10).background(Color.bgSurface).cornerRadius(8)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 4)
+
+                if appState.isLoadingCardTxns {
+                    VStack { Spacer(); LoaderView(); Spacer() }
+                } else if transactions.isEmpty {
+                    VStack { Spacer(); Text("No transactions found").font(.system(size: 13)).foregroundColor(.secondary); Spacer() }
+                } else {
+                    List {
+                        ForEach(transactions) { tx in
+                            Button(action: { matchTransaction(tx) }) {
+                                HStack(spacing: 10) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(tx.merchant.isEmpty ? tx.description : tx.merchant)
+                                            .font(.system(size: 14, weight: .medium)).foregroundColor(.primary).lineLimit(1)
+                                        HStack(spacing: 6) {
+                                            if !tx.cardLastFour.isEmpty {
+                                                Text("•••• \(tx.cardLastFour)").font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary)
+                                            }
+                                            if tx.transactionDate > 0 {
+                                                Text(FormatUtils.formatTimestamp(tx.transactionDate)).font(.system(size: 10)).foregroundColor(.secondary)
+                                            }
+                                        }
+                                    }
+                                    Spacer()
+                                    Text(FormatUtils.formatGBP(tx.amount))
+                                        .font(.system(size: 14, weight: .semibold, design: .monospaced)).foregroundColor(.goldDark)
+                                }
+                                .padding(.vertical, 4)
+                            }
+                        }
+                    }.listStyle(GroupedListStyle())
+                }
+            }
+            .background(Color.bgBase)
+            .navigationBarTitle(Text("Match to Transaction"), displayMode: .inline)
+            .navigationBarItems(trailing: Button("Cancel") { isPresented = false }
+                .font(.system(size: 16, weight: .semibold)).foregroundColor(.goldDark))
+        }
+    }
+
+    private func matchTransaction(_ tx: CardTransaction) {
+        matching = true
+        appState.matchReceipt(receiptId, transactionId: tx.id) { _ in
+            matching = false
+            isPresented = false
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MARK: - Partial Top-Up Sheet
+// ═══════════════════════════════════════════════════════════════════
+
+struct PartialTopUpSheet: View {
+    @EnvironmentObject var appState: POViewModel
+    let itemId: String
+    @Binding var isPresented: Bool
+    @State private var amount = ""
+    @State private var note = ""
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("PARTIAL AMOUNT").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
+                    HStack(spacing: 2) {
+                        Text("£").font(.system(size: 16, weight: .semibold)).foregroundColor(.goldDark)
+                        TextField("0.00", text: $amount)
+                            .font(.system(size: 16, weight: .semibold, design: .monospaced))
+                            .foregroundColor(.goldDark)
+                            .keyboardType(.decimalPad)
+                    }
+                    .padding(10).background(Color.bgRaised).cornerRadius(8)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("NOTE (OPTIONAL)").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
+                    TextField("Reason for partial top-up...", text: $note)
+                        .font(.system(size: 13))
+                        .padding(10).background(Color.bgRaised).cornerRadius(8)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                }
+
+                Button(action: submit) {
+                    Text("Confirm Partial Top-Up")
+                        .font(.system(size: 15, weight: .bold)).foregroundColor(.white)
+                        .frame(maxWidth: .infinity).padding(.vertical, 14)
+                        .background((Double(amount) ?? 0) > 0 ? Color.gold : Color.gold.opacity(0.4))
+                        .cornerRadius(10)
+                }
+                .disabled((Double(amount) ?? 0) <= 0)
+
+                Spacer()
+            }
+            .padding(20)
+            .background(Color.bgBase.edgesIgnoringSafeArea(.all))
+            .navigationBarTitle(Text("Partial Top-Up"), displayMode: .inline)
+            .navigationBarItems(trailing: Button("Cancel") { isPresented = false }
+                .font(.system(size: 16, weight: .semibold)).foregroundColor(.goldDark))
+        }
+    }
+
+    private func submit() {
+        guard let amt = Double(amount), amt > 0 else { return }
+        appState.markTopUpCompleted(itemId, amount: amt, note: note.isEmpty ? "Partial" : note)
+        isPresented = false
     }
 }
 
@@ -2522,7 +2749,7 @@ struct AllTransactionsPage: View {
                     }.buttonStyle(BorderlessButtonStyle())
                 }
                 .padding(.horizontal, 12).padding(.vertical, 9)
-                .background(Color.white).cornerRadius(8)
+                .background(Color.bgSurface).cornerRadius(8)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.goldDark, lineWidth: 1.5))
             } else {
                 HStack(spacing: 8) {
@@ -2547,7 +2774,7 @@ struct AllTransactionsPage: View {
                         Image(systemName: "magnifyingglass")
                             .font(.system(size: 13, weight: .medium)).foregroundColor(.goldDark)
                             .padding(.horizontal, 10).padding(.vertical, 8)
-                            .background(Color.white).cornerRadius(6)
+                            .background(Color.bgSurface).cornerRadius(6)
                             .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
                     }.buttonStyle(BorderlessButtonStyle())
                 }
@@ -2586,7 +2813,7 @@ struct AllTransactionsPage: View {
             Text(value).font(.system(size: 16, weight: .bold, design: .monospaced)).foregroundColor(.primary).lineLimit(1).minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(10)
-        .background(Color.white).cornerRadius(8)
+        .background(Color.bgSurface).cornerRadius(8)
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
     }
 
@@ -2598,7 +2825,7 @@ struct AllTransactionsPage: View {
                 Image(systemName: "chevron.down").font(.system(size: 8, weight: .medium)).foregroundColor(.gray)
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
-            .background(Color.white).cornerRadius(6)
+            .background(Color.bgSurface).cornerRadius(6)
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
         }.buttonStyle(BorderlessButtonStyle())
     }
@@ -2727,7 +2954,7 @@ struct TopUpDetailPage: View {
                     }
                     .padding(14)
                 }
-                .background(Color.white).cornerRadius(12)
+                .background(Color.bgSurface).cornerRadius(12)
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
             }
             .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 24)
@@ -2811,7 +3038,7 @@ struct TopUpItemRow: View {
             }
         }
         .padding(14)
-        .background(Color.white).cornerRadius(10)
+        .background(Color.bgSurface).cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 }
@@ -2909,7 +3136,7 @@ struct AllTransactionsRow: View {
             }
         }
         .padding(14)
-        .background(Color.white).cornerRadius(10)
+        .background(Color.bgSurface).cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
         .contentShape(Rectangle())
     }
@@ -2924,6 +3151,8 @@ struct CardRegisterPage: View {
     @State private var rejectTargetCard: ExpenseCard? = nil
     @State private var rejectCardReason: String = ""
     @State private var showInlineRejectSheet = false
+    @State private var cardToActivate: ExpenseCard? = nil
+    @State private var navigateToActivate = false
 
     private var tierCount: Int { appState.cardTierConfigRows.count }
 
@@ -2977,7 +3206,11 @@ struct CardRegisterPage: View {
                                     onAssignPhysical: nil,
                                     onApprove: nil,
                                     onReject: nil,
-                                    onOverride: nil
+                                    onOverride: nil,
+                                    onActivate: {
+                                        cardToActivate = card
+                                        navigateToActivate = true
+                                    }
                                 )
                                 .contentShape(Rectangle())
                                 .onTapGesture { navigateToCardId = card.id }
@@ -3014,7 +3247,7 @@ struct CardRegisterPage: View {
                             Text("Reason").font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
                             TextField("Enter reason…", text: $rejectCardReason)
                                 .font(.system(size: 14)).padding(10)
-                                .background(Color.white).cornerRadius(8)
+                                .background(Color.bgSurface).cornerRadius(8)
                                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                         }
                         Spacer()
@@ -3032,6 +3265,16 @@ struct CardRegisterPage: View {
                 )
             }
         }
+        .background(
+            NavigationLink(
+                destination: Group {
+                    if let c = cardToActivate {
+                        ActivateCardPage(card: c).environmentObject(appState)
+                    } else { EmptyView() }
+                },
+                isActive: $navigateToActivate
+            ) { EmptyView() }.frame(width: 0, height: 0).hidden()
+        )
         .background(
             NavigationLink(destination: RequestCardPage().environmentObject(appState),
                            isActive: $navigateToRequestCard) { EmptyView() }.frame(width: 0, height: 0).hidden()
@@ -3211,7 +3454,7 @@ struct ReceiptsTabView: View {
                         Image(systemName: "magnifyingglass").foregroundColor(.gray).font(.system(size: 14))
                         TextField("Search receipts…", text: $searchText).font(.system(size: 14))
                     }
-                    .padding(10).background(Color.white).cornerRadius(8)
+                    .padding(10).background(Color.bgSurface).cornerRadius(8)
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
 
                     Button(action: { showFilterSheet = true }) {
@@ -3224,7 +3467,7 @@ struct ReceiptsTabView: View {
                                 .font(.system(size: 8, weight: .medium)).foregroundColor(.gray)
                         }
                         .padding(.horizontal, 10).padding(.vertical, 10)
-                        .background(Color.white).cornerRadius(8)
+                        .background(Color.bgSurface).cornerRadius(8)
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                         .contentShape(Rectangle())
                     }
@@ -3400,10 +3643,34 @@ struct CardDetailPage: View {
     @State private var rejectReason = ""
     @State private var showCardNumber = false
     @State private var navigateToAssign = false
+    @State private var navigateToEdit = false
+    @State private var navigateToHistory = false
+    @State private var navigateToActivate = false
+    @State private var deleting = false
+
+    enum StatusOperation { case suspending, reactivating }
+    @State private var pendingOperation: StatusOperation? = nil
+
+    enum ActiveAlert: Identifiable {
+        case deleteConfirm, suspendConfirm, reactivateConfirm
+        var id: Int { hashValue }
+    }
+    @State private var activeAlert: ActiveAlert? = nil
 
     private var displayCard: ExpenseCard { liveCard ?? card }
     private var isAccountant: Bool { appState.currentUser?.isAccountant ?? false }
-    private var isPendingApproval: Bool { ["pending", "approved"].contains(displayCard.status) }
+    /// True only while the card is still awaiting tier approvals.
+    /// Approved / override / active / suspended / rejected cards have finished the approval workflow
+    /// and should not show the "Pending Approval" section or action buttons.
+    private var isPendingApproval: Bool { displayCard.status.lowercased() == "pending" }
+    private var isOwnCard: Bool { displayCard.holderId == appState.userId }
+    private var canEditRequest: Bool {
+        // User can edit their own card while still in requested/pending state (not yet approved/active).
+        // Accountants can also edit any card while it's in requested/pending state.
+        let editableStatuses: Set<String> = ["requested", "pending"]
+        guard editableStatuses.contains(displayCard.status.lowercased()) else { return false }
+        return isOwnCard || isAccountant
+    }
 
     private var totalTiers: Int {
         let cfg = ApprovalHelpers.resolveConfig(appState.cardTierConfigRows, deptId: displayCard.departmentId, amount: displayCard.monthlyLimit)
@@ -3445,6 +3712,29 @@ struct CardDetailPage: View {
         return num
     }
 
+    private var cardStatusBadge: some View {
+        let status = displayCard.status.lowercased()
+        let (label, fg, bg): (String, Color, Color) = {
+            let purple = Color(red: 0.5, green: 0.1, blue: 0.8)
+            switch status {
+            case "active":
+                return displayCard.isDigitalOnly ? ("Digital Active", Color(red: 0.0, green: 0.6, blue: 0.7), Color(red: 0.0, green: 0.6, blue: 0.7).opacity(0.15))
+                                                 : ("Active", .green, Color.green.opacity(0.15))
+            case "suspended":    return ("Suspended", purple, purple.opacity(0.15))
+            case "requested":    return ("Requested", .orange, Color.orange.opacity(0.15))
+            case "pending":      return ("Pending Approval", .orange, Color.orange.opacity(0.15))
+            case "approved",
+                 "override":     return ("Approved", .green, Color.green.opacity(0.15))
+            case "rejected":     return ("Rejected", .red, Color.red.opacity(0.15))
+            default:             return (status.capitalized, .goldDark, Color.gold.opacity(0.15))
+            }
+        }()
+        return Text(label)
+            .font(.system(size: 10, weight: .bold)).foregroundColor(fg)
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .background(bg).cornerRadius(5)
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
@@ -3470,6 +3760,8 @@ struct CardDetailPage: View {
                                     .foregroundColor(showCardNumber ? .secondary : .goldDark)
                             }
                             .buttonStyle(PlainButtonStyle())
+                            Spacer()
+                            cardStatusBadge
                         }
                         let subtitle = [displayCard.holderFullName, displayCard.holderDesignation, resolvedBankName]
                             .filter { !$0.isEmpty }.joined(separator: " · ")
@@ -3479,35 +3771,51 @@ struct CardDetailPage: View {
                     }
                     .padding(.horizontal, 20).padding(.top, 20).padding(.bottom, 18)
 
-                    // ── Stats: Card Limit | Available | Total Spent ──
-                    HStack(spacing: 0) {
-                        statCol("CARD LIMIT",   FormatUtils.formatGBP(displayCard.monthlyLimit),   .goldDark)
-                        statCol("AVAILABLE",    FormatUtils.formatGBP(displayCard.currentBalance), Color(red: 0, green: 0.6, blue: 0.5))
-                        statCol("TOTAL SPENT",  FormatUtils.formatGBP(displayCard.spentAmount),    .primary)
-                    }
-                    .padding(.horizontal, 20).padding(.bottom, 14)
+                    // ── Stats + Utilisation only when the card is active / suspended ──
+                    // For pending, requested, approved, rejected states, spending data is meaningless.
+                    let statusLower = displayCard.status.lowercased()
+                    let showSpending = statusLower == "active" || statusLower == "suspended"
 
-                    // ── Utilisation bar (only when a limit is set) ──
-                    if displayCard.monthlyLimit > 0 {
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text("UTILISATION").font(.system(size: 10, weight: .semibold)).foregroundColor(.secondary).tracking(0.5)
-                                Spacer()
-                                Text("\(Int(displayCard.spendPercent * 100))%").font(.system(size: 10, weight: .semibold)).foregroundColor(.secondary)
-                            }
-                            GeometryReader { geo in
-                                ZStack(alignment: .leading) {
-                                    RoundedRectangle(cornerRadius: 3).fill(Color(.systemGray5)).frame(height: 6)
-                                    RoundedRectangle(cornerRadius: 3)
-                                        .fill(displayCard.spendPercent > 0.8 ? Color.red : Color.goldDark)
-                                        .frame(width: max(geo.size.width * CGFloat(min(displayCard.spendPercent, 1.0)), 0), height: 6)
+                    if showSpending {
+                        // ── Stats: Card Limit | Available | Total Spent ──
+                        HStack(spacing: 0) {
+                            statCol("CARD LIMIT",   FormatUtils.formatGBP(displayCard.monthlyLimit),   .goldDark)
+                            statCol("AVAILABLE",    FormatUtils.formatGBP(displayCard.currentBalance), Color(red: 0, green: 0.6, blue: 0.5))
+                            statCol("TOTAL SPENT",  FormatUtils.formatGBP(displayCard.spentAmount),    .primary)
+                        }
+                        .padding(.horizontal, 20).padding(.bottom, 14)
+
+                        // ── Utilisation bar (only when a limit is set) ──
+                        if displayCard.monthlyLimit > 0 {
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text("UTILISATION").font(.system(size: 10, weight: .semibold)).foregroundColor(.secondary).tracking(0.5)
+                                    Spacer()
+                                    Text("\(Int(displayCard.spendPercent * 100))%").font(.system(size: 10, weight: .semibold)).foregroundColor(.secondary)
                                 }
-                            }.frame(height: 6)
-                            HStack {
-                                Text("Spent: \(FormatUtils.formatGBP(displayCard.spentAmount))").font(.system(size: 10)).foregroundColor(.secondary)
-                                Spacer()
-                                Text("Limit: \(FormatUtils.formatGBP(displayCard.monthlyLimit))").font(.system(size: 10)).foregroundColor(.secondary)
+                                GeometryReader { geo in
+                                    ZStack(alignment: .leading) {
+                                        RoundedRectangle(cornerRadius: 3).fill(Color(.systemGray5)).frame(height: 6)
+                                        RoundedRectangle(cornerRadius: 3)
+                                            .fill(displayCard.spendPercent > 0.8 ? Color.red : Color.goldDark)
+                                            .frame(width: max(geo.size.width * CGFloat(min(displayCard.spendPercent, 1.0)), 0), height: 6)
+                                    }
+                                }.frame(height: 6)
+                                HStack {
+                                    Text("Spent: \(FormatUtils.formatGBP(displayCard.spentAmount))").font(.system(size: 10)).foregroundColor(.secondary)
+                                    Spacer()
+                                    Text("Limit: \(FormatUtils.formatGBP(displayCard.monthlyLimit))").font(.system(size: 10)).foregroundColor(.secondary)
+                                }
                             }
+                            .padding(.horizontal, 20).padding(.bottom, 20)
+                        }
+                    } else if displayCard.monthlyLimit > 0 {
+                        // For non-active states, just show the proposed limit compactly
+                        HStack {
+                            Text("PROPOSED LIMIT").font(.system(size: 10, weight: .semibold)).foregroundColor(.secondary).tracking(0.5)
+                            Spacer()
+                            Text(FormatUtils.formatGBP(displayCard.monthlyLimit))
+                                .font(.system(size: 16, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
                         }
                         .padding(.horizontal, 20).padding(.bottom, 20)
                     }
@@ -3717,20 +4025,199 @@ struct CardDetailPage: View {
                         .padding(.horizontal, 20).padding(.vertical, 16)
                     }
 
+                    // Edit (+ Delete for users) buttons — shown while card is in requested/pending state.
+                    // Users see Delete + Edit (they can cancel their own request).
+                    // Accountants see just Edit (they can modify details on behalf of requester).
+                    if canEditRequest {
+                        Divider()
+                        HStack(spacing: 10) {
+                            if !isAccountant {
+                                Button(action: { activeAlert = .deleteConfirm }) {
+                                    HStack(spacing: 6) {
+                                        if deleting {
+                                            ActivityIndicator(isAnimating: true).frame(width: 14, height: 14)
+                                        } else {
+                                            Image(systemName: "trash").font(.system(size: 12, weight: .bold))
+                                        }
+                                        Text(deleting ? "Deleting…" : "Delete").font(.system(size: 14, weight: .bold))
+                                    }
+                                    .foregroundColor(.white).padding(.horizontal, 20).padding(.vertical, 12)
+                                    .frame(maxWidth: .infinity)
+                                    .background(Color.red).cornerRadius(8)
+                                }
+                                .buttonStyle(BorderlessButtonStyle())
+                                .disabled(deleting)
+                            }
+
+                            Button(action: { navigateToEdit = true }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "pencil").font(.system(size: 12, weight: .bold))
+                                    Text("Edit Request").font(.system(size: 14, weight: .bold))
+                                }
+                                .foregroundColor(.white).padding(.horizontal, 20).padding(.vertical, 12)
+                                .frame(maxWidth: .infinity)
+                                .background(Color.gold).cornerRadius(8)
+                            }.buttonStyle(BorderlessButtonStyle())
+                        }
+                        .padding(.horizontal, 20).padding(.vertical, 16)
+                    }
+
                     if !approverName.isEmpty {
                         Text("Approved by \(approverName)")
                             .font(.system(size: 12)).foregroundColor(.secondary)
                             .padding(.horizontal, 20).padding(.vertical, 12)
                     }
 
+                    // Activate Card — accountant only, when status is approved/override (not yet active)
+                    if isAccountant && (displayCard.status.lowercased() == "approved" || displayCard.status.lowercased() == "override") {
+                        Divider()
+                        Button(action: { navigateToActivate = true }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "creditcard.and.123").font(.system(size: 12, weight: .bold))
+                                let hasNum = !(displayCard.physicalCardNumber ?? "").isEmpty || !(displayCard.digitalCardNumber ?? "").isEmpty
+                                Text(hasNum ? "Activate Card" : "Activate & Assign Card Number")
+                                    .font(.system(size: 14, weight: .bold))
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color.orange).cornerRadius(10)
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
+                        .padding(.horizontal, 20).padding(.vertical, 16)
+                    }
+
+                    // Suspend / Reactivate — accountant only, when card is active or suspended.
+                    // While an operation is in flight, pin the button to the operation being
+                    // performed so labels don't flip mid-request (optimistic status update
+                    // would otherwise swap Suspend ↔ Re-activate while the spinner is showing).
+                    if isAccountant && (displayCard.status.lowercased() == "active" || displayCard.status.lowercased() == "suspended" || pendingOperation != nil) {
+                        Divider()
+                        Group {
+                            let showingSuspend: Bool = {
+                                if let op = pendingOperation { return op == .suspending }
+                                return displayCard.status.lowercased() == "active"
+                            }()
+
+                            if showingSuspend {
+                                Button(action: { activeAlert = .suspendConfirm }) {
+                                    HStack(spacing: 6) {
+                                        if pendingOperation == .suspending {
+                                            ActivityIndicator(isAnimating: true).frame(width: 14, height: 14)
+                                        } else {
+                                            Image(systemName: "pause.circle.fill").font(.system(size: 12, weight: .semibold))
+                                        }
+                                        Text(pendingOperation == .suspending ? "Suspending…" : "Suspend Card").font(.system(size: 14, weight: .bold))
+                                    }
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 14)
+                                    .background(Color.orange).cornerRadius(10)
+                                }
+                                .buttonStyle(BorderlessButtonStyle())
+                                .disabled(pendingOperation != nil)
+                            } else {
+                                Button(action: { activeAlert = .reactivateConfirm }) {
+                                    HStack(spacing: 6) {
+                                        if pendingOperation == .reactivating {
+                                            ActivityIndicator(isAnimating: true).frame(width: 14, height: 14)
+                                        } else {
+                                            Image(systemName: "play.circle.fill").font(.system(size: 12, weight: .semibold))
+                                        }
+                                        Text(pendingOperation == .reactivating ? "Reactivating…" : "Re-activate Card").font(.system(size: 14, weight: .bold))
+                                    }
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 14)
+                                    .background(Color.green).cornerRadius(10)
+                                }
+                                .buttonStyle(BorderlessButtonStyle())
+                                .disabled(pendingOperation != nil)
+                            }
+                        }
+                        .padding(.horizontal, 20).padding(.vertical, 16)
+                    }
+
                 Spacer(minLength: 20)
             }
         }
-        .background(Color.white)
+        .background(Color.bgSurface)
         .navigationBarTitle(Text("Card Details"), displayMode: .inline)
+        .navigationBarItems(trailing:
+            Button(action: { navigateToHistory = true }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "clock.arrow.circlepath").font(.system(size: 14, weight: .semibold))
+                    Text("History").font(.system(size: 14, weight: .semibold))
+                }
+                .foregroundColor(.goldDark)
+            }
+        )
+        .background(
+            NavigationLink(destination: EditCardRequestPage(card: displayCard).environmentObject(appState),
+                           isActive: $navigateToEdit) { EmptyView() }.frame(width: 0, height: 0).hidden()
+        )
+        .background(
+            NavigationLink(destination: CardHistoryPage(cardId: displayCard.id, cardLabel: displayCard.holderFullName).environmentObject(appState),
+                           isActive: $navigateToHistory) { EmptyView() }.frame(width: 0, height: 0).hidden()
+        )
+        .background(
+            NavigationLink(destination: ActivateCardPage(card: displayCard).environmentObject(appState),
+                           isActive: $navigateToActivate) { EmptyView() }.frame(width: 0, height: 0).hidden()
+        )
+        .alert(item: $activeAlert) { alert in
+            switch alert {
+            case .deleteConfirm:
+                return Alert(
+                    title: Text("Delete Card Request?"),
+                    message: Text("This will permanently delete your card request. This action cannot be undone."),
+                    primaryButton: .destructive(Text("Delete")) {
+                        deleting = true
+                        appState.deleteCardRequest(id: displayCard.id) { success in
+                            deleting = false
+                            if success { presentationMode.wrappedValue.dismiss() }
+                        }
+                    },
+                    secondaryButton: .cancel()
+                )
+            case .suspendConfirm:
+                return Alert(
+                    title: Text("Suspend Card?"),
+                    message: Text("The card will be temporarily disabled. You can re-activate it anytime."),
+                    primaryButton: .destructive(Text("Suspend")) {
+                        pendingOperation = .suspending
+                        appState.suspendCard(id: displayCard.id) { _ in
+                            pendingOperation = nil
+                        }
+                    },
+                    secondaryButton: .cancel()
+                )
+            case .reactivateConfirm:
+                return Alert(
+                    title: Text("Re-activate Card?"),
+                    message: Text("The card will be re-enabled for spending."),
+                    primaryButton: .default(Text("Re-activate")) {
+                        pendingOperation = .reactivating
+                        appState.reactivateCard(id: displayCard.id) { _ in
+                            pendingOperation = nil
+                        }
+                    },
+                    secondaryButton: .cancel()
+                )
+            }
+        }
         .onAppear {
             appState.loadCard(card.id) { fetched in liveCard = fetched }
             if appState.bankAccounts.isEmpty { appState.loadBankAccounts() }
+        }
+        .onReceive(appState.$userCards) { cards in
+            if let updated = cards.first(where: { $0.id == card.id }) {
+                liveCard = updated
+            }
+        }
+        .onReceive(appState.$allCards) { cards in
+            if let updated = cards.first(where: { $0.id == card.id }) {
+                liveCard = updated
+            }
         }
         .sheet(isPresented: $showRejectSheet) {
             NavigationView {
@@ -3743,7 +4230,7 @@ struct CardDetailPage: View {
                             Text("Reason").font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
                             TextField("Enter reason…", text: $rejectReason)
                                 .font(.system(size: 14)).padding(10)
-                                .background(Color.white).cornerRadius(8)
+                                .background(Color.bgSurface).cornerRadius(8)
                                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                         }
                         Spacer()
@@ -3818,6 +4305,7 @@ struct CardRow: View {
     var onApprove: (() -> Void)? = nil
     var onReject: (() -> Void)? = nil
     var onOverride: (() -> Void)? = nil
+    var onActivate: (() -> Void)? = nil
 
     private var displayBankName: String { resolvedBankName ?? card.bankName }
     private var totalTiers: Int { max(tierCount, card.approvals.count + (card.status == "pending" ? 1 : 0)) }
@@ -3899,19 +4387,23 @@ struct CardRow: View {
                 if !card.holderDesignation.isEmpty {
                     Text(card.holderDesignation).font(.system(size: 12)).foregroundColor(.secondary)
                 }
-                if card.proposedLimit > 0 || card.monthlyLimit > 0 {
+                if card.monthlyLimit > 0 || card.proposedLimit > 0 {
                     HStack {
                         Text("Proposed Limit").font(.system(size: 10)).foregroundColor(.secondary)
                         Spacer()
-                        Text("\(FormatUtils.formatGBP(max(card.proposedLimit, card.monthlyLimit)))/mo")
+                        // Prefer monthly_limit (the field PATCH updates). Fall back
+                        // to proposed_limit only when monthly_limit is unset.
+                        Text("\(FormatUtils.formatGBP(card.monthlyLimit > 0 ? card.monthlyLimit : card.proposedLimit))/mo")
                             .font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundColor(.goldDark)
                     }
                 }
 
             } else if card.status == "pending" || card.status == "approved" || card.status == "override" {
                 // ── Pending / Approved ──
-                Text("Pending Approval")
-                    .font(.system(size: 12, weight: .medium)).italic().foregroundColor(.orange)
+                let isFullyApproved = card.status == "approved" || card.status == "override"
+                Text(isFullyApproved ? "Approved" : "Pending Approval")
+                    .font(.system(size: 12, weight: .medium)).italic()
+                    .foregroundColor(isFullyApproved ? .green : .orange)
                 Text(card.holderFullName).font(.system(size: 14, weight: .bold))
                 HStack(spacing: 4) {
                     if !card.holderDesignation.isEmpty {
@@ -3931,11 +4423,13 @@ struct CardRow: View {
                     .padding(.horizontal, 10).padding(.vertical, 6)
                     .background(Color.bgRaised).cornerRadius(6)
                 }
-                if card.proposedLimit > 0 || card.monthlyLimit > 0 {
+                if card.monthlyLimit > 0 || card.proposedLimit > 0 {
                     HStack {
                         Text("Proposed Limit").font(.system(size: 10)).foregroundColor(.secondary)
                         Spacer()
-                        Text("\(FormatUtils.formatGBP(max(card.proposedLimit, card.monthlyLimit)))/mo")
+                        // Prefer monthly_limit (the field PATCH updates). Fall back
+                        // to proposed_limit only when monthly_limit is unset.
+                        Text("\(FormatUtils.formatGBP(card.monthlyLimit > 0 ? card.monthlyLimit : card.proposedLimit))/mo")
                             .font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundColor(.goldDark)
                     }
                 }
@@ -4012,17 +4506,35 @@ struct CardRow: View {
                     }
                 }
 
+                // Activate button (full-width) — accountant side, card is approved
+                if isAccountant, card.status == "approved" || card.status == "override", let act = onActivate {
+                    Button(action: act) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "creditcard.and.123").font(.system(size: 12, weight: .bold))
+                            let hasNumber = !(card.physicalCardNumber ?? "").isEmpty
+                            Text(hasNumber ? "Activate Card" : "Activate & Assign Card Number")
+                                .font(.system(size: 13, weight: .bold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color.orange).cornerRadius(10)
+                    }.buttonStyle(BorderlessButtonStyle())
+                }
+
             } else if card.status == "rejected" {
                 // ── Rejected ──
                 Text(card.holderFullName).font(.system(size: 14, weight: .bold))
                 if !card.holderDesignation.isEmpty {
                     Text(card.holderDesignation).font(.system(size: 12)).foregroundColor(.secondary)
                 }
-                if card.proposedLimit > 0 || card.monthlyLimit > 0 {
+                if card.monthlyLimit > 0 || card.proposedLimit > 0 {
                     HStack {
                         Text("Proposed Limit").font(.system(size: 10)).foregroundColor(.secondary)
                         Spacer()
-                        Text("\(FormatUtils.formatGBP(max(card.proposedLimit, card.monthlyLimit)))/mo")
+                        // Prefer monthly_limit (the field PATCH updates). Fall back
+                        // to proposed_limit only when monthly_limit is unset.
+                        Text("\(FormatUtils.formatGBP(card.monthlyLimit > 0 ? card.monthlyLimit : card.proposedLimit))/mo")
                             .font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundColor(.goldDark)
                     }
                 }
@@ -4051,7 +4563,7 @@ struct CardRow: View {
                 Text(card.holderFullName).font(.system(size: 14, weight: .bold))
             }
         }
-        .padding(14).background(Color.white).cornerRadius(12)
+        .padding(14).background(Color.bgSurface).cornerRadius(12)
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
     }
 
@@ -4141,7 +4653,7 @@ struct RequestCardPage: View {
                             .font(.system(size: 13)).foregroundColor(.secondary).multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity).padding(.vertical, 24)
-                    .background(Color.white).cornerRadius(12)
+                    .background(Color.bgSurface).cornerRadius(12)
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
 
                     // Read-only info + limit input
@@ -4169,7 +4681,7 @@ struct RequestCardPage: View {
                         }
                         .padding(.horizontal, 14).padding(.vertical, 12)
                     }
-                    .background(Color.white).cornerRadius(10)
+                    .background(Color.bgSurface).cornerRadius(10)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
 
                     HStack(spacing: 10) {
@@ -4205,7 +4717,7 @@ struct RequestCardPage: View {
                 .disabled((Double(proposedLimit) ?? 0) <= 0 || submitting)
             }
             .padding(.horizontal, 16).padding(.vertical, 12)
-            .background(Color.white)
+            .background(Color.bgSurface)
             .overlay(Rectangle().fill(Color.borderColor).frame(height: 1), alignment: .top)
         }
         .navigationBarTitle(Text("Request New Card"), displayMode: .inline)
@@ -4262,7 +4774,7 @@ struct RequestCardPage: View {
                             }
                         }
                         .padding(.horizontal, 10).padding(.vertical, 9)
-                        .background(Color.white)
+                        .background(Color.bgSurface)
                         .cornerRadius(6)
                         .overlay(RoundedRectangle(cornerRadius: 6).stroke(
                             showUserDropdown ? Color.goldDark : Color.borderColor,
@@ -4283,7 +4795,7 @@ struct RequestCardPage: View {
                                         .font(.system(size: 12)).foregroundColor(.secondary)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                         .padding(14)
-                                        .background(Color.white)
+                                        .background(Color.bgSurface)
                                 } else {
                                     ScrollView {
                                         VStack(alignment: .leading, spacing: 0) {
@@ -4332,7 +4844,7 @@ struct RequestCardPage: View {
                                                     .padding(.horizontal, 10).padding(.vertical, 8)
                                                     .frame(maxWidth: .infinity, alignment: .leading)
                                                     .background(selectedUserId == u.id
-                                                                ? Color.gold.opacity(0.06) : Color.white)
+                                                                ? Color.gold.opacity(0.06) : Color.bgSurface)
                                                     .contentShape(Rectangle())
                                                 }
                                                 .buttonStyle(BorderlessButtonStyle())
@@ -4345,7 +4857,7 @@ struct RequestCardPage: View {
                                     .frame(maxHeight: 220)
                                 }
                             }
-                            .background(Color.white)
+                            .background(Color.bgSurface)
                             .cornerRadius(8)
                             .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
                             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
@@ -4392,7 +4904,7 @@ struct RequestCardPage: View {
                                     .font(.system(size: 12)).foregroundColor(.secondary)
                             }
                             .padding(.horizontal, 14).padding(.vertical, 12)
-                            .background(Color.white)
+                            .background(Color.bgSurface)
                             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                         }
                         .buttonStyle(BorderlessButtonStyle())
@@ -4429,14 +4941,14 @@ struct RequestCardPage: View {
                                                 }
                                             }
                                             .padding(.horizontal, 14).padding(.vertical, 9)
-                                            .background(selectedBankId == bank.id ? Color.gold.opacity(0.06) : Color.white)
+                                            .background(selectedBankId == bank.id ? Color.gold.opacity(0.06) : Color.bgSurface)
                                         }
                                         .buttonStyle(BorderlessButtonStyle())
                                         Divider().padding(.leading, 52)
                                     }
                                 }
                             }
-                            .background(Color.white)
+                            .background(Color.bgSurface)
                             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                             .cornerRadius(8)
                         }
@@ -4455,7 +4967,7 @@ struct RequestCardPage: View {
                                     .keyboardType(.decimalPad)
                             }
                             .padding(.horizontal, 12).padding(.vertical, 12)
-                            .background(Color.white)
+                            .background(Color.bgSurface)
                             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                         }
                         .frame(maxWidth: .infinity)
@@ -4466,7 +4978,7 @@ struct RequestCardPage: View {
                                 .font(.system(size: 14))
                                 .keyboardType(.numberPad)
                                 .padding(.horizontal, 12).padding(.vertical, 12)
-                                .background(Color.white)
+                                .background(Color.bgSurface)
                                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                         }
                         .frame(maxWidth: .infinity)
@@ -4478,7 +4990,7 @@ struct RequestCardPage: View {
                     fieldLabel("JUSTIFICATION")
                     MultilineTextView(text: $justification, placeholder: "Reason for card request...")
                         .frame(minHeight: 90)
-                        .background(Color.white)
+                        .background(Color.bgSurface)
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                         .cornerRadius(8)
                 }
@@ -4499,7 +5011,7 @@ struct RequestCardPage: View {
             .buttonStyle(BorderlessButtonStyle())
             .disabled(!isValid || submitting)
             .padding(.horizontal, 16).padding(.vertical, 12)
-            .background(Color.white)
+            .background(Color.bgSurface)
             .overlay(Rectangle().fill(Color.borderColor).frame(height: 1), alignment: .top)
         }
         .navigationBarTitle(Text("Request New Card"), displayMode: .inline)
@@ -4547,6 +5059,530 @@ struct RequestCardPage: View {
             Text(value).font(.system(size: 12, weight: .semibold))
         }
         .padding(.horizontal, 14).padding(.vertical, 12)
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MARK: - Edit Card Request Page (user edits their own pending request)
+// ═══════════════════════════════════════════════════════════════════
+
+struct EditCardRequestPage: View {
+    @EnvironmentObject var appState: POViewModel
+    @Environment(\.presentationMode) var presentationMode
+    let card: ExpenseCard
+
+    @State private var proposedLimit: String = ""
+    @State private var bsControlCode: String = ""
+    @State private var justification: String = ""
+    @State private var selectedBankId: String = ""
+    @State private var showBankSheet = false
+    @State private var submitting = false
+
+    private var isAccountant: Bool { appState.currentUser?.isAccountant ?? false }
+
+    private var canSave: Bool {
+        (Double(proposedLimit) ?? 0) > 0 && !submitting
+    }
+
+    private var holderName: String {
+        if !card.holderFullName.isEmpty { return card.holderFullName }
+        if let u = UsersData.byId[card.holderId], !u.fullName.isEmpty { return u.fullName }
+        return appState.currentUser?.fullName ?? "—"
+    }
+
+    private var departmentName: String {
+        if !card.department.isEmpty { return card.department }
+        if let u = UsersData.byId[card.holderId], !u.displayDepartment.isEmpty { return u.displayDepartment }
+        return appState.currentUser?.displayDepartment ?? "—"
+    }
+
+    private var selectedBankName: String {
+        if let b = appState.bankAccounts.first(where: { $0.id == selectedBankId }) { return b.name }
+        return card.bankAccount?.name ?? ""
+    }
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            Color.bgBase.edgesIgnoringSafeArea(.all)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack(spacing: 16) {
+                        // Card Holder (read-only)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("CARD HOLDER").font(.system(size: 10, weight: .bold)).foregroundColor(.secondary).tracking(0.5)
+                            Text(holderName)
+                                .font(.system(size: 14)).foregroundColor(.primary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(10).background(Color.bgRaised).cornerRadius(8)
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                        }
+                        // Department (read-only)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("DEPARTMENT").font(.system(size: 10, weight: .bold)).foregroundColor(.secondary).tracking(0.5)
+                            Text(departmentName)
+                                .font(.system(size: 14)).foregroundColor(.primary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(10).background(Color.bgRaised).cornerRadius(8)
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                        }
+                    }
+
+                    // Accountant extras: Card Issuer (Bank), BS Control, Justification
+                    if isAccountant {
+                        // Bank Account picker
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("CARD ISSUER (BANK ACCOUNT)").font(.system(size: 10, weight: .bold)).foregroundColor(.secondary).tracking(0.5)
+                            Button(action: { showBankSheet = true }) {
+                                HStack {
+                                    Text(selectedBankName.isEmpty ? "Select bank" : selectedBankName)
+                                        .font(.system(size: 13))
+                                        .foregroundColor(selectedBankName.isEmpty ? .gray : .primary)
+                                    Spacer()
+                                    if !selectedBankId.isEmpty {
+                                        Button(action: { selectedBankId = "" }) {
+                                            Image(systemName: "xmark.circle.fill").font(.system(size: 13)).foregroundColor(.gray.opacity(0.6))
+                                        }.buttonStyle(BorderlessButtonStyle())
+                                    } else {
+                                        Image(systemName: "chevron.down").font(.system(size: 10)).foregroundColor(.gray)
+                                    }
+                                }
+                                .padding(10).background(Color.bgSurface).cornerRadius(8)
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+                            .compatActionSheet(title: "Select Bank Account", isPresented: $showBankSheet, buttons:
+                                appState.bankAccounts.map { b in
+                                    CompatActionSheetButton.default(b.name == selectedBankName ? "\(b.name) ✓" : b.name) {
+                                        selectedBankId = b.id
+                                    }
+                                } + [.cancel()]
+                            )
+                        }
+                    }
+
+                    HStack(alignment: .top, spacing: 12) {
+                        // Proposed Limit (editable)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("PROPOSED LIMIT").font(.system(size: 10, weight: .bold)).foregroundColor(.secondary).tracking(0.5)
+                            TextField("0", text: $proposedLimit)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.primary)
+                                .keyboardType(.decimalPad)
+                                .padding(10).background(Color.bgSurface).cornerRadius(8)
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                        }
+                        .frame(maxWidth: .infinity)
+
+                        // BS Control Code (accountant only — show next to limit)
+                        if isAccountant {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("BS CONTROL CODE").font(.system(size: 10, weight: .bold)).foregroundColor(.secondary).tracking(0.5)
+                                TextField("e.g. 1145", text: $bsControlCode)
+                                    .font(.system(size: 14))
+                                    .padding(10).background(Color.bgSurface).cornerRadius(8)
+                                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                    }
+
+                    // Justification (accountant only — multi-line)
+                    if isAccountant {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("JUSTIFICATION").font(.system(size: 10, weight: .bold)).foregroundColor(.secondary).tracking(0.5)
+                            MultilineTextView(text: $justification, placeholder: "Reason for card request...")
+                                .frame(minHeight: 90)
+                                .background(Color.bgSurface)
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                                .cornerRadius(8)
+                        }
+                    }
+                }
+                .padding(20).padding(.bottom, 90)
+            }
+
+            // Footer — Submit button (label differs by role)
+            HStack {
+                Spacer()
+                Button(action: save) {
+                    HStack(spacing: 6) {
+                        if submitting { ActivityIndicator(isAnimating: true).frame(width: 14, height: 14) }
+                        Text(submitting ? "Submitting…" : (isAccountant ? "Submit for Approval" : "Re-submit"))
+                            .font(.system(size: 14, weight: .bold))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 20).padding(.vertical, 10)
+                    .background(canSave ? Color.orange : Color.orange.opacity(0.4))
+                    .cornerRadius(8)
+                }
+                .buttonStyle(BorderlessButtonStyle())
+                .disabled(!canSave)
+            }
+            .padding(.horizontal, 20).padding(.vertical, 14)
+            .background(Color.bgSurface)
+            .overlay(Rectangle().fill(Color.borderColor).frame(height: 1), alignment: .top)
+        }
+        .navigationBarTitle(Text("Edit Card Details"), displayMode: .inline)
+        .onAppear {
+            proposedLimit  = card.monthlyLimit > 0 ? String(format: "%.0f", card.monthlyLimit) : ""
+            bsControlCode  = card.bsControlCode
+            justification  = card.justification
+            selectedBankId = card.bankAccount?.id ?? ""
+            if appState.bankAccounts.isEmpty { appState.loadBankAccounts() }
+        }
+    }
+
+    private func save() {
+        guard let amt = Double(proposedLimit), amt > 0 else { return }
+        submitting = true
+        appState.updateCardRequest(
+            id: card.id,
+            proposedLimit: amt,
+            bsControlCode: isAccountant ? bsControlCode : card.bsControlCode,
+            justification: isAccountant ? justification : card.justification,
+            bankAccountId: isAccountant ? selectedBankId : (card.bankAccount?.id ?? "")
+        ) { _ in
+            submitting = false
+            // Always dismiss — optimistic update has already applied the new values
+            presentationMode.wrappedValue.dismiss()
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MARK: - Activate Card Page
+// ═══════════════════════════════════════════════════════════════════
+
+struct ActivateCardPage: View {
+    @EnvironmentObject var appState: POViewModel
+    @Environment(\.presentationMode) var presentationMode
+    let card: ExpenseCard
+
+    @State private var selectedType: POViewModel.CardType? = .digital
+    @State private var cardNumber: String = ""
+    @State private var submitting = false
+    @State private var showSuccess = false
+
+    private var rawDigits: String { cardNumber.filter { $0.isNumber } }
+    private var isValid: Bool { rawDigits.count == 16 }
+    private var canSubmit: Bool { selectedType != nil && isValid && !submitting }
+
+    private var submitLabel: String {
+        switch selectedType {
+        case .physical: return submitting ? "Activating…" : "Activate Physical Card"
+        case .digital:  return submitting ? "Activating…" : "Activate Digital Card"
+        case .none:     return "Activate Card"
+        }
+    }
+
+    private var holderName: String {
+        if !card.holderFullName.isEmpty { return card.holderFullName }
+        if let u = UsersData.byId[card.holderId] { return u.fullName }
+        return "—"
+    }
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            Color.bgBase.edgesIgnoringSafeArea(.all)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Intro
+                    (Text("Assign a card type, card number and activate the card for ")
+                        .font(.system(size: 14)).foregroundColor(.primary)
+                     + Text(holderName)
+                        .font(.system(size: 14, weight: .bold)).foregroundColor(.primary)
+                     + Text(".").font(.system(size: 14)).foregroundColor(.primary))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    // Card type picker
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("CARD TYPE").font(.system(size: 10, weight: .bold)).foregroundColor(.secondary).tracking(0.5)
+                        HStack(spacing: 10) {
+                            cardTypeOption(type: .digital, label: "Digital Card")
+                            cardTypeOption(type: .physical, label: "Physical Card")
+                        }
+                    }
+
+                    // Card number (shown once a type is picked)
+                    if let type = selectedType {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(type == .physical ? "CARD NUMBER (16 DIGITS)" : "VIRTUAL CARD NUMBER (16 DIGITS)")
+                                .font(.system(size: 10, weight: .bold)).foregroundColor(.secondary).tracking(0.5)
+                            TextField("0000  0000  0000  0000", text: Binding(
+                                get: { cardNumber },
+                                set: { newValue in
+                                    let digits = newValue.filter { $0.isNumber }
+                                    let trimmed = String(digits.prefix(16))
+                                    cardNumber = formatCardNumber(trimmed)
+                                }
+                            ))
+                                .font(.system(size: 15, design: .monospaced))
+                                .keyboardType(.numberPad)
+                                .padding(12)
+                                .background(Color.bgSurface).cornerRadius(8)
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                            Text("\(rawDigits.count)/16 digits")
+                                .font(.system(size: 10)).foregroundColor(.secondary)
+                        }
+                    }
+                }
+                .padding(20).padding(.bottom, 100)
+            }
+
+            // Footer — full-width submit
+            Button(action: submit) {
+                HStack(spacing: 6) {
+                    if submitting { ActivityIndicator(isAnimating: true).frame(width: 14, height: 14) }
+                    Text(submitLabel).font(.system(size: 15, weight: .bold))
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(canSubmit ? Color.orange : Color.gray.opacity(0.4))
+                .cornerRadius(10)
+            }
+            .buttonStyle(BorderlessButtonStyle())
+            .disabled(!canSubmit)
+            .padding(.horizontal, 20).padding(.vertical, 14)
+            .background(Color.bgSurface)
+            .overlay(Rectangle().fill(Color.borderColor).frame(height: 1), alignment: .top)
+        }
+        .navigationBarTitle(Text("Activate Card"), displayMode: .inline)
+        .alert(isPresented: $showSuccess) {
+            Alert(
+                title: Text("Card Activated"),
+                message: Text("\(holderName)'s card is now active."),
+                dismissButton: .default(Text("Done")) { presentationMode.wrappedValue.dismiss() }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func cardTypeOption(type: POViewModel.CardType, label: String) -> some View {
+        let isSelected = selectedType == type
+        Button(action: { selectedType = type }) {
+            VStack(spacing: 6) {
+                Image(systemName: "creditcard")
+                    .font(.system(size: 24, weight: .regular))
+                    .foregroundColor(isSelected ? .goldDark : .secondary)
+                Text(label)
+                    .font(.system(size: 13, weight: isSelected ? .bold : .regular))
+                    .foregroundColor(isSelected ? .goldDark : .secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 20)
+            .background(isSelected ? Color.gold.opacity(0.08) : Color.bgRaised)
+            .cornerRadius(10)
+            .overlay(RoundedRectangle(cornerRadius: 10)
+                .stroke(isSelected ? Color.goldDark : Color.borderColor, lineWidth: isSelected ? 1.5 : 1))
+        }.buttonStyle(BorderlessButtonStyle())
+    }
+
+    private func formatCardNumber(_ digits: String) -> String {
+        // Group in 4s: "1234  5678  ..."
+        guard !digits.isEmpty else { return "" }
+        let groups = stride(from: 0, to: digits.count, by: 4).map { i -> String in
+            let start = digits.index(digits.startIndex, offsetBy: i)
+            let end = digits.index(start, offsetBy: min(4, digits.count - i))
+            return String(digits[start..<end])
+        }
+        return groups.joined(separator: "  ")
+    }
+
+    private func submit() {
+        guard let type = selectedType, isValid else { return }
+        submitting = true
+        appState.activateCard(id: card.id, cardNumber: rawDigits, cardType: type) { success in
+            submitting = false
+            if success { showSuccess = true }
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MARK: - Card History Page
+// ═══════════════════════════════════════════════════════════════════
+
+struct CardHistoryPage: View {
+    @EnvironmentObject var appState: POViewModel
+    let cardId: String
+    let cardLabel: String
+
+    @State private var entries: [CardHistoryEntry] = []
+    @State private var isLoading = true
+
+    var body: some View {
+        ZStack {
+            Color.bgBase.edgesIgnoringSafeArea(.all)
+
+            if isLoading {
+                VStack { Spacer(); LoaderView(); Spacer() }
+            } else if entries.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "clock").font(.system(size: 36)).foregroundColor(.gray.opacity(0.4))
+                    Text("No history yet").font(.system(size: 14, weight: .semibold)).foregroundColor(.secondary)
+                    Text("Actions on this card will appear here.")
+                        .font(.system(size: 12)).foregroundColor(.gray).multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        if !cardLabel.isEmpty {
+                            HStack(spacing: 6) {
+                                Image(systemName: "creditcard.fill").font(.system(size: 12)).foregroundColor(.goldDark)
+                                Text(cardLabel)
+                                    .font(.system(size: 13, weight: .semibold)).foregroundColor(.primary)
+                                Spacer()
+                                Text("\(entries.count) event\(entries.count == 1 ? "" : "s")")
+                                    .font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary)
+                            }
+                            .padding(12).background(Color.bgSurface).cornerRadius(10)
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                            .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 10)
+                        }
+                        ForEach(Array(entries.enumerated()), id: \.offset) { idx, entry in
+                            historyRow(entry, isLast: idx == entries.count - 1)
+                        }
+                    }
+                    .padding(.bottom, 24)
+                }
+            }
+        }
+        .navigationBarTitle(Text("Card History"), displayMode: .inline)
+        .onAppear {
+            appState.loadCardHistoryById(cardId) { fetched in
+                entries = fetched.sorted { $0.timestamp > $1.timestamp }
+                isLoading = false
+            }
+        }
+    }
+
+    private func actionColor(_ action: String) -> Color {
+        let a = action.lowercased()
+        if a.contains("approv") && !a.contains("override") { return .green }
+        if a.contains("reject") { return .red }
+        if a.contains("override") { return .orange }
+        if a.contains("submit") || a.contains("request") || a.contains("upload") { return .goldDark }
+        if a.contains("escalat") { return .red }
+        if a.contains("post") { return Color(red: 0.1, green: 0.6, blue: 0.3) }
+        if a.contains("delete") || a.contains("remov") { return .red }
+        return .goldDark
+    }
+
+    private func actionIcon(_ action: String) -> String {
+        let a = action.lowercased()
+        if a.contains("approv") && !a.contains("override") { return "checkmark.circle.fill" }
+        if a.contains("reject") { return "xmark.circle.fill" }
+        if a.contains("override") { return "bolt.fill" }
+        if a.contains("submit") || a.contains("request") { return "paperplane.fill" }
+        if a.contains("upload") { return "arrow.up.circle.fill" }
+        if a.contains("escalat") { return "exclamationmark.triangle.fill" }
+        if a.contains("post") { return "tray.and.arrow.down.fill" }
+        if a.contains("delete") || a.contains("remov") { return "trash.fill" }
+        if a.contains("update") || a.contains("edit") || a.contains("amend") { return "pencil.circle.fill" }
+        return "circle.fill"
+    }
+
+    private func historyRow(_ entry: CardHistoryEntry, isLast: Bool) -> some View {
+        let color = actionColor(entry.action)
+        return HStack(alignment: .top, spacing: 12) {
+            // Timeline: icon + vertical line
+            VStack(spacing: 0) {
+                ZStack {
+                    Circle().fill(color.opacity(0.15)).frame(width: 28, height: 28)
+                    Image(systemName: actionIcon(entry.action))
+                        .font(.system(size: 11, weight: .bold)).foregroundColor(color)
+                }
+                if !isLast {
+                    Rectangle().fill(Color.borderColor).frame(width: 2)
+                        .frame(maxHeight: .infinity)
+                        .padding(.top, 2)
+                }
+            }
+            .frame(width: 28)
+
+            // Card content
+            VStack(alignment: .leading, spacing: 6) {
+                // Header: action + tier badge
+                HStack(spacing: 6) {
+                    Text(entry.action.isEmpty ? "—" : entry.action)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.primary)
+                    if let tier = entry.tierNumber, tier > 0 {
+                        Text("Tier \(tier)")
+                            .font(.system(size: 9, weight: .bold)).foregroundColor(color)
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(color.opacity(0.12)).cornerRadius(4)
+                    }
+                    Spacer()
+                }
+
+                // Actor
+                if !entry.actionByName.isEmpty || !entry.actionBy.isEmpty {
+                    HStack(spacing: 4) {
+                        Image(systemName: "person.fill").font(.system(size: 9)).foregroundColor(.secondary)
+                        Text("by \(entry.actionByName.isEmpty ? entry.actionBy : entry.actionByName)")
+                            .font(.system(size: 11)).foregroundColor(.secondary)
+                    }
+                }
+
+                // Details
+                if !entry.details.isEmpty {
+                    Text(entry.details)
+                        .font(.system(size: 12))
+                        .foregroundColor(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                // Field change (old → new)
+                if !entry.oldValue.isEmpty || !entry.newValue.isEmpty {
+                    HStack(spacing: 6) {
+                        if !entry.field.isEmpty {
+                            Text(entry.field.uppercased())
+                                .font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
+                        }
+                        if !entry.oldValue.isEmpty {
+                            Text(entry.oldValue).font(.system(size: 11, design: .monospaced)).foregroundColor(.red)
+                                .strikethrough()
+                        }
+                        if !entry.oldValue.isEmpty && !entry.newValue.isEmpty {
+                            Image(systemName: "arrow.right").font(.system(size: 9)).foregroundColor(.gray)
+                        }
+                        if !entry.newValue.isEmpty {
+                            Text(entry.newValue).font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundColor(.green)
+                        }
+                    }
+                }
+
+                // Reason
+                if !entry.reason.isEmpty {
+                    HStack(alignment: .top, spacing: 4) {
+                        Image(systemName: "quote.bubble").font(.system(size: 9)).foregroundColor(.secondary)
+                        Text("Reason: \(entry.reason)")
+                            .font(.system(size: 11)).foregroundColor(.secondary).italic()
+                    }
+                }
+
+                // Timestamp (date + time)
+                if entry.timestamp > 0 {
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock").font(.system(size: 9)).foregroundColor(.gray)
+                        Text(FormatUtils.formatDateTime(entry.timestamp))
+                            .font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
+                    }
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.bgSurface)
+            .cornerRadius(10)
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+            .padding(.bottom, isLast ? 0 : 10)
+        }
+        .padding(.horizontal, 16).padding(.top, 4)
     }
 }
 
@@ -4599,7 +5635,7 @@ struct CardsForApprovalTabView: View {
                             Text("Reason").font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
                             TextField("Enter reason…", text: $rejectReason)
                                 .font(.system(size: 14)).padding(10)
-                                .background(Color.white).cornerRadius(8)
+                                .background(Color.bgSurface).cornerRadius(8)
                                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                         }
                         Spacer()
@@ -4737,7 +5773,7 @@ struct ApprovalCardRow: View {
                 }.buttonStyle(BorderlessButtonStyle())
             }
         }
-        .padding(14).background(Color.white).cornerRadius(12)
+        .padding(14).background(Color.bgSurface).cornerRadius(12)
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
     }
 }
@@ -4882,7 +5918,7 @@ struct ReceiptRow: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.white).cornerRadius(10)
+            .background(Color.bgSurface).cornerRadius(10)
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
             .contentShape(Rectangle())
         }
@@ -5065,7 +6101,7 @@ struct CardTransactionRow: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.white).cornerRadius(10)
+            .background(Color.bgSurface).cornerRadius(10)
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
             .contentShape(Rectangle())
     }
@@ -5261,7 +6297,7 @@ struct CardTransactionDetailPage: View {
                             .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
                         }.padding(14)
                     }
-                    .background(Color.white).cornerRadius(12)
+                    .background(Color.bgSurface).cornerRadius(12)
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
                 }
                 .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 90)
@@ -5345,7 +6381,7 @@ struct CardTransactionDetailPage: View {
                         TextField("e.g. Approver unavailable, deadline critical…", text: $overrideReason)
                             .font(.system(size: 13))
                             .padding(12)
-                            .background(Color.white)
+                            .background(Color.bgSurface)
                             .cornerRadius(10)
                             .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
                     }
@@ -5571,7 +6607,7 @@ struct EditCardTransactionPage: View {
                     }
                 }
                 .padding(12)
-                .background(Color.white).cornerRadius(10)
+                .background(Color.bgSurface).cornerRadius(10)
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
 
                 // Save button
@@ -6052,7 +7088,7 @@ struct ReceiptDetailPage: View {
                         }
                         .padding(.horizontal, 14).padding(.vertical, 10)
                     }
-                    .background(Color.white).cornerRadius(12)
+                    .background(Color.bgSurface).cornerRadius(12)
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
 
                     // ── Workflow progress ─────────────────────────
@@ -6073,7 +7109,7 @@ struct ReceiptDetailPage: View {
                         }
                         .padding(.horizontal, 10).padding(.bottom, 14)
                     }
-                    .background(Color.white).cornerRadius(12)
+                    .background(Color.bgSurface).cornerRadius(12)
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
 
                     // ── Key details ───────────────────────────────
@@ -6106,7 +7142,7 @@ struct ReceiptDetailPage: View {
                             dRow("doc.fill", "File", live.originalName)
                         }
                     }
-                    .background(Color.white).cornerRadius(12)
+                    .background(Color.bgSurface).cornerRadius(12)
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
 
                     // ── Linked transaction ────────────────────────
@@ -6143,7 +7179,7 @@ struct ReceiptDetailPage: View {
                             }
                             .padding(.horizontal, 14).padding(.vertical, 12)
                         }
-                        .background(Color.white).cornerRadius(12)
+                        .background(Color.bgSurface).cornerRadius(12)
                         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
                     }
 
@@ -6179,7 +7215,7 @@ struct ReceiptDetailPage: View {
                             }
                             .padding(.horizontal, 14).padding(.vertical, 11)
                         }
-                        .background(Color.white).cornerRadius(12)
+                        .background(Color.bgSurface).cornerRadius(12)
                         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
                     }
 
@@ -6203,7 +7239,7 @@ struct ReceiptDetailPage: View {
                     }.buttonStyle(BorderlessButtonStyle())
                 }
                 .padding(.horizontal, 16).padding(.vertical, 12)
-                .background(Color.white)
+                .background(Color.bgSurface)
                 .overlay(Rectangle().fill(Color.borderColor).frame(height: 1), alignment: .top)
             }
         }
@@ -6297,7 +7333,7 @@ struct ReceiptHistoryPage: View {
                         .padding(.bottom, idx == history.count - 1 ? 16 : 0)
                     }
                 }
-                .background(Color.white).cornerRadius(10)
+                .background(Color.bgSurface).cornerRadius(10)
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
                 .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 24)
             }
@@ -6376,7 +7412,7 @@ struct AddCodeLineItemsPage: View {
                 .disabled(isSaving || nominalCode.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             .padding(.horizontal, 16).padding(.vertical, 12)
-            .background(Color.white)
+            .background(Color.bgSurface)
             .overlay(Rectangle().fill(Color.borderColor).frame(height: 1), alignment: .top)
         }
         .navigationBarTitle(Text("Add Code & Line Items"), displayMode: .inline)
@@ -6410,7 +7446,7 @@ struct AddCodeLineItemsPage: View {
             Divider().padding(.leading, 14)
             infoRow("File", "\(receipt.fileType.uppercased()) · \(receipt.fileSizeDisplay)")
         }
-        .background(Color.white).cornerRadius(10)
+        .background(Color.bgSurface).cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 
@@ -6445,7 +7481,7 @@ struct AddCodeLineItemsPage: View {
             }
             .padding(.horizontal, 14).padding(.vertical, 12)
         }
-        .background(Color.white).cornerRadius(10)
+        .background(Color.bgSurface).cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 
@@ -6519,7 +7555,7 @@ struct AddCodeLineItemsPage: View {
             }
             .padding(.horizontal, 14).padding(.vertical, 10)
         }
-        .background(Color.white).cornerRadius(10)
+        .background(Color.bgSurface).cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 
@@ -6632,7 +7668,7 @@ struct UploadReceiptPage: View {
                         Text("+ Add Another Receipt")
                             .font(.system(size: 13, weight: .semibold)).foregroundColor(.secondary)
                             .frame(maxWidth: .infinity).padding(.vertical, 14)
-                            .background(Color.white).cornerRadius(10)
+                            .background(Color.bgSurface).cornerRadius(10)
                             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [4])).foregroundColor(Color.borderColor))
                     }.buttonStyle(BorderlessButtonStyle())
 
@@ -6851,7 +7887,7 @@ struct UploadReceiptPage: View {
             .cornerRadius(8)
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
         }
-        .padding(12).background(Color.white).cornerRadius(10)
+        .padding(12).background(Color.bgSurface).cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 

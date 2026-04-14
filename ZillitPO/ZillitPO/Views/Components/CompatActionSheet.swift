@@ -31,6 +31,7 @@ struct CompatActionSheetContent: View {
     let title: String
     let buttons: [CompatActionSheetButton]
     @Binding var isPresented: Bool
+    @ObservedObject private var theme = ThemeManager.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -72,7 +73,7 @@ struct CompatActionSheetContent: View {
                     }
                 }
             }
-            .background(Color(UIColor.secondarySystemGroupedBackground))
+            .background(Color.bgRaised)
             .cornerRadius(12)
             .padding(.horizontal, 16)
 
@@ -86,13 +87,14 @@ struct CompatActionSheetContent: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(BorderlessButtonStyle())
-            .background(Color(UIColor.secondarySystemGroupedBackground))
+            .background(Color.bgRaised)
             .cornerRadius(12)
             .padding(.horizontal, 16)
             .padding(.top, 8)
             .padding(.bottom, 16)
         }
-        .background(Color(UIColor.systemGroupedBackground))
+        .background(Color.bgBase.edgesIgnoringSafeArea(.all))
+        .environment(\.colorScheme, theme.isDark ? .dark : .light)
     }
 }
 
@@ -102,6 +104,7 @@ struct CompatActionSheet: ViewModifier {
     let title: String
     @Binding var isPresented: Bool
     let buttons: [CompatActionSheetButton]
+    @ObservedObject private var theme = ThemeManager.shared
 
     func body(content: Content) -> some View {
         content.sheet(isPresented: $isPresented) {
@@ -109,8 +112,10 @@ struct CompatActionSheet: ViewModifier {
                 CompatActionSheetContent(title: title, buttons: buttons, isPresented: $isPresented)
                     .presentationDetents([.height(CGFloat(actionButtons.count * 50 + 140))])
                     .presentationDragIndicator(.hidden)
+                    .environment(\.colorScheme, theme.isDark ? .dark : .light)
             } else {
                 CompatActionSheetContent(title: title, buttons: buttons, isPresented: $isPresented)
+                    .environment(\.colorScheme, theme.isDark ? .dark : .light)
             }
         }
     }

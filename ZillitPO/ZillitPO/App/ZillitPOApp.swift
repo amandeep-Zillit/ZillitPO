@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 #if canImport(UIKit)
 import UIKit
@@ -19,6 +20,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
     let appState = POViewModel()
+    private var themeCancellable: Any?
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options: UIScene.ConnectionOptions) {
         guard let windowScene = scene as? UIWindowScene else { return }
@@ -27,6 +29,14 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         window.rootViewController = UIHostingController(rootView: rootView)
         window.makeKeyAndVisible()
         self.window = window
+
+        // Sync UIKit window interface style with ThemeManager so sheets,
+        // alerts, and safe-area chrome follow the app's dark mode toggle.
+        let theme = ThemeManager.shared
+        window.overrideUserInterfaceStyle = theme.isDark ? .dark : .light
+        themeCancellable = theme.$isDark.sink { [weak window] isDark in
+            window?.overrideUserInterfaceStyle = isDark ? .dark : .light
+        }
     }
 }
 #endif

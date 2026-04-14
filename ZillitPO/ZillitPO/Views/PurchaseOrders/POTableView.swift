@@ -22,7 +22,7 @@ struct POTableView: View {
                         }.buttonStyle(BorderlessButtonStyle())
                         Divider().padding(.horizontal, 12)
                     }
-                }.background(Color.white).cornerRadius(10)
+                }.background(Color.bgSurface).cornerRadius(10)
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
             }
 
@@ -55,7 +55,7 @@ struct PORow: View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(po.poNumber).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundColor(.goldDark)
-                Text(po.vendor.isEmpty ? "—" : po.vendor).font(.system(size: 13, weight: .medium)).foregroundColor(.black).lineLimit(1)
+                Text(po.vendor.isEmpty ? "—" : po.vendor).font(.system(size: 13, weight: .medium)).foregroundColor(.primary).lineLimit(1)
                 if !(po.description ?? "").isEmpty { Text(po.description ?? "").font(.system(size: 10)).foregroundColor(.secondary).lineLimit(1) }
             }
             Spacer()

@@ -103,15 +103,30 @@ struct InvoicesModuleView: View {
             VStack(spacing: 0) {
                 tabBar
 
-                // Search + Filter in one line
-                HStack(spacing: 8) {
-                    searchBar
-                    filterBar
+                // Search + Filter
+                if appState.isRunAuthApprover {
+                    VStack(spacing: 8) {
+                        filterBar
+                        searchBar
+                    }
+                    .padding(.horizontal, 16).padding(.top, 12)
+                } else {
+                    HStack(spacing: 8) {
+                        searchBar
+                        filterBar
+                    }
+                    .padding(.horizontal, 16).padding(.top, 12)
                 }
-                .padding(.horizontal, 16).padding(.top, 12)
                 ScrollView {
-                    if appState.isLoading {
+                    // Show the loader whenever an invoices fetch is in-flight
+                    // AND we don't already have data on screen, OR during the
+                    // initial app-wide load (`isLoading`). This way tapping
+                    // the Invoices tile from the sidebar triggers the loader
+                    // even if loadAllData didn't run first.
+                    if (appState.isLoadingInvoices || appState.isLoading) && appState.invoices.isEmpty {
                         LoaderView()
+                            .padding(.top, 60)
+                            .frame(maxWidth: .infinity)
                     } else if filteredInvoices.isEmpty {
                         emptyState.padding(.top, 20)
                     } else {
@@ -194,7 +209,7 @@ struct InvoicesModuleView: View {
 
     private var filterBar: some View {
         HStack(spacing: 6) {
-            // Filter dropdown
+            // Filter dropdown (left)
             Button(action: { showFilterSheet = true }) {
                 HStack(spacing: 4) {
                     Image(systemName: "line.3.horizontal.decrease")
@@ -205,7 +220,7 @@ struct InvoicesModuleView: View {
                         .font(.system(size: 8, weight: .medium)).foregroundColor(.gray)
                 }
                 .padding(.horizontal, 10).padding(.vertical, 10)
-                .background(Color.white).cornerRadius(8)
+                .background(Color.bgSurface).cornerRadius(8)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                 .contentShape(Rectangle())
             }
@@ -217,7 +232,9 @@ struct InvoicesModuleView: View {
                 } + [.cancel()]
             )
 
-            // Payment Run Approval button
+            Spacer()
+
+            // Payment Run Approval button (right)
             if appState.isRunAuthApprover {
                 Button(action: { navigateToPaymentRunApproval = true }) {
                     HStack(spacing: 5) {
@@ -233,7 +250,7 @@ struct InvoicesModuleView: View {
                     }
                     .foregroundColor(.goldDark)
                     .padding(.horizontal, 12).padding(.vertical, 8)
-                    .background(Color.white).cornerRadius(6)
+                    .background(Color.bgSurface).cornerRadius(6)
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.gold.opacity(0.3), lineWidth: 1))
                     .contentShape(Rectangle())
                 }
@@ -247,7 +264,7 @@ struct InvoicesModuleView: View {
             Image(systemName: "magnifyingglass").foregroundColor(.gray).font(.system(size: 14))
             TextField("Search invoices…", text: $searchText).font(.system(size: 14))
         }
-        .padding(10).background(Color.white).cornerRadius(8)
+        .padding(10).background(Color.bgSurface).cornerRadius(8)
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
         .frame(maxWidth: .infinity)
     }
@@ -293,7 +310,7 @@ struct InvoicesModuleView: View {
                 Divider().padding(.horizontal, 12)
             }
         }
-        .background(Color.white).cornerRadius(10)
+        .background(Color.bgSurface).cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 }
@@ -347,7 +364,7 @@ struct PaymentRunApprovalPage: View {
                                 }
                             }
                         }
-                        .background(Color.white).cornerRadius(10)
+                        .background(Color.bgSurface).cornerRadius(10)
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
                         .padding(.top, 12)
                     }
@@ -394,7 +411,7 @@ struct InvoiceRow: View {
                 HStack(spacing: 6) {
                     Text(displayName)
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.black).lineLimit(1)
+                        .foregroundColor(.primary).lineLimit(1)
                     if onViewFile != nil {
                         Button(action: { onViewFile?() }) {
                             Text("View")
@@ -473,6 +490,7 @@ struct InvoiceDetailPage: View {
     let invoice: Invoice
     @EnvironmentObject var appState: POViewModel
     @Environment(\.presentationMode) var presentationMode
+    @State private var navigateToHistory = false
 
     private var liveInvoice: Invoice {
         appState.invoices.first(where: { $0.id == invoice.id }) ?? invoice
@@ -483,14 +501,193 @@ struct InvoiceDetailPage: View {
             .environmentObject(appState)
             .navigationBarTitle(Text(liveInvoice.invoiceNumber.isEmpty ? "Invoice" : liveInvoice.invoiceNumber), displayMode: .inline)
             .navigationBarBackButtonHidden(true)
-            .navigationBarItems(leading:
-                Button(action: { presentationMode.wrappedValue.dismiss() }) {
+            .navigationBarItems(
+                leading: Button(action: { presentationMode.wrappedValue.dismiss() }) {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.left").font(.system(size: 14, weight: .semibold))
                         Text("Back").font(.system(size: 16))
                     }.foregroundColor(.goldDark)
+                },
+                trailing: Button(action: { navigateToHistory = true }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock.arrow.circlepath").font(.system(size: 14, weight: .semibold))
+                        Text("History").font(.system(size: 14, weight: .semibold))
+                    }.foregroundColor(.goldDark)
                 }
             )
+            .background(
+                NavigationLink(
+                    destination: InvoiceHistoryPage(invoiceId: liveInvoice.id, invoiceLabel: liveInvoice.invoiceNumber.isEmpty ? "Invoice" : liveInvoice.invoiceNumber).environmentObject(appState),
+                    isActive: $navigateToHistory
+                ) { EmptyView() }.frame(width: 0, height: 0).hidden()
+            )
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MARK: - Invoice History Page
+// ═══════════════════════════════════════════════════════════════════
+
+struct InvoiceHistoryPage: View {
+    @EnvironmentObject var appState: POViewModel
+    let invoiceId: String
+    let invoiceLabel: String
+
+    private var entries: [InvoiceHistoryEntry] { appState.invoiceHistory[invoiceId] ?? [] }
+
+    var body: some View {
+        ZStack {
+            Color.bgBase.edgesIgnoringSafeArea(.all)
+            if appState.invoiceHistoryLoading && entries.isEmpty {
+                VStack { Spacer(); LoaderView(); Spacer() }
+            } else if entries.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "clock").font(.system(size: 36)).foregroundColor(.gray.opacity(0.4))
+                    Text("No history yet").font(.system(size: 14, weight: .semibold)).foregroundColor(.secondary)
+                    Text("Actions on this invoice will appear here.")
+                        .font(.system(size: 12)).foregroundColor(.gray).multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        // Summary header
+                        if !invoiceLabel.isEmpty {
+                            HStack(spacing: 6) {
+                                Image(systemName: "doc.text.fill").font(.system(size: 12)).foregroundColor(.goldDark)
+                                Text(invoiceLabel)
+                                    .font(.system(size: 13, weight: .semibold)).foregroundColor(.primary)
+                                Spacer()
+                                Text("\(entries.count) event\(entries.count == 1 ? "" : "s")")
+                                    .font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary)
+                            }
+                            .padding(12).background(Color.bgSurface).cornerRadius(10)
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                            .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 10)
+                        }
+
+                        ForEach(Array(entries.enumerated()), id: \.offset) { idx, entry in
+                            historyRow(entry, isLast: idx == entries.count - 1)
+                        }
+                    }
+                    .padding(.bottom, 24)
+                }
+            }
+        }
+        .navigationBarTitle(Text("Invoice History"), displayMode: .inline)
+        .onAppear { appState.loadInvoiceHistory(invoiceId) }
+    }
+
+    private func actionColor(_ action: String) -> Color {
+        let a = action.lowercased()
+        if a.contains("approv") && !a.contains("override") { return .green }
+        if a.contains("reject") { return .red }
+        if a.contains("override") { return .orange }
+        if a.contains("submit") || a.contains("upload") { return .goldDark }
+        if a.contains("escalat") { return .red }
+        if a.contains("post") || a.contains("paid") { return Color(red: 0.1, green: 0.6, blue: 0.3) }
+        return .goldDark
+    }
+
+    private func actionIcon(_ action: String) -> String {
+        let a = action.lowercased()
+        if a.contains("approv") && !a.contains("override") { return "checkmark.circle.fill" }
+        if a.contains("reject") { return "xmark.circle.fill" }
+        if a.contains("override") { return "bolt.fill" }
+        if a.contains("submit") { return "paperplane.fill" }
+        if a.contains("upload") { return "arrow.up.circle.fill" }
+        if a.contains("escalat") { return "exclamationmark.triangle.fill" }
+        if a.contains("post") || a.contains("paid") { return "tray.and.arrow.down.fill" }
+        if a.contains("update") || a.contains("edit") { return "pencil.circle.fill" }
+        return "circle.fill"
+    }
+
+    /// Turn a raw backend action string into a past-tense Title Case label.
+    /// "inbox_processed" → "Inbox processed", "created" → "Created".
+    private func actionTitle(_ raw: String) -> String {
+        if raw.isEmpty { return "—" }
+        let replaced = raw.replacingOccurrences(of: "_", with: " ")
+        return replaced.prefix(1).uppercased() + replaced.dropFirst()
+    }
+
+    /// Resolve the user for a history entry — returns both the display name
+    /// and (optionally) a formatted designation like "Production Accountant".
+    private func resolvedUser(for entry: InvoiceHistoryEntry) -> (name: String, role: String?) {
+        if let uid = entry.userId, !uid.isEmpty, let u = UsersData.byId[uid] {
+            let role = u.displayDesignation.isEmpty ? nil : u.displayDesignation
+            return (u.fullName, role)
+        }
+        if let name = entry.userName, !name.isEmpty { return (name, nil) }
+        if let uid = entry.userId, !uid.isEmpty { return (uid, nil) }
+        return ("Unknown", nil)
+    }
+
+    private func historyRow(_ entry: InvoiceHistoryEntry, isLast: Bool) -> some View {
+        let actionStr = entry.action ?? ""
+        let title = actionTitle(actionStr)
+        let color = actionColor(actionStr)
+        let who = resolvedUser(for: entry)
+        return HStack(alignment: .top, spacing: 12) {
+            // Timeline icon + connecting line
+            VStack(spacing: 0) {
+                ZStack {
+                    Circle().fill(color.opacity(0.15)).frame(width: 28, height: 28)
+                    Image(systemName: actionIcon(actionStr))
+                        .font(.system(size: 11, weight: .bold)).foregroundColor(color)
+                }
+                if !isLast {
+                    Rectangle().fill(Color.borderColor).frame(width: 2)
+                        .frame(maxHeight: .infinity).padding(.top, 2)
+                }
+            }
+            .frame(width: 28)
+
+            VStack(alignment: .leading, spacing: 6) {
+                // "Updated"
+                Text(title)
+                    .font(.system(size: 14, weight: .bold)).foregroundColor(.primary)
+
+                // "by Sarah Alderton (Production Accountant)"
+                HStack(alignment: .firstTextBaseline, spacing: 0) {
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 9)).foregroundColor(.secondary)
+                        .padding(.trailing, 4)
+                    (
+                        Text("by ").foregroundColor(.secondary)
+                        + Text(who.name).fontWeight(.semibold).foregroundColor(.primary)
+                        + Text({
+                            if let r = who.role { return " (\(r))" }
+                            return ""
+                        }()).foregroundColor(.secondary)
+                    )
+                    .font(.system(size: 12))
+                    .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+
+                // Optional free-text details (legacy endpoint)
+                if let d = entry.details, !d.isEmpty {
+                    Text(d).font(.system(size: 12)).foregroundColor(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                // "14 Apr 2026, 00:46"
+                if let ts = entry.timestamp, ts > 0 {
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock").font(.system(size: 9)).foregroundColor(.gray)
+                        Text(FormatUtils.formatHistoryDateTime(ts))
+                            .font(.system(size: 11, design: .monospaced)).foregroundColor(.gray)
+                    }
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.bgSurface)
+            .cornerRadius(10)
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+            .padding(.bottom, isLast ? 0 : 10)
+        }
+        .padding(.horizontal, 16).padding(.top, 4)
     }
 }
 
@@ -521,59 +718,73 @@ struct InvoiceDetailContentView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            Color.bgBase.edgesIgnoringSafeArea(.all)
+            Color.bgSurface.edgesIgnoringSafeArea(.all)
 
             ScrollView {
-                    VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 0) {
 
-                        // Header card (scrolls with content)
-                        invoiceHeader
-                            .padding(14).frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color.white).cornerRadius(10)
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                    // ── Header ─────────────────────────────────────────
+                    invoiceHeader
+                        .padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 14)
 
-                        // Supplier card
-                        supplierSection
+                    Divider()
 
-                        // Hold reason banner
-                        if let holdReason = invoice.holdReason, !holdReason.isEmpty {
-                            holdBanner(reason: holdReason, note: invoice.holdNote)
-                        }
+                    // ── Vendor / Supplier ──────────────────────────────
+                    supplierSection
+                        .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 14)
 
-                        // Dept / Currency / Pay Method grid
-                        metaGrid
-
-                        // Amounts
-                        amountsSection
-
-                        // Dates grid
-                        datesGrid
-
-                        // Linked POs
-                        if !invoice.poIds.isEmpty || invoice.poNumber != nil {
-                            linkedPOsSection
-                        }
-
-
-                        // Approval chain (hide for override status)
-                        if invoice.invoiceStatus != .override_ {
-                            invoiceApprovalFlowSection
-                        }
-
-                        // Rejection banner
-                        if let reason = invoice.rejectionReason, !reason.isEmpty {
-                            rejectionBanner(reason: reason)
-                        }
-
-                        // History section (from API)
-                        historySection
-
-                        // Audit footer
-                        auditFooter
+                    // ── Hold banner (kept as tinted callout) ───────────
+                    if let holdReason = invoice.holdReason, !holdReason.isEmpty {
+                        Divider()
+                        holdBanner(reason: holdReason, note: invoice.holdNote)
+                            .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 14)
                     }
-                    .padding(.horizontal, 16).padding(.top, 14)
-                    .padding(.bottom, (vis.canApprove || canDelete || (invoice.status == "inbox" && appState.currentUser?.isAccountant == true)) ? 80 : 24)
 
+                    Divider()
+
+                    // ── Department / Currency / Pay Method ─────────────
+                    metaGrid
+                        .padding(.top, 4).padding(.bottom, 4)
+
+                    Divider()
+
+                    // ── Gross Amount ───────────────────────────────────
+                    amountsSection
+                        .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 14)
+
+                    Divider()
+
+                    // ── Invoice / Due / Effective dates ────────────────
+                    datesGrid
+                        .padding(.top, 4).padding(.bottom, 4)
+
+                    // ── Linked POs ─────────────────────────────────────
+                    if !invoice.poIds.isEmpty || invoice.poNumber != nil || !invoice.linkedPOs.isEmpty {
+                        Divider()
+                        linkedPOsSection
+                            .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 14)
+                    }
+
+                    // ── Approval chain ─────────────────────────────────
+                    if invoice.invoiceStatus != .override_ {
+                        Divider()
+                        invoiceApprovalFlowSection
+                    }
+
+                    // ── Rejection banner (tinted callout) ──────────────
+                    if let reason = invoice.rejectionReason, !reason.isEmpty {
+                        Divider()
+                        rejectionBanner(reason: reason)
+                            .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 14)
+                    }
+
+                    // ── Audit footer ───────────────────────────────────
+                    Divider()
+                    auditFooter
+                        .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 14)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, (vis.canApprove || canDelete || (invoice.status == "inbox" && appState.currentUser?.isAccountant == true)) ? 80 : 24)
             }
 
             // ── Pinned action bar ──────────────────────────────────────────
@@ -642,10 +853,15 @@ struct InvoiceDetailContentView: View {
                 }.padding(32)
             }
         }
-        .onAppear { appState.loadInvoiceHistory(invoice.id) }
+        .onAppear {
+            // Make sure vendor + PO data is available so the supplier card
+            // and "Linked POs" rows can resolve by id.
+            if appState.vendors.isEmpty { appState.loadVendors() }
+            if appState.purchaseOrders.isEmpty { appState.loadPOs() }
+        }
     }
 
-    // MARK: - History
+    // MARK: - History (kept private — used by InvoiceHistoryPage)
 
     private var historySection: some View {
         let entries = appState.invoiceHistory[invoice.id] ?? []
@@ -668,23 +884,40 @@ struct InvoiceDetailContentView: View {
                     .padding(.horizontal, 14).padding(.bottom, 12)
             } else {
                 ForEach(entries) { entry in
+                    let raw = entry.action ?? ""
+                    let title: String = {
+                        if raw.isEmpty { return "—" }
+                        let replaced = raw.replacingOccurrences(of: "_", with: " ")
+                        return replaced.prefix(1).uppercased() + replaced.dropFirst()
+                    }()
+                    let resolved: (name: String, role: String?) = {
+                        if let uid = entry.userId, !uid.isEmpty, let u = UsersData.byId[uid] {
+                            return (u.fullName, u.displayDesignation.isEmpty ? nil : u.displayDesignation)
+                        }
+                        if let name = entry.userName, !name.isEmpty { return (name, nil) }
+                        if let uid = entry.userId, !uid.isEmpty { return (uid, nil) }
+                        return ("Unknown", nil)
+                    }()
                     HStack(alignment: .top, spacing: 10) {
                         Circle().fill(Color.goldDark).frame(width: 8, height: 8).padding(.top, 5)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(entry.action ?? "—").font(.system(size: 12, weight: .semibold))
+                            Text(title).font(.system(size: 12, weight: .semibold))
                             if let d = entry.details, !d.isEmpty {
                                 Text(d).font(.system(size: 10)).foregroundColor(.secondary)
                             }
-                            HStack(spacing: 6) {
-                                if let name = entry.userName, !name.isEmpty {
-                                    Text(name).font(.system(size: 9, weight: .medium)).foregroundColor(.goldDark)
-                                } else if let uid = entry.userId, !uid.isEmpty {
-                                    Text(UsersData.byId[uid]?.fullName ?? uid).font(.system(size: 9, weight: .medium)).foregroundColor(.goldDark)
-                                }
-                                if let ts = entry.timestamp, ts > 0 {
-                                    Text("·").font(.system(size: 9)).foregroundColor(.gray)
-                                    Text(FormatUtils.formatDateTime(ts)).font(.system(size: 9)).foregroundColor(.gray)
-                                }
+                            (
+                                Text("by ").foregroundColor(.secondary)
+                                + Text(resolved.name).fontWeight(.medium).foregroundColor(.goldDark)
+                                + Text({
+                                    if let r = resolved.role { return " (\(r))" }
+                                    return ""
+                                }()).foregroundColor(.secondary)
+                            )
+                            .font(.system(size: 10))
+                            .fixedSize(horizontal: false, vertical: true)
+                            if let ts = entry.timestamp, ts > 0 {
+                                Text(FormatUtils.formatHistoryDateTime(ts))
+                                    .font(.system(size: 9, design: .monospaced)).foregroundColor(.gray)
                             }
                         }
                         Spacer()
@@ -693,15 +926,49 @@ struct InvoiceDetailContentView: View {
                 .padding(.bottom, 6)
             }
         }
-        .background(Color.white).cornerRadius(10)
+        .background(Color.bgSurface).cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 
-    /// Construct URL for viewing the uploaded invoice document
+    /// Construct URL for viewing the uploaded invoice document.
+    /// Format: <base>/uploads/<filename> — e.g.
+    /// https://accounthub-dev.zillit.com/uploads/1776107650863-975643146.png
+    ///
+    /// Falls back to `upload_id` when no filename is present — some servers
+    /// expose the file via `/uploads/<upload_id>` too. As a last resort we
+    /// attempt `/api/v2/invoices/<id>/file`.
     private var invoiceDocumentURL: URL? {
-        guard let fileName = invoice.file, !fileName.isEmpty else { return nil }
         let base = APIClient.shared.baseURL
-        return URL(string: "\(base)/api/v2/invoices/uploads/\(fileName)")
+
+        // 1) Explicit file field (preferred)
+        if let fileName = invoice.file, !fileName.isEmpty {
+            if fileName.hasPrefix("http://") || fileName.hasPrefix("https://") {
+                return URL(string: fileName)
+            }
+            let trimmed = fileName.hasPrefix("/") ? String(fileName.dropFirst()) : fileName
+            // Server may return "uploads/xyz.png" already-prefixed
+            if trimmed.hasPrefix("uploads/") {
+                return URL(string: "\(base)/\(trimmed)")
+            }
+            return URL(string: "\(base)/uploads/\(trimmed)")
+        }
+
+        // 2) Fall back to upload_id — many servers let you fetch the file by id
+        if let uid = invoice.uploadId, !uid.isEmpty {
+            return URL(string: "\(base)/uploads/\(uid)")
+        }
+
+        // 3) Final fallback — invoice-scoped file endpoint
+        return URL(string: "\(base)/api/v2/invoices/\(invoice.id)/file")
+    }
+
+    /// Whether there's any uploaded document we can try to show. The View
+    /// button uses this so it still appears when the server didn't populate
+    /// `file` directly but we have an `upload_id`.
+    private var hasInvoiceDocument: Bool {
+        if let f = invoice.file, !f.isEmpty { return true }
+        if let u = invoice.uploadId, !u.isEmpty { return true }
+        return false
     }
 
     // MARK: - Header
@@ -722,15 +989,19 @@ struct InvoiceDetailContentView: View {
                     return desc
                 }())
                     .font(.system(size: 16, weight: .bold)).foregroundColor(.primary)
-                Button(action: { showDocumentViewer = true }) {
-                    HStack(spacing: 3) {
-                        Image(systemName: "eye.fill").font(.system(size: 10))
-                        Text("View").font(.system(size: 10, weight: .semibold))
-                    }
-                    .foregroundColor(.goldDark)
-                    .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(Color.gold.opacity(0.12)).cornerRadius(4)
-                }.buttonStyle(BorderlessButtonStyle())
+                // Show the View button whenever we have any path to the file
+                // (an explicit filename OR an upload id we can look up).
+                if hasInvoiceDocument {
+                    Button(action: { showDocumentViewer = true }) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "eye.fill").font(.system(size: 10))
+                            Text("View").font(.system(size: 10, weight: .semibold))
+                        }
+                        .foregroundColor(.goldDark)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(Color.gold.opacity(0.12)).cornerRadius(4)
+                    }.buttonStyle(BorderlessButtonStyle())
+                }
             }
             // Status badge row
             HStack(spacing: 6) {
@@ -767,37 +1038,71 @@ struct InvoiceDetailContentView: View {
 
     // MARK: - Supplier
 
+    /// Resolve vendor live from `appState.vendors` so address/email/phone show
+    /// up even if the invoice was loaded before the vendor list arrived.
+    private var resolvedVendor: Vendor? {
+        guard let vid = invoice.vendorId, !vid.isEmpty else { return nil }
+        return appState.vendors.first { $0.id == vid }
+    }
+
     private var supplierSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        // Prefer live vendor data, fall back to whatever was baked into the invoice
+        let v = resolvedVendor
+        let name    = !invoice.supplierName.isEmpty ? invoice.supplierName : (v?.name ?? "")
+        let address = !invoice.vendorAddress.isEmpty ? invoice.vendorAddress : (v?.address.formatted ?? "")
+        let phone: String = {
+            if !invoice.vendorPhone.isEmpty { return invoice.vendorPhone }
+            guard let v = v else { return "" }
+            return "\(v.phone.countryCode) \(v.phone.number)".trimmingCharacters(in: .whitespaces)
+        }()
+        let email   = !invoice.vendorEmail.isEmpty ? invoice.vendorEmail : (v?.email ?? "")
+        let contact = v?.contactPerson ?? ""
+        let vat     = invoice.vendorVatNumber ?? v?.vatNumber
+
+        return VStack(alignment: .leading, spacing: 6) {
             Text("VENDOR").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary)
                 .tracking(0.6)
-            Text(invoice.supplierName.isEmpty ? "—" : invoice.supplierName)
-                .font(.system(size: 14, weight: .semibold))
-            if !invoice.vendorAddress.isEmpty {
-                Text(invoice.vendorAddress)
-                    .font(.system(size: 11)).foregroundColor(.secondary)
+            Text(name.isEmpty ? "—" : name)
+                .font(.system(size: 15, weight: .semibold))
+                .fixedSize(horizontal: false, vertical: true)
+            if !contact.isEmpty {
+                Text("Contact: \(contact)")
+                    .font(.system(size: 12)).foregroundColor(.secondary)
             }
-            if !invoice.vendorPhone.isEmpty || !invoice.vendorEmail.isEmpty {
-                Divider()
-                HStack(spacing: 16) {
-                    if !invoice.vendorPhone.isEmpty {
-                        VStack(alignment: .leading, spacing: 1) {
+            if !address.isEmpty {
+                Text(address)
+                    .font(.system(size: 12)).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !phone.isEmpty || !email.isEmpty || (vat?.isEmpty == false) {
+                HStack(alignment: .top, spacing: 16) {
+                    if !phone.isEmpty {
+                        VStack(alignment: .leading, spacing: 2) {
                             Text("PHONE").font(.system(size: 8, weight: .bold)).foregroundColor(.gray).tracking(0.4)
-                            Text(invoice.vendorPhone).font(.system(size: 11, weight: .medium))
+                            Text(phone).font(.system(size: 12, weight: .medium))
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    if !invoice.vendorEmail.isEmpty {
-                        VStack(alignment: .leading, spacing: 1) {
+                    if !email.isEmpty {
+                        VStack(alignment: .leading, spacing: 2) {
                             Text("EMAIL").font(.system(size: 8, weight: .bold)).foregroundColor(.gray).tracking(0.4)
-                            Text(invoice.vendorEmail).font(.system(size: 11, weight: .medium))
+                            Text(email).font(.system(size: 12, weight: .medium))
+                                .lineLimit(1).truncationMode(.middle)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                }
+                .padding(.top, 4)
+                if let vatNum = vat, !vatNum.isEmpty {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("VAT NUMBER").font(.system(size: 8, weight: .bold)).foregroundColor(.gray).tracking(0.4)
+                        Text(vatNum).font(.system(size: 12, weight: .medium, design: .monospaced))
+                    }
+                    .padding(.top, 4)
                 }
             }
         }
-        .padding(14).frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white).cornerRadius(10)
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Banners
@@ -842,8 +1147,6 @@ struct InvoiceDetailContentView: View {
             Divider().frame(height: 44)
             metaCell(label: "Pay Method", value: (invoice.payMethod ?? "—").uppercased())
         }
-        .background(Color.white).cornerRadius(10)
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 
     private func metaCell(label: String, value: String) -> some View {
@@ -859,19 +1162,14 @@ struct InvoiceDetailContentView: View {
 
     private var amountsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("GROSS AMOUNTS").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
-            HStack(alignment: .bottom, spacing: 4) {
-                Text(FormatUtils.formatCurrency(invoice.grossAmount, code: invoice.currency))
-                    .font(.system(size: 22, weight: .bold, design: .monospaced)).foregroundColor(.primary)
-                
-            }
+            Text("GROSS AMOUNT").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
+            Text(FormatUtils.formatCurrency(invoice.grossAmount, code: invoice.currency))
+                .font(.system(size: 24, weight: .bold, design: .monospaced)).foregroundColor(.primary)
             if let costCentre = invoice.costCentre, !costCentre.isEmpty {
                 Text("Cost Centre: \(costCentre)").font(.system(size: 11)).foregroundColor(.secondary)
             }
         }
-        .padding(14).frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white).cornerRadius(10)
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Dates Grid
@@ -884,8 +1182,6 @@ struct InvoiceDetailContentView: View {
             Divider().frame(height: 44)
             dateCell(label: "Effective Date", value: invoice.effectiveDate.flatMap { $0 > 0 ? FormatUtils.formatTimestamp($0) : nil } ?? "—")
         }
-        .background(Color.white).cornerRadius(10)
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 
     private func dateCell(label: String, value: String, overdue: Bool = false) -> some View {
@@ -903,30 +1199,101 @@ struct InvoiceDetailContentView: View {
 
     // MARK: - Linked POs
 
-    private var linkedPOsSection: some View {
-        let poNums: [String] = {
-            var nums = invoice.poIds.compactMap { id in
-                appState.purchaseOrders.first(where: { $0.id == id })?.poNumber ?? (id.isEmpty ? nil : id)
-            }
-            if nums.isEmpty, let p = invoice.poNumber, !p.isEmpty { nums = [p] }
-            return nums
-        }()
-        return VStack(alignment: .leading, spacing: 8) {
-            Text("LINKED POs (\(poNums.count))").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
-            ForEach(poNums, id: \.self) { num in
-                HStack {
-                    Text(num).font(.system(size: 13, weight: .semibold))
-                    Spacer()
-                    Image(systemName: "link").font(.system(size: 11)).foregroundColor(.secondary)
+    /// Row model used in the linked-POs section. Prefers the rich
+    /// `linked_pos` summary from the backend (po_number + vendor name +
+    /// gross total) and falls back to a lookup on `invoice.poIds`.
+    private struct LinkedPORow: Identifiable {
+        let id: String
+        let poNumber: String
+        let vendorName: String
+        let amount: Double?
+        let currency: String
+    }
+
+    private var linkedPORows: [LinkedPORow] {
+        // 1) Prefer the rich backend summary if present.
+        if !invoice.linkedPOs.isEmpty {
+            return invoice.linkedPOs.map { lp in
+                // Fall back to appState lookup if the backend didn't resolve
+                // the vendor name (e.g. the vendor list on backend is stale).
+                var vendor = lp.poVendorName
+                if vendor.isEmpty, !lp.poVendorId.isEmpty,
+                   let v = appState.vendors.first(where: { $0.id == lp.poVendorId }) {
+                    vendor = v.name
                 }
-                .padding(.horizontal, 12).padding(.vertical, 8)
-                .background(Color.blue.opacity(0.04)).cornerRadius(6)
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.blue.opacity(0.15), lineWidth: 1))
+                return LinkedPORow(
+                    id: lp.id,
+                    poNumber: lp.poNumber.isEmpty ? "PO-\(String(lp.poId.suffix(8)).uppercased())" : lp.poNumber,
+                    vendorName: vendor,
+                    amount: lp.poGrossTotal > 0 ? lp.poGrossTotal : nil,
+                    currency: lp.currency
+                )
             }
         }
-        .padding(14).frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white).cornerRadius(10)
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+        // 2) Fall back to the flat po_ids array + PO lookup.
+        var rows: [LinkedPORow] = invoice.poIds.compactMap { id in
+            guard !id.isEmpty else { return nil }
+            if let po = appState.purchaseOrders.first(where: { $0.id == id }) {
+                let vendor = po.vendor.isEmpty
+                    ? (po.vendorId.flatMap { vid in appState.vendors.first { $0.id == vid }?.name } ?? "")
+                    : po.vendor
+                // `po.grossTotal` is optional; only surface it when we have
+                // a positive value to show.
+                let amt: Double? = {
+                    if let g = po.grossTotal, g > 0 { return g }
+                    return nil
+                }()
+                return LinkedPORow(
+                    id: id,
+                    poNumber: po.poNumber.isEmpty ? "PO-\(String(id.suffix(8)).uppercased())" : po.poNumber,
+                    vendorName: vendor,
+                    amount: amt,
+                    currency: po.currency
+                )
+            }
+            let short = "PO-\(String(id.suffix(8)).uppercased())"
+            return LinkedPORow(id: id, poNumber: short, vendorName: "", amount: nil, currency: invoice.currency)
+        }
+        // 3) Legacy single-PO fallback
+        if rows.isEmpty, let p = invoice.poNumber, !p.isEmpty {
+            rows = [LinkedPORow(id: p, poNumber: p, vendorName: invoice.supplierName, amount: nil, currency: invoice.currency)]
+        }
+        return rows
+    }
+
+    private var linkedPOsSection: some View {
+        let items = linkedPORows
+        return VStack(alignment: .leading, spacing: 10) {
+            Text("LINKED POS (\(items.count))")
+                .font(.system(size: 10, weight: .bold)).foregroundColor(.secondary).tracking(0.8)
+            ForEach(items) { row in
+                HStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(row.poNumber)
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(.primary)
+                        if !row.vendorName.isEmpty {
+                            Text(row.vendorName)
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    Spacer(minLength: 8)
+                    if let amt = row.amount {
+                        Text(FormatUtils.formatCurrency(amt, code: row.currency))
+                            .font(.system(size: 15, weight: .bold, design: .monospaced))
+                            .foregroundColor(.primary)
+                    }
+                }
+                .padding(.horizontal, 14).padding(.vertical, 12)
+                .frame(maxWidth: .infinity)
+                .background(Color.bgRaised)
+                .cornerRadius(8)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Line Items
@@ -953,7 +1320,7 @@ struct InvoiceDetailContentView: View {
                     .font(.system(size: 15, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
             }.padding(.horizontal, 14).padding(.vertical, 8)
         }
-        .background(Color.white).cornerRadius(10)
+        .background(Color.bgSurface).cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 
@@ -1000,8 +1367,6 @@ struct InvoiceDetailContentView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(14).background(Color.white).cornerRadius(10)
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 
     // MARK: - Action Bar
@@ -1097,7 +1462,7 @@ struct InvoiceDetailContentView: View {
                                 .background(Color.red.opacity(0.1)).cornerRadius(4)
                         }
                     }
-                    .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 10)
+                    .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 10)
 
                     if let config = cfg {
                         ForEach(1...totalTiers, id: \.self) { tierNum in
@@ -1107,8 +1472,7 @@ struct InvoiceDetailContentView: View {
 
                     EmptyView()
                 }
-                .background(Color.white).cornerRadius(10)
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+                .padding(.bottom, 14)
             }
         }
     }
@@ -1251,7 +1615,7 @@ struct RejectInvoiceSheetView: View {
                         Text("Reason for rejection").font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
                         TextField("Enter reason…", text: $appState.rejectInvoiceReason)
                             .font(.system(size: 14)).padding(10)
-                            .background(Color.white).cornerRadius(8)
+                            .background(Color.bgSurface).cornerRadius(8)
                             .overlay(RoundedRectangle(cornerRadius: 8).stroke(showError ? Color.red : Color.borderColor, lineWidth: 1))
                         if showError {
                             Text("Reason is required").font(.system(size: 11)).foregroundColor(.red)
@@ -1289,7 +1653,7 @@ struct PaymentRunRow: View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(run.number).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundColor(.goldDark)
-                Text(run.name.isEmpty ? "Payment Run" : run.name).font(.system(size: 13, weight: .medium)).foregroundColor(.black).lineLimit(1)
+                Text(run.name.isEmpty ? "Payment Run" : run.name).font(.system(size: 13, weight: .medium)).foregroundColor(.primary).lineLimit(1)
                 HStack(spacing: 8) {
                     if !run.payMethod.isEmpty {
                         Text(run.payMethod.uppercased()).font(.system(size: 9, weight: .semibold)).foregroundColor(.blue)
@@ -1411,7 +1775,7 @@ struct PaymentRunDetailPage: View {
                             ActivityIndicator(isAnimating: true).frame(width: 16, height: 16)
                             Text("Loading invoices…").font(.system(size: 12)).foregroundColor(.secondary)
                         }.padding(14).frame(maxWidth: .infinity)
-                        .background(Color.white).cornerRadius(10)
+                        .background(Color.bgSurface).cornerRadius(10)
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
                     } else if !runInvoices.isEmpty {
                         invoicesSection
@@ -1462,7 +1826,7 @@ struct PaymentRunDetailPage: View {
                     }
                     .padding(.horizontal, 16).padding(.vertical, 12)
                 }
-                .background(Color.white.edgesIgnoringSafeArea(.bottom))
+                .background(Color.bgSurface.edgesIgnoringSafeArea(.bottom))
             }
         }
         .navigationBarTitle(Text("\(liveRun.number) — \(liveRun.name.isEmpty ? "Payment Run" : liveRun.name)"), displayMode: .inline)
@@ -1594,7 +1958,7 @@ struct PaymentRunDetailPage: View {
                 summaryRow(label: "Last Updated", value: FormatUtils.formatDateTime(liveRun.updatedAt))
             }
         }
-        .background(Color.white).cornerRadius(10)
+        .background(Color.bgSurface).cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 
@@ -1749,7 +2113,7 @@ struct PaymentRunDetailPage: View {
                 }
                 .padding(12)
             }
-            .background(Color.white).cornerRadius(10)
+            .background(Color.bgSurface).cornerRadius(10)
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
         }
     }
@@ -1813,7 +2177,7 @@ struct PaymentRunDetailPage: View {
                 .padding(14)
             }
         }
-        .background(Color.white).cornerRadius(10)
+        .background(Color.bgSurface).cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 
@@ -1837,7 +2201,7 @@ struct RejectPaymentRunSheetView: View {
                         Text("Reason for rejection").font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
                         TextField("Enter reason…", text: $appState.rejectPaymentRunReason)
                             .font(.system(size: 14)).padding(10)
-                            .background(Color.white).cornerRadius(8)
+                            .background(Color.bgSurface).cornerRadius(8)
                             .overlay(RoundedRectangle(cornerRadius: 8).stroke(showError ? Color.red : Color.borderColor, lineWidth: 1))
                         if showError { Text("Reason is required").font(.system(size: 11)).foregroundColor(.red) }
                     }
@@ -2061,7 +2425,7 @@ struct UploadInvoicePage: View {
                 Text("Upload Invoice").font(.system(size: 20, weight: .bold))
                 Text("Select a file to upload your invoice").font(.system(size: 13)).foregroundColor(.secondary)
             }
-            .frame(maxWidth: .infinity).padding(.vertical, 40).background(Color.white).cornerRadius(12)
+            .frame(maxWidth: .infinity).padding(.vertical, 40).background(Color.bgSurface).cornerRadius(12)
             .overlay(
                 RoundedRectangle(cornerRadius: 12).stroke(Color.gold.opacity(0.3), lineWidth: 1)
                     .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [8])).foregroundColor(Color.gold.opacity(0.4)))
@@ -2096,7 +2460,7 @@ struct UploadInvoicePage: View {
                     Text(name).font(.system(size: 14, weight: .medium)).multilineTextAlignment(.center)
                 }
             }
-            .frame(maxWidth: .infinity).padding(.vertical, 24).background(Color.white).cornerRadius(12)
+            .frame(maxWidth: .infinity).padding(.vertical, 24).background(Color.bgSurface).cornerRadius(12)
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
 
             // Extraction status
@@ -2215,7 +2579,7 @@ struct UploadInvoicePage: View {
                 }
                 Spacer()
             }
-            .padding(14).background(Color.white).cornerRadius(12)
+            .padding(14).background(Color.bgSurface).cornerRadius(12)
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(selectedType == value ? Color.gold : Color.borderColor, lineWidth: selectedType == value ? 1.5 : 1))
         }
         .buttonStyle(PlainButtonStyle())
@@ -2229,13 +2593,13 @@ struct UploadInvoicePage: View {
                 Image(systemName: icon).font(.system(size: 20)).foregroundColor(.goldDark)
                     .frame(width: 36, height: 36).background(Color.gold.opacity(0.15)).cornerRadius(8)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.system(size: 15, weight: .semibold)).foregroundColor(.black)
+                    Text(title).font(.system(size: 15, weight: .semibold)).foregroundColor(.primary)
                     Text(subtitle).font(.system(size: 12)).foregroundColor(.secondary)
                 }
                 Spacer()
                 Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(.gray)
             }
-            .padding(14).background(Color.white).cornerRadius(12)
+            .padding(14).background(Color.bgSurface).cornerRadius(12)
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
             .contentShape(Rectangle())
         }.buttonStyle(BorderlessButtonStyle())
@@ -2385,13 +2749,147 @@ struct InvoiceDocumentViewer: View {
     let url: URL
     @Environment(\.presentationMode) var presentationMode
 
+    // Detected kind: nil until HEAD/initial load resolves the Content-Type.
+    // Fallbacks to the URL extension so we display immediately when possible.
+    @State private var resolvedKind: DocKind? = nil
+
+    enum DocKind { case image, pdf, web }
+
+    private var ext: String { url.pathExtension.lowercased() }
+    private var guessedKind: DocKind {
+        if ["png", "jpg", "jpeg", "gif", "heic", "heif", "webp", "bmp", "tif", "tiff"].contains(ext) { return .image }
+        if ext == "pdf" { return .pdf }
+        // Unknown — render in WKWebView which handles most types, or probe later.
+        return .web
+    }
+
     var body: some View {
         NavigationView {
-            InvoiceWebView(url: url)
-                .navigationBarTitle("Invoice Document", displayMode: .inline)
-                .navigationBarItems(trailing: Button("Done") { presentationMode.wrappedValue.dismiss() }
-                    .font(.system(size: 14, weight: .semibold)).foregroundColor(.goldDark))
+            Group {
+                switch resolvedKind ?? guessedKind {
+                case .image:
+                    // Zoomable image view for PNG/JPG/HEIC/WebP/etc.
+                    InvoiceImageView(url: url)
+                case .pdf:
+                    // PDFs render natively via WKWebView
+                    InvoiceWebView(url: url)
+                case .web:
+                    // Generic fallback — WKWebView also handles images/PDFs/plain HTML
+                    InvoiceWebView(url: url)
+                }
+            }
+            .background(Color.bgBase.edgesIgnoringSafeArea(.all))
+            .navigationBarTitle(Text(url.lastPathComponent.isEmpty ? "Document" : url.lastPathComponent), displayMode: .inline)
+            .navigationBarItems(trailing: Button("Done") { presentationMode.wrappedValue.dismiss() }
+                .font(.system(size: 14, weight: .semibold)).foregroundColor(.goldDark))
+            .onAppear { probeContentTypeIfNeeded() }
         }
+    }
+
+    /// If the URL has no extension (e.g. /uploads/<upload_id>), probe the
+    /// server with a HEAD request to learn whether this is an image or PDF.
+    private func probeContentTypeIfNeeded() {
+        guard resolvedKind == nil, guessedKind == .web else { return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "HEAD"
+        let client = APIClient.shared
+        req.setValue(client.projectId, forHTTPHeaderField: "x-project-id")
+        req.setValue(client.userId, forHTTPHeaderField: "x-user-id")
+        req.setValue(String(client.isAccountant), forHTTPHeaderField: "x-is-accountant")
+        URLSession.shared.dataTask(with: req) { _, resp, _ in
+            guard let http = resp as? HTTPURLResponse,
+                  let type = (http.value(forHTTPHeaderField: "Content-Type")
+                              ?? http.value(forHTTPHeaderField: "content-type"))?.lowercased()
+            else { return }
+            DispatchQueue.main.async {
+                if type.contains("image/") { self.resolvedKind = .image }
+                else if type.contains("pdf") { self.resolvedKind = .pdf }
+                else { self.resolvedKind = .web }
+            }
+        }.resume()
+    }
+}
+
+/// Loads an image via URLSession with the same auth headers APIClient uses.
+/// Supports pinch-to-zoom via a UIScrollView + UIImageView.
+struct InvoiceImageView: UIViewRepresentable {
+    let url: URL
+
+    func makeUIView(context: Context) -> UIScrollView {
+        let scrollView = UIScrollView()
+        scrollView.minimumZoomScale = 1
+        scrollView.maximumZoomScale = 4
+        scrollView.bouncesZoom = true
+        scrollView.delegate = context.coordinator
+        scrollView.backgroundColor = .black
+
+        let imageView = UIImageView()
+        imageView.contentMode = .scaleAspectFit
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.addSubview(imageView)
+        context.coordinator.imageView = imageView
+
+        NSLayoutConstraint.activate([
+            imageView.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
+            imageView.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
+            imageView.topAnchor.constraint(equalTo: scrollView.topAnchor),
+            imageView.bottomAnchor.constraint(equalTo: scrollView.bottomAnchor),
+            imageView.widthAnchor.constraint(equalTo: scrollView.widthAnchor),
+            imageView.heightAnchor.constraint(equalTo: scrollView.heightAnchor),
+        ])
+
+        // Loading spinner
+        let spinner = UIActivityIndicatorView(style: .large)
+        spinner.color = .white
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.addSubview(spinner)
+        NSLayoutConstraint.activate([
+            spinner.centerXAnchor.constraint(equalTo: scrollView.centerXAnchor),
+            spinner.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
+        ])
+        spinner.startAnimating()
+
+        // Build authenticated request
+        var request = URLRequest(url: url)
+        let client = APIClient.shared
+        request.setValue(client.projectId, forHTTPHeaderField: "x-project-id")
+        request.setValue(client.userId, forHTTPHeaderField: "x-user-id")
+        request.setValue(String(client.isAccountant), forHTTPHeaderField: "x-is-accountant")
+
+        URLSession.shared.dataTask(with: request) { data, _, error in
+            DispatchQueue.main.async {
+                spinner.stopAnimating()
+                spinner.removeFromSuperview()
+                if let data = data, let img = UIImage(data: data) {
+                    imageView.image = img
+                } else {
+                    let label = UILabel()
+                    label.text = error?.localizedDescription ?? "Unable to load image"
+                    label.textColor = .lightGray
+                    label.font = .systemFont(ofSize: 13)
+                    label.textAlignment = .center
+                    label.numberOfLines = 0
+                    label.translatesAutoresizingMaskIntoConstraints = false
+                    scrollView.addSubview(label)
+                    NSLayoutConstraint.activate([
+                        label.centerXAnchor.constraint(equalTo: scrollView.centerXAnchor),
+                        label.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
+                        label.widthAnchor.constraint(lessThanOrEqualTo: scrollView.widthAnchor, constant: -32),
+                    ])
+                }
+            }
+        }.resume()
+
+        return scrollView
+    }
+
+    func updateUIView(_ uiView: UIScrollView, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    final class Coordinator: NSObject, UIScrollViewDelegate {
+        weak var imageView: UIImageView?
+        func viewForZooming(in scrollView: UIScrollView) -> UIView? { imageView }
     }
 }
 
@@ -2402,6 +2900,7 @@ struct InvoiceWebView: UIViewRepresentable {
         let config = WKWebViewConfiguration()
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.backgroundColor = .systemGroupedBackground
+        webView.isOpaque = false
 
         // Build request with same headers APIClient uses
         var request = URLRequest(url: url)

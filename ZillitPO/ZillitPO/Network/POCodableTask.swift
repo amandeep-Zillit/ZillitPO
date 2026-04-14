@@ -32,6 +32,7 @@ enum POCodableTask {
 
     // MARK: - Form Template (typed response)
     case fetchFormTemplate((Result<APIResponse<FormTemplateResponse>?, Error>) -> Void)
+    case fetchFloatFormTemplate((Result<APIResponse<FormTemplateResponse>?, Error>) -> Void)
 
     // MARK: - Invoices (typed responses)
     case fetchInvoices(String, (Result<APIResponse<[InvoiceRaw]>?, Error>) -> Void)
@@ -54,6 +55,7 @@ enum POCodableTask {
     case getPaymentRun(String, (Result<APIResponse<PaymentRunDetailRaw>?, Error>) -> Void)
     case approvePaymentRun(String, [String: Any], (Result<Data?, Error>) -> Void)
     case rejectPaymentRun(String, [String: Any], (Result<Data?, Error>) -> Void)
+
 }
 
 extension POCodableTask: PODataTaskProtocol {
@@ -131,6 +133,10 @@ extension POCodableTask: PODataTaskProtocol {
         // MARK: Form Template
         case .fetchFormTemplate(let completion):
             guard let urlRequest = PORequest.fetchFormTemplate.urlRequest else { return nil }
+            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+
+        case .fetchFloatFormTemplate(let completion):
+            guard let urlRequest = PORequest.fetchFloatFormTemplate.urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
 
         // MARK: Invoices
