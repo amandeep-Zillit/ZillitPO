@@ -5,6 +5,38 @@
 
 import Foundation
 
+// MARK: - Float History Entry
+/// A single entry returned by GET /float-requests/{id}/history.
+/// Each row is `{ action, action_by, action_at, note? }` where `action`
+/// is a human-readable label the backend pre-formats (e.g.
+/// "Float: AWAITING_APPROVAL" or "Batch #RB-0008: POSTED"), `action_at`
+/// is epoch ms, and `note` carries any optional reason/rejection text.
+struct FloatHistoryEntry: Decodable, Identifiable {
+    var id: String { "\(action ?? "")-\(actionAt ?? 0)-\(actionBy ?? "")" }
+    var action: String?
+    var actionBy: String?
+    var actionAt: Int64?
+    var note: String?
+
+    enum CodingKeys: String, CodingKey {
+        case action
+        case actionBy = "action_by"
+        case actionAt = "action_at"
+        case note
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        action   = try? c.decode(String.self, forKey: .action)
+        actionBy = try? c.decode(String.self, forKey: .actionBy)
+        note     = try? c.decode(String.self, forKey: .note)
+        if let v = try? c.decode(Int64.self,  forKey: .actionAt)      { actionAt = v }
+        else if let v = try? c.decode(Double.self, forKey: .actionAt) { actionAt = Int64(v) }
+        else if let s = try? c.decode(String.self, forKey: .actionAt), let v = Int64(s) { actionAt = v }
+        else { actionAt = nil }
+    }
+}
+
 // MARK: - Metadata
 
 struct CashExpenseMetadata: Codable {
@@ -50,6 +82,16 @@ struct FloatRequest: Identifiable, Equatable {
     var issuedFloat: Double = 0
     var receiptsAmount: Double = 0
     var returnAmount: Double = 0
+    /// Backend-authoritative "spent" running total — incremented when a
+    /// posted batch reduces the float. We keep this as its own property
+    /// (instead of deriving from receiptsAmount) because the backend tracks
+    /// it independently and it's the value shown in the SPENT column.
+    var spent: Double = 0
+    /// Backend-authoritative remaining balance — the single source of
+    /// truth. Optional so we can distinguish "server didn't send it"
+    /// from "server said £0.00". When present (including 0), `remaining`
+    /// returns this directly.
+    var balance: Double? = nil
     var duration: String = ""
     var costCode: String = ""
     var startDate: Int64?
@@ -64,7 +106,32 @@ struct FloatRequest: Identifiable, Equatable {
     var updatedAt: Int64 = 0
     static func == (lhs: FloatRequest, rhs: FloatRequest) -> Bool { lhs.id == rhs.id }
 
-    var remaining: Double { issuedFloat - receiptsAmount - returnAmount }
+    /// Remaining balance. Prefer the backend-authoritative `balance`
+    /// column — it already accounts for top-ups, posted batches, and
+    /// returns. Only derive client-side when the backend didn't send
+    /// a `balance` field (legacy responses).
+    var remaining: Double {
+        if let b = balance { return b }
+        return max(0, issuedFloat - receiptsAmount - returnAmount)
+    }
+
+    /// Total cash spent from this float (receipts posted against it).
+    /// Priority:
+    ///   1. Backend `spent` column (authoritative running total),
+    ///   2. `receipts_amount` from legacy responses,
+    ///   3. Derived: issued − balance − returned (mathematically
+    ///      equivalent since the backend maintains
+    ///      balance = issued − spent − returned).
+    /// This covers the case where `spent` is 0 because the list endpoint
+    /// doesn't populate it, but `balance` and `issuedFloat` are live.
+    var spentTotal: Double {
+        if spent > 0.005 { return spent }
+        if receiptsAmount > 0.005 { return receiptsAmount }
+        if let b = balance {
+            return max(0, issuedFloat - b - returnAmount)
+        }
+        return 0
+    }
     // Status values (mirrors backend FloatRequestService STATUS enum):
     //   AWAITING_APPROVAL → APPROVED (all tiers) | REJECTED | ACCT_OVERRIDE
     //   APPROVED / ACCT_OVERRIDE → READY_TO_COLLECT → COLLECTED
@@ -114,6 +181,10 @@ struct FloatRequestRaw: Codable {
     var user_id: String?; var department_id: String?
     var req_number: String?; var req_amount: String?; var issued_float: String?
     var receipts_amount: String?; var return_amount: String?; var duration: String?
+    /// Running "spent" total — backend column `spent`.
+    var spent: String?
+    /// Authoritative remaining balance — backend column `balance`.
+    var balance: String?
     var cost_code: String?; var start_date: String?; var purpose: String?
     var collection_method: String?; var status: String?
     var approvals: [CashApprovalRaw]?
@@ -125,6 +196,7 @@ struct FloatRequestRaw: Codable {
         case receipts_amount, return_amount, duration, cost_code, start_date
         case purpose, collection_method, status, approvals
         case rejection_reason, rejected_by, created_at, updated_at
+        case spent, balance
     }
 
     init(from decoder: Decoder) throws {
@@ -137,6 +209,13 @@ struct FloatRequestRaw: Codable {
         issued_float = try? c.decode(String.self, forKey: .issued_float)
         receipts_amount = try? c.decode(String.self, forKey: .receipts_amount)
         return_amount = try? c.decode(String.self, forKey: .return_amount)
+        // Numeric Postgres columns can arrive as either String or Number in
+        // JSON depending on driver / serializer. Accept both so we don't
+        // silently lose the value and fall back to 0.
+        if let s = try? c.decode(String.self, forKey: .spent) { spent = s }
+        else if let d = try? c.decode(Double.self, forKey: .spent) { spent = String(d) }
+        if let s = try? c.decode(String.self, forKey: .balance) { balance = s }
+        else if let d = try? c.decode(Double.self, forKey: .balance) { balance = String(d) }
         duration = try? c.decode(String.self, forKey: .duration)
         cost_code = try? c.decode(String.self, forKey: .cost_code)
         start_date = try? c.decode(String.self, forKey: .start_date)
@@ -158,6 +237,13 @@ struct FloatRequestRaw: Codable {
         f.issuedFloat = Double(issued_float ?? "") ?? 0
         f.receiptsAmount = Double(receipts_amount ?? "") ?? 0
         f.returnAmount = Double(return_amount ?? "") ?? 0
+        // Backend-authoritative running totals. Fall back to legacy
+        // values when not present (older list endpoints) so we still
+        // render something sensible.
+        f.spent = Double(spent ?? "") ?? f.receiptsAmount
+        // Keep `balance` nil when the server didn't send it, so the
+        // `remaining` computed var falls back to the derivation.
+        f.balance = (balance?.isEmpty == false) ? Double(balance!) : nil
         f.duration = duration ?? ""; f.costCode = cost_code ?? ""
         f.startDate = Int64(start_date ?? ""); f.purpose = purpose ?? ""
         f.collectionMethod = collection_method ?? ""; f.status = status ?? ""
@@ -203,6 +289,11 @@ struct ClaimBatch: Identifiable, Equatable {
     var postedAt: Int64?
     var createdAt: Int64 = 0
     var updatedAt: Int64 = 0
+    /// Extra follow-up action stored under `settlement_details.follow_up`
+    /// — typically "top_up" (reimburse back into float) or "close" (close
+    /// the float after this batch posts). Used by the detail view's
+    /// "Follow-up" column.
+    var followUp: String = ""
     static func == (lhs: ClaimBatch, rhs: ClaimBatch) -> Bool { lhs.id == rhs.id }
 
     var isPettyCash: Bool { expenseType.lowercased() == "pc" }
@@ -236,12 +327,20 @@ struct ClaimBatchRaw: Codable {
     var posted_by: String?; var posted_at: String?
     var created_at: String?; var updated_at: String?
 
+    /// `settlement_details` is a nested JSON object. We only need
+    /// `follow_up` out of it, so decode into this tiny struct.
+    struct SettlementDetails: Codable {
+        var follow_up: String?
+    }
+    var settlement_details: SettlementDetails?
+
     enum CodingKeys: String, CodingKey {
         case id, batch_reference, user_id, department_id, expense_type, float_request_id
         case settlement_type, status, total_gross, total_net, total_vat, claim_count, notes
         case category, cost_code, coding_description
         case rejection_reason, rejected_by, escalation_reason, assigned_to
         case posted_by, posted_at, created_at, updated_at
+        case settlement_details
     }
 
     init(from decoder: Decoder) throws {
@@ -270,6 +369,7 @@ struct ClaimBatchRaw: Codable {
         posted_at = try? c.decode(String.self, forKey: .posted_at)
         created_at = try? c.decode(String.self, forKey: .created_at)
         updated_at = try? c.decode(String.self, forKey: .updated_at)
+        settlement_details = try? c.decode(SettlementDetails.self, forKey: .settlement_details)
     }
 
     func toClaimBatch() -> ClaimBatch {
@@ -289,6 +389,7 @@ struct ClaimBatchRaw: Codable {
         cb.escalationReason = escalation_reason; cb.assignedTo = assigned_to
         cb.postedBy = posted_by; cb.postedAt = posted_at.flatMap { Int64($0) }
         cb.createdAt = Int64(created_at ?? "") ?? 0; cb.updatedAt = Int64(updated_at ?? "") ?? 0
+        cb.followUp = settlement_details?.follow_up ?? ""
         return cb
     }
 }

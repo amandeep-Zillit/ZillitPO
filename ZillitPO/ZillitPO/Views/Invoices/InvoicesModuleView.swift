@@ -111,9 +111,12 @@ struct InvoicesModuleView: View {
                     }
                     .padding(.horizontal, 16).padding(.top, 12)
                 } else {
+                    // No payment-run button → use the bare filter button
+                    // (no Spacer) so the search field can claim every
+                    // remaining pixel of the row.
                     HStack(spacing: 8) {
                         searchBar
-                        filterBar
+                        filterButton
                     }
                     .padding(.horizontal, 16).padding(.top, 12)
                 }
@@ -207,30 +210,40 @@ struct InvoicesModuleView: View {
 
     @State private var showFilterSheet = false
 
+    /// Filter button alone — sized to its content, no Spacer. Used by
+    /// both layouts so the inline (no-approver) row doesn't inherit a
+    /// width-stealing Spacer from the multi-button approver row.
+    private var filterButton: some View {
+        Button(action: { showFilterSheet = true }) {
+            HStack(spacing: 4) {
+                Image(systemName: "line.3.horizontal.decrease")
+                    .font(.system(size: 10, weight: .medium)).foregroundColor(.goldDark)
+                Text(selectedFilter.rawValue)
+                    .font(.system(size: 12, weight: .semibold)).foregroundColor(.primary).lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .medium)).foregroundColor(.gray)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 10)
+            .background(Color.bgSurface).cornerRadius(8)
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(BorderlessButtonStyle())
+        .selectionActionSheet(
+            title: "Filter by Status",
+            isPresented: $showFilterSheet,
+            options: InvoiceFilter.allCases,
+            isSelected: { $0 == selectedFilter },
+            label: { $0.rawValue },
+            onSelect: { selectedFilter = $0 }
+        )
+    }
+
+    /// Two-row layout — Filter + Payment Run Approval on top, Search
+    /// below — used when the current user is a payment-run approver.
     private var filterBar: some View {
         HStack(spacing: 6) {
-            // Filter dropdown (left)
-            Button(action: { showFilterSheet = true }) {
-                HStack(spacing: 4) {
-                    Image(systemName: "line.3.horizontal.decrease")
-                        .font(.system(size: 10, weight: .medium)).foregroundColor(.goldDark)
-                    Text(selectedFilter.rawValue)
-                        .font(.system(size: 12, weight: .semibold)).foregroundColor(.primary).lineLimit(1)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 8, weight: .medium)).foregroundColor(.gray)
-                }
-                .padding(.horizontal, 10).padding(.vertical, 10)
-                .background(Color.bgSurface).cornerRadius(8)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(BorderlessButtonStyle())
-            .compatActionSheet(title: "Filter by Status", isPresented: $showFilterSheet, buttons:
-                InvoiceFilter.allCases.map { filter in
-                    let label = filter == selectedFilter ? "\(filter.rawValue) ✓" : filter.rawValue
-                    return CompatActionSheetButton.default(label) { selectedFilter = filter }
-                } + [.cancel()]
-            )
+            filterButton
 
             Spacer()
 
@@ -491,6 +504,8 @@ struct InvoiceDetailPage: View {
     @EnvironmentObject var appState: POViewModel
     @Environment(\.presentationMode) var presentationMode
     @State private var navigateToHistory = false
+    @State private var navigateToQueries = false
+    @State private var showActionsMenu = false
 
     private var liveInvoice: Invoice {
         appState.invoices.first(where: { $0.id == invoice.id }) ?? invoice
@@ -508,19 +523,78 @@ struct InvoiceDetailPage: View {
                         Text("Back").font(.system(size: 16))
                     }.foregroundColor(.goldDark)
                 },
-                trailing: Button(action: { navigateToHistory = true }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "clock.arrow.circlepath").font(.system(size: 14, weight: .semibold))
-                        Text("History").font(.system(size: 14, weight: .semibold))
-                    }.foregroundColor(.goldDark)
-                }
+                // Trailing: native SwiftUI `Menu` on iOS 14+ renders the
+                // options as a dropdown popover anchored to the button.
+                // iOS 13 falls back to the reusable `appDropdownMenu`
+                // modifier (same AppActionSheetItem model).
+                trailing: trailingMenu
             )
             .background(
-                NavigationLink(
-                    destination: InvoiceHistoryPage(invoiceId: liveInvoice.id, invoiceLabel: liveInvoice.invoiceNumber.isEmpty ? "Invoice" : liveInvoice.invoiceNumber).environmentObject(appState),
-                    isActive: $navigateToHistory
-                ) { EmptyView() }.frame(width: 0, height: 0).hidden()
+                // Hidden NavigationLinks driven by the menu rows.
+                ZStack {
+                    NavigationLink(
+                        destination: InvoiceHistoryPage(invoiceId: liveInvoice.id, invoiceLabel: liveInvoice.invoiceNumber.isEmpty ? "Invoice" : liveInvoice.invoiceNumber).environmentObject(appState),
+                        isActive: $navigateToHistory
+                    ) { EmptyView() }.frame(width: 0, height: 0).hidden()
+                    NavigationLink(
+                        destination: InvoiceQueriesPage(invoiceId: liveInvoice.id, invoiceLabel: liveInvoice.invoiceNumber.isEmpty ? "Invoice" : liveInvoice.invoiceNumber).environmentObject(appState),
+                        isActive: $navigateToQueries
+                    ) { EmptyView() }.frame(width: 0, height: 0).hidden()
+                    // iOS 13 dropdown fallback — driven by the legacy
+                    // button below when Menu{} isn't available.
+                    if #available(iOS 14.0, *) { EmptyView() }
+                    else {
+                        Color.clear
+                            .appDropdownMenu(
+                                isPresented: $showActionsMenu,
+                                items: [
+                                    .action("Query", systemImage: "text.bubble") { navigateToQueries = true },
+                                    .action("History", systemImage: "clock.arrow.circlepath") { navigateToHistory = true }
+                                ]
+                            )
+                            .frame(width: 0, height: 0)
+                    }
+                }
             )
+    }
+
+    /// Trailing nav-bar trigger. iOS 14+ uses SwiftUI's native `Menu`
+    /// which renders a system-styled dropdown popover anchored under
+    /// the ellipsis. iOS 13 falls back to the reusable
+    /// `appDropdownMenu` modifier (attached via the background ZStack
+    /// above) toggled by the same button.
+    @ViewBuilder
+    private var trailingMenu: some View {
+        if #available(iOS 14.0, *) {
+            Menu {
+                Button {
+                    navigateToQueries = true
+                } label: {
+                    Label("Query", systemImage: "text.bubble")
+                }
+                Button {
+                    navigateToHistory = true
+                } label: {
+                    Label("History", systemImage: "clock.arrow.circlepath")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.goldDark)
+            }
+            .accessibility(label: Text("More actions"))
+        } else {
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    showActionsMenu.toggle()
+                }
+            }) {
+                Image(systemName: "ellipsis.circle")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.goldDark)
+            }
+            .accessibility(label: Text("More actions"))
+        }
     }
 }
 
@@ -691,6 +765,190 @@ struct InvoiceHistoryPage: View {
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// MARK: - Invoice Queries Page
+// ═══════════════════════════════════════════════════════════════════
+
+/// Flattened chat message (query root or reply) used for display.
+private struct QueryMessage: Identifiable {
+    let id: String
+    let userId: String?
+    let userName: String?
+    let text: String
+    let timestamp: Int64?
+    let isLocal: Bool   // true when the message was typed into the composer
+                        // and hasn't round-tripped through the backend yet.
+}
+
+struct InvoiceQueriesPage: View {
+    @EnvironmentObject var appState: POViewModel
+    let invoiceId: String
+    let invoiceLabel: String
+
+    @State private var draft: String = ""
+    @State private var localMessages: [QueryMessage] = []
+
+    private var thread: InvoiceQueryThread? { appState.invoiceQueries[invoiceId] }
+
+    /// Flatten the backend thread's `messages` + any optimistic local
+    /// messages into a single sorted chat list.
+    private var messages: [QueryMessage] {
+        var list: [QueryMessage] = []
+        if let t = thread {
+            for m in t.messages {
+                guard let body = m.query, !body.isEmpty else { continue }
+                list.append(QueryMessage(
+                    id: m.id,
+                    userId: m.queriedBy,
+                    userName: nil,        // backend doesn't ship a name; we resolve via UsersData
+                    text: body,
+                    timestamp: m.queriedAt,
+                    isLocal: false
+                ))
+            }
+        }
+        list.append(contentsOf: localMessages)
+        return list.sorted { ($0.timestamp ?? 0) < ($1.timestamp ?? 0) }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // ── Header: invoice number only (centered) ──────────────────
+            Text(invoiceLabel.isEmpty ? "—" : invoiceLabel)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundColor(.primary)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 10)
+
+            Divider()
+
+            // ── Chat area ────────────────────────────────────────────
+            Group {
+                if appState.invoiceQueriesLoading && messages.isEmpty {
+                    VStack { Spacer(); LoaderView(); Spacer() }
+                } else if messages.isEmpty {
+                    VStack(spacing: 10) {
+                        Spacer()
+                        Image(systemName: "text.bubble")
+                            .font(.system(size: 32)).foregroundColor(.gray.opacity(0.4))
+                        Text("No messages yet")
+                            .font(.system(size: 13, weight: .semibold)).foregroundColor(.secondary)
+                        Text("Type a message to start the conversation.")
+                            .font(.system(size: 11)).foregroundColor(.gray)
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .trailing, spacing: 16) {
+                            ForEach(messages) { m in messageBubble(m) }
+                        }
+                        .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 16)
+                    }
+                }
+            }
+            .frame(maxHeight: .infinity)
+
+            // ── Composer: text field + orange send button ────────────
+            Divider()
+            HStack(spacing: 10) {
+                TextField("Type a message…", text: $draft)
+                    .font(.system(size: 14))
+                    .padding(.horizontal, 14).padding(.vertical, 10)
+                    .background(Capsule().fill(Color.bgSurface))
+                    .overlay(Capsule().stroke(Color.borderColor, lineWidth: 1))
+                Button(action: sendMessage) {
+                    Image(systemName: "paperplane.fill")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(draft.trimmingCharacters(in: .whitespaces).isEmpty
+                            ? Color.gold.opacity(0.5)
+                            : Color(red: 0.95, green: 0.55, blue: 0.15)))
+                }
+                .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
+                .buttonStyle(BorderlessButtonStyle())
+            }
+            .padding(.horizontal, 16).padding(.vertical, 10)
+            .background(Color.bgSurface)
+        }
+        .background(Color.bgSurface.edgesIgnoringSafeArea(.all))
+        .navigationBarTitle(Text("Query"), displayMode: .inline)
+        .onAppear { appState.loadInvoiceQueries(invoiceId) }
+    }
+
+    // MARK: - Chat bubble (right-aligned, orange background)
+
+    private func messageBubble(_ m: QueryMessage) -> some View {
+        let resolvedName: String = {
+            if let n = m.userName, !n.isEmpty { return n }
+            if let uid = m.userId { return UsersData.byId[uid]?.fullName ?? "Unknown" }
+            return "Unknown"
+        }()
+        let role: String = {
+            if let uid = m.userId, let u = UsersData.byId[uid] {
+                return u.displayDesignation
+            }
+            return ""
+        }()
+        let stamp: String = {
+            guard let ts = m.timestamp, ts > 0 else { return "" }
+            return FormatUtils.formatHistoryDateTime(ts)
+        }()
+        let orange = Color(red: 0.95, green: 0.55, blue: 0.15)
+        return HStack {
+            Spacer(minLength: 0)
+            VStack(alignment: .trailing, spacing: 4) {
+                // Name (bold) + role (secondary)
+                HStack(spacing: 4) {
+                    Text(resolvedName).font(.system(size: 13, weight: .bold))
+                    if !role.isEmpty {
+                        Text(role).font(.system(size: 12)).foregroundColor(.secondary)
+                    }
+                }
+
+                // Orange message pill — caps length to ~78% of screen so
+                // long messages wrap instead of stretching edge-to-edge.
+                Text(m.text)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 14).padding(.vertical, 10)
+                    .background(orange)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .frame(maxWidth: UIScreen.main.bounds.width * 0.78, alignment: .trailing)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if !stamp.isEmpty {
+                    Text(stamp)
+                        .font(.system(size: 10)).foregroundColor(.gray)
+                }
+            }
+        }
+    }
+
+    // MARK: - Send
+
+    /// Append the typed message to the local thread. Network wiring for
+    /// POSTing new query replies can be added alongside this — for now the
+    /// message appears in the UI and a warning logs the missing endpoint.
+    private func sendMessage() {
+        let text = draft.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return }
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let me = appState.currentUser
+        localMessages.append(QueryMessage(
+            id: UUID().uuidString,
+            userId: me?.id,
+            userName: me?.fullName,
+            text: text,
+            timestamp: now,
+            isLocal: true
+        ))
+        draft = ""
+        print("⚠️ sendQueryMessage: no POST endpoint wired yet. Message added locally.")
+    }
+}
+
 // MARK: - Invoice Detail Content View
 
 struct InvoiceDetailContentView: View {
@@ -698,6 +956,9 @@ struct InvoiceDetailContentView: View {
     var onClose: () -> Void
     @EnvironmentObject var appState: POViewModel
     @State private var showDeleteConfirm = false
+    /// Approval chain is collapsed by default — users who need to audit
+    /// the tier state can expand it on demand.
+    @State private var approvalChainExpanded = false
 
     private var vis: ApprovalVisibility { appState.invoiceApprovalVisibility(for: invoice) }
     private var canDelete: Bool {
@@ -1057,7 +1318,6 @@ struct InvoiceDetailContentView: View {
         }()
         let email   = !invoice.vendorEmail.isEmpty ? invoice.vendorEmail : (v?.email ?? "")
         let contact = v?.contactPerson ?? ""
-        let vat     = invoice.vendorVatNumber ?? v?.vatNumber
 
         return VStack(alignment: .leading, spacing: 6) {
             Text("VENDOR").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary)
@@ -1074,7 +1334,7 @@ struct InvoiceDetailContentView: View {
                     .font(.system(size: 12)).foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if !phone.isEmpty || !email.isEmpty || (vat?.isEmpty == false) {
+            if !phone.isEmpty || !email.isEmpty {
                 HStack(alignment: .top, spacing: 16) {
                     if !phone.isEmpty {
                         VStack(alignment: .leading, spacing: 2) {
@@ -1093,13 +1353,6 @@ struct InvoiceDetailContentView: View {
                     }
                 }
                 .padding(.top, 4)
-                if let vatNum = vat, !vatNum.isEmpty {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("VAT NUMBER").font(.system(size: 8, weight: .bold)).foregroundColor(.gray).tracking(0.4)
-                        Text(vatNum).font(.system(size: 12, weight: .medium, design: .monospaced))
-                    }
-                    .padding(.top, 4)
-                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1446,31 +1699,41 @@ struct InvoiceDetailContentView: View {
         return Group {
             if totalTiers > 0 {
                 VStack(alignment: .leading, spacing: 0) {
-                    HStack {
-                        Image(systemName: "person.3.fill").font(.system(size: 12)).foregroundColor(.goldDark)
-                        Text("APPROVAL CHAIN").font(.system(size: 10, weight: .bold)).foregroundColor(.secondary)
-                        Spacer()
-                        if invoice.invoiceStatus == .approved || invoice.invoiceStatus == .paid {
-                            Text("Fully Approved")
-                                .font(.system(size: 11, weight: .semibold)).foregroundColor(.green)
-                                .padding(.horizontal, 8).padding(.vertical, 3)
-                                .background(Color.green.opacity(0.1)).cornerRadius(4)
-                        } else if invoice.invoiceStatus == .rejected {
-                            Text("Rejected")
-                                .font(.system(size: 11, weight: .semibold)).foregroundColor(.red)
-                                .padding(.horizontal, 8).padding(.vertical, 3)
-                                .background(Color.red.opacity(0.1)).cornerRadius(4)
+                    // Collapsible header — tapping toggles the tier list.
+                    // Closed by default so the detail page stays compact.
+                    Button(action: { approvalChainExpanded.toggle() }) {
+                        HStack {
+                            Image(systemName: "person.3.fill").font(.system(size: 12)).foregroundColor(.goldDark)
+                            Text("APPROVAL CHAIN").font(.system(size: 10, weight: .bold)).foregroundColor(.secondary)
+                            Spacer()
+                            if invoice.invoiceStatus == .approved || invoice.invoiceStatus == .paid {
+                                Text("Fully Approved")
+                                    .font(.system(size: 11, weight: .semibold)).foregroundColor(.green)
+                                    .padding(.horizontal, 8).padding(.vertical, 3)
+                                    .background(Color.green.opacity(0.1)).cornerRadius(4)
+                            } else if invoice.invoiceStatus == .rejected {
+                                Text("Rejected")
+                                    .font(.system(size: 11, weight: .semibold)).foregroundColor(.red)
+                                    .padding(.horizontal, 8).padding(.vertical, 3)
+                                    .background(Color.red.opacity(0.1)).cornerRadius(4)
+                            }
+                            // Chevron indicates collapsed/expanded state
+                            Image(systemName: approvalChainExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(.gray)
+                                .padding(.leading, 4)
                         }
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(PlainButtonStyle())
                     .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 10)
 
-                    if let config = cfg {
+                    // Tier rows — only rendered when expanded.
+                    if approvalChainExpanded, let config = cfg {
                         ForEach(1...totalTiers, id: \.self) { tierNum in
                             invoiceTierRow(tierNum: tierNum, totalTiers: totalTiers, config: config, approvedSet: approvedSet)
                         }
                     }
-
-                    EmptyView()
                 }
                 .padding(.bottom, 14)
             }

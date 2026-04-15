@@ -21,6 +21,9 @@ class POViewModel: ObservableObject {
     @Published var invoices: [Invoice] = []
     @Published var invoiceHistory: [String: [InvoiceHistoryEntry]] = [:]
     @Published var invoiceHistoryLoading: Bool = false
+    /// Single query thread raised against each invoice, keyed by invoice id.
+    @Published var invoiceQueries: [String: InvoiceQueryThread] = [:]
+    @Published var invoiceQueriesLoading: Bool = false
     @Published var invoiceTierConfigRows: [ApprovalTierConfig] = []
     @Published var formTemplate: FormTemplateResponse?
     @Published var floatFormTemplate: FormTemplateResponse?

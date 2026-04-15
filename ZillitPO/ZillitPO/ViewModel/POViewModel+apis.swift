@@ -273,6 +273,31 @@ extension POViewModel {
         }.urlDataTask?.resume()
     }
 
+    /// Fetches the query thread raised against an invoice via
+    /// GET /api/v2/account-hub/queries/entity/invoice/{id}. The backend
+    /// returns a single thread object with a `queries` array of messages.
+    func loadInvoiceQueries(_ invoiceId: String) {
+        invoiceQueriesLoading = true
+        POCodableTask.fetchInvoiceQueries(invoiceId) { [weak self] result in
+            DispatchQueue.main.async {
+                self?.invoiceQueriesLoading = false
+                switch result {
+                case .success(let response):
+                    if let thread = response?.data {
+                        self?.invoiceQueries[invoiceId] = thread
+                        print("✅ Loaded invoice query thread for \(invoiceId): \(thread.messages.count) messages")
+                    } else {
+                        // Empty response → clear any stale thread so the
+                        // empty state renders correctly.
+                        self?.invoiceQueries.removeValue(forKey: invoiceId)
+                    }
+                case .failure(let error):
+                    print("❌ Fetch invoice queries failed: \(error)")
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
     // MARK: - Actions
 
     func approvePO(_ po: PurchaseOrder) {

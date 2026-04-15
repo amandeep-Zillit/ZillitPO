@@ -59,6 +59,89 @@ struct InvoiceHistoryEntry: Decodable, Identifiable {
     }
 }
 
+// MARK: - Invoice Query Thread (raised against an invoice)
+
+/// The single query thread returned by
+/// GET /api/v2/account-hub/queries/entity/invoice/{invoiceId}.
+/// Response shape:
+/// {
+///   "id": "…",
+///   "entity_type": "invoice",
+///   "entity_id": "…",
+///   "raised_by": "mock-sa",
+///   "raised_at": "1776168245993",
+///   "queries": [
+///     { "query": "ok", "queried_at": 1776168245993, "queried_by": "mock-sa" }
+///   ],
+///   "created_at": "…", "updated_at": "…"
+/// }
+struct InvoiceQueryThread: Decodable, Identifiable {
+    var id: String
+    var entityType: String?
+    var entityId: String?
+    var raisedBy: String?
+    var raisedAt: Int64?
+    var createdAt: Int64?
+    var updatedAt: Int64?
+    var messages: [InvoiceQueryMessage]
+
+    enum CodingKeys: String, CodingKey {
+        case id, queries
+        case entityType = "entity_type"
+        case entityId   = "entity_id"
+        case raisedBy   = "raised_by"
+        case raisedAt   = "raised_at"
+        case createdAt  = "created_at"
+        case updatedAt  = "updated_at"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id         = (try? c.decode(String.self, forKey: .id)) ?? UUID().uuidString
+        entityType = try? c.decode(String.self, forKey: .entityType)
+        entityId   = try? c.decode(String.self, forKey: .entityId)
+        raisedBy   = try? c.decode(String.self, forKey: .raisedBy)
+        messages   = (try? c.decode([InvoiceQueryMessage].self, forKey: .queries)) ?? []
+
+        func flexTs(_ key: CodingKeys) -> Int64? {
+            if let v = try? c.decode(Int64.self,  forKey: key) { return v }
+            if let v = try? c.decode(Double.self, forKey: key) { return Int64(v) }
+            if let s = try? c.decode(String.self, forKey: key), let v = Int64(s) { return v }
+            return nil
+        }
+        raisedAt  = flexTs(.raisedAt)
+        createdAt = flexTs(.createdAt)
+        updatedAt = flexTs(.updatedAt)
+    }
+}
+
+/// One message inside an InvoiceQueryThread's `queries` array.
+/// Each entry is shaped `{ query, queried_at, queried_by }`.
+struct InvoiceQueryMessage: Decodable, Identifiable {
+    /// Composite id derived from user + timestamp — the backend doesn't
+    /// send a per-message id.
+    var id: String { "\(queriedBy ?? "unknown")-\(queriedAt ?? 0)" }
+    var query: String?
+    var queriedAt: Int64?
+    var queriedBy: String?
+
+    enum CodingKeys: String, CodingKey {
+        case query
+        case queriedAt = "queried_at"
+        case queriedBy = "queried_by"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        query = try? c.decode(String.self, forKey: .query)
+        queriedBy = try? c.decode(String.self, forKey: .queriedBy)
+        if let v = try? c.decode(Int64.self,  forKey: .queriedAt)      { queriedAt = v }
+        else if let v = try? c.decode(Double.self, forKey: .queriedAt) { queriedAt = Int64(v) }
+        else if let s = try? c.decode(String.self, forKey: .queriedAt), let v = Int64(s) { queriedAt = v }
+        else { queriedAt = nil }
+    }
+}
+
 // MARK: - Run Authorization Level
 
 struct RunAuthLevel: Codable, Equatable {

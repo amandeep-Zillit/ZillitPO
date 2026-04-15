@@ -60,11 +60,13 @@ struct QuickFiltersBar: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(BorderlessButtonStyle())
-        .compatActionSheet(title: "Filter by Status", isPresented: $showFilterSheet, buttons:
-            QuickFilter.allCases.map { filter in
-                let label = filter == appState.activeFilter ? "\(filter.rawValue) ✓" : filter.rawValue
-                return CompatActionSheetButton.default(label) { appState.activeFilter = filter }
-            } + [.cancel()]
+        .selectionActionSheet(
+            title: "Filter by Status",
+            isPresented: $showFilterSheet,
+            options: QuickFilter.allCases,
+            isSelected: { $0 == appState.activeFilter },
+            label: { $0.rawValue },
+            onSelect: { appState.activeFilter = $0 }
         )
     }
 
@@ -83,11 +85,13 @@ struct QuickFiltersBar: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(BorderlessButtonStyle())
-        .compatActionSheet(title: "Sort By", isPresented: $showSortSheet, buttons:
-            SortKey.allCases.map { key in
-                let label = key == appState.sortKey ? "\(key.rawValue) ✓" : key.rawValue
-                return CompatActionSheetButton.default(label) { appState.sortKey = key }
-            } + [.cancel()]
+        .selectionActionSheet(
+            title: "Sort By",
+            isPresented: $showSortSheet,
+            options: SortKey.allCases,
+            isSelected: { $0 == appState.sortKey },
+            label: { $0.rawValue },
+            onSelect: { appState.sortKey = $0 }
         )
     }
 }

@@ -697,11 +697,10 @@ struct POFormView: View {
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                 .contentShape(Rectangle())
                 .onTapGesture { showAttachSheet = true }
-                .compatActionSheet(title: "Attach", isPresented: $showAttachSheet, buttons: [
-                    CompatActionSheetButton.default("Quote") { /* TODO: attach quote */ },
-                    CompatActionSheetButton.default("Email") { /* TODO: attach email */ },
-                    CompatActionSheetButton.default("Attachment") { /* TODO: attach file */ },
-                    CompatActionSheetButton.cancel()
+                .appActionSheet(title: "Attach", isPresented: $showAttachSheet, items: [
+                    .action("Quote") { /* TODO: attach quote */ },
+                    .action("Email") { /* TODO: attach email */ },
+                    .action("Attachment") { /* TODO: attach file */ }
                 ])
 
                 // Save button (gold, dropdown)
@@ -713,7 +712,7 @@ struct POFormView: View {
                 .background(Color.gold).cornerRadius(8)
                 .contentShape(Rectangle())
                 .onTapGesture { showSaveSheet = true }
-                .compatActionSheet(title: "Save Options", isPresented: $showSaveSheet, buttons: saveSheetButtons)
+                .appActionSheet(title: "Save Options", isPresented: $showSaveSheet, items: saveSheetItems)
             }
 
             // Submit PO button (full width, dark gold)
@@ -750,28 +749,25 @@ struct POFormView: View {
     }
 
     // MARK: - Save sheet buttons
-    private var saveSheetButtons: [CompatActionSheetButton] {
+    private var saveSheetItems: [AppActionSheetItem] {
         if resumeDraft != nil {
             // Resuming a draft — Save updates existing, Save as Draft creates new
             return [
-                CompatActionSheetButton.default("Save") { self.saveCurrentDraft() },
-                CompatActionSheetButton.default("Save as New Draft") { self.saveAsNewDraft() },
-                CompatActionSheetButton.default("Save as Template") { self.templateName = self.desc; self.showTemplateNameSheet = true },
-                CompatActionSheetButton.cancel()
+                .action("Save") { self.saveCurrentDraft() },
+                .action("Save as New Draft") { self.saveAsNewDraft() },
+                .action("Save as Template") { self.templateName = self.desc; self.showTemplateNameSheet = true }
             ]
         } else if editingPO != nil {
             // Editing an existing PO — Save as Draft creates a copy as draft
             return [
-                CompatActionSheetButton.default("Save as Draft") { self.saveAsNewDraft() },
-                CompatActionSheetButton.default("Save as Template") { self.templateName = self.desc; self.showTemplateNameSheet = true },
-                CompatActionSheetButton.cancel()
+                .action("Save as Draft") { self.saveAsNewDraft() },
+                .action("Save as Template") { self.templateName = self.desc; self.showTemplateNameSheet = true }
             ]
         } else {
             // New PO — Save as Draft creates new
             return [
-                CompatActionSheetButton.default("Save as Draft") { self.saveAsNewDraft() },
-                CompatActionSheetButton.default("Save as Template") { self.templateName = self.desc; self.showTemplateNameSheet = true },
-                CompatActionSheetButton.cancel()
+                .action("Save as Draft") { self.saveAsNewDraft() },
+                .action("Save as Template") { self.templateName = self.desc; self.showTemplateNameSheet = true }
             ]
         }
     }

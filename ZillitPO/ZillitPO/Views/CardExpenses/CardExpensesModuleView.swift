@@ -482,6 +482,25 @@ struct CoordinatorApprovalQueueView: View {
     @State private var rejectTarget: ExpenseCard?
     @State private var rejectReason = ""
     @State private var showRejectSheet = false
+    /// Override-card sheet state. The button is gated behind
+    /// `appState.cashMeta?.can_override == true`; when the user lacks the
+    /// permission these stay unused and the button is hidden.
+    @State private var overrideTarget: ExpenseCard?
+    @State private var overrideReason = ""
+    @State private var showOverrideSheet = false
+
+    /// Shim a card into a PurchaseOrder so we can reuse the existing
+    /// `ApprovalHelpers.getVisibility` (which is keyed on POs).
+    private func cardAsPO(_ card: ExpenseCard) -> PurchaseOrder {
+        var po = PurchaseOrder()
+        po.id = card.id
+        po.userId = card.holderId
+        po.departmentId = card.departmentId
+        po.status = "PENDING"
+        po.approvals = card.approvals
+        po.netAmount = card.monthlyLimit
+        return po
+    }
 
     private var cards: [ExpenseCard] { appState.cardsForApproval() }
     private var transactions: [CardTransaction] { appState.cardApprovalQueueItems }
@@ -509,11 +528,22 @@ struct CoordinatorApprovalQueueView: View {
                             }.frame(maxWidth: .infinity, minHeight: 400)
                         } else {
                             ForEach(cards) { card in
-                                ApprovalCardRow(card: card, tierConfigs: appState.cardTierConfigRows, onApprove: {
-                                    appState.approveCard(card)
-                                }, onReject: {
-                                    rejectTarget = card; showRejectSheet = true
-                                })
+                                let cardVis = ApprovalHelpers
+                                    .resolveConfig(appState.cardTierConfigRows,
+                                                   deptId: card.departmentId,
+                                                   amount: card.monthlyLimit)
+                                    .map { ApprovalHelpers.getVisibility(po: cardAsPO(card), config: $0, userId: appState.userId) }
+                                let canApproveCard = cardVis?.canApprove ?? false
+                                let canOverrideCard = (appState.cashMeta?.can_override == true)
+                                ApprovalCardRow(
+                                    card: card,
+                                    tierConfigs: appState.cardTierConfigRows,
+                                    canApprove: canApproveCard,
+                                    canOverride: canOverrideCard,
+                                    onApprove: { appState.approveCard(card) },
+                                    onReject: { rejectTarget = card; showRejectSheet = true },
+                                    onOverride: canOverrideCard ? { overrideTarget = card; showOverrideSheet = true } : nil
+                                )
                             }
                         }
                     }.padding(.horizontal, 16).padding(.bottom, 24)
@@ -572,6 +602,43 @@ struct CoordinatorApprovalQueueView: View {
                         appState.rejectCard(c, reason: rejectReason.trimmingCharacters(in: .whitespaces))
                         showRejectSheet = false; rejectReason = ""; rejectTarget = nil
                     }.foregroundColor(.red).font(.system(size: 16, weight: .bold))
+                )
+            }
+        }
+        .sheet(isPresented: $showOverrideSheet) {
+            NavigationView {
+                ZStack {
+                    Color.bgBase.edgesIgnoringSafeArea(.all)
+                    VStack(alignment: .leading, spacing: 16) {
+                        if let c = overrideTarget {
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: "bolt.fill").font(.system(size: 14)).foregroundColor(.orange)
+                                Text("This will approve the card for \(c.holderFullName), bypassing the normal approval chain.")
+                                    .font(.system(size: 12)).foregroundColor(.primary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .padding(10)
+                            .background(Color.orange.opacity(0.08)).cornerRadius(8)
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.orange.opacity(0.3), lineWidth: 1))
+                        }
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Override reason (optional)").font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
+                            TextField("Reason…", text: $overrideReason)
+                                .font(.system(size: 14)).padding(10)
+                                .background(Color.bgSurface).cornerRadius(8)
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                        }
+                        Spacer()
+                    }.padding()
+                }
+                .navigationBarTitle(Text("Override Card Approval"), displayMode: .inline)
+                .navigationBarItems(
+                    leading: Button("Cancel") { showOverrideSheet = false; overrideReason = ""; overrideTarget = nil }.foregroundColor(.goldDark),
+                    trailing: Button("Override") {
+                        guard let c = overrideTarget else { return }
+                        appState.overrideCard(c)
+                        showOverrideSheet = false; overrideReason = ""; overrideTarget = nil
+                    }.foregroundColor(.orange).font(.system(size: 16, weight: .bold))
                 )
             }
         }
@@ -1180,12 +1247,13 @@ struct SmartAlertsPage: View {
                                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
                             }
                             .buttonStyle(BorderlessButtonStyle())
-                            .compatActionSheet(
+                            .selectionActionSheet(
                                 title: "Filter Alerts",
                                 isPresented: $showFilterSheet,
-                                buttons: filters.map { f in
-                                    CompatActionSheetButton.default(f == activeFilter ? "\(f) ✓" : f) { activeFilter = f }
-                                } + [.cancel()]
+                                options: filters,
+                                isSelected: { $0 == activeFilter },
+                                label: { $0 },
+                                onSelect: { activeFilter = $0 }
                             )
                             Spacer()
                         }
@@ -2756,16 +2824,31 @@ struct AllTransactionsPage: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
                             dropdown(label: activeFilter, icon: "line.3.horizontal.decrease", action: { showFilterSheet = true })
-                                .compatActionSheet(title: "Status", isPresented: $showFilterSheet, buttons:
-                                    filters.map { f in CompatActionSheetButton.default(f == activeFilter ? "\(f) ✓" : f) { activeFilter = f } } + [.cancel()]
+                                .selectionActionSheet(
+                                    title: "Status",
+                                    isPresented: $showFilterSheet,
+                                    options: filters,
+                                    isSelected: { $0 == activeFilter },
+                                    label: { $0 },
+                                    onSelect: { activeFilter = $0 }
                                 )
                             dropdown(label: activeCard, icon: "creditcard", action: { showCardSheet = true })
-                                .compatActionSheet(title: "Card", isPresented: $showCardSheet, buttons:
-                                    cardOptions.map { c in CompatActionSheetButton.default(c == activeCard ? "\(c) ✓" : c) { activeCard = c } } + [.cancel()]
+                                .selectionActionSheet(
+                                    title: "Card",
+                                    isPresented: $showCardSheet,
+                                    options: cardOptions,
+                                    isSelected: { $0 == activeCard },
+                                    label: { $0 },
+                                    onSelect: { activeCard = $0 }
                                 )
                             dropdown(label: activeDept, icon: "building.2", action: { showDeptSheet = true })
-                                .compatActionSheet(title: "Department", isPresented: $showDeptSheet, buttons:
-                                    deptOptions.map { d in CompatActionSheetButton.default(d == activeDept ? "\(d) ✓" : d) { activeDept = d } } + [.cancel()]
+                                .selectionActionSheet(
+                                    title: "Department",
+                                    isPresented: $showDeptSheet,
+                                    options: deptOptions,
+                                    isSelected: { $0 == activeDept },
+                                    label: { $0 },
+                                    onSelect: { activeDept = $0 }
                                 )
                         }
                     }
@@ -3153,72 +3236,177 @@ struct CardRegisterPage: View {
     @State private var showInlineRejectSheet = false
     @State private var cardToActivate: ExpenseCard? = nil
     @State private var navigateToActivate = false
+    /// Search + status filter state — mirrors the web's CardRegisterPage.
+    @State private var searchText: String = ""
+    @State private var statusFilter: String = "all"
+    @State private var showStatusFilterSheet: Bool = false
+
+    /// Status filter options — keys match the web's STATUS_FILTERS.
+    private let statusFilters: [(key: String, label: String)] = [
+        ("all",        "All Status"),
+        ("active",     "Active"),
+        ("approved",   "Approved"),
+        ("override",   "Override"),
+        ("pending",    "Pending Approval"),
+        ("requested",  "Requested"),
+        ("rejected",   "Rejected"),
+        ("suspended",  "Suspended"),
+    ]
+
+    private var statusFilterLabel: String {
+        statusFilters.first { $0.key == statusFilter }?.label ?? "All Status"
+    }
+
+    /// Filter by status + free-text search — mirrors the web's filter logic
+    /// (holder name, department, BS code, card issuer, last 4).
+    private var filteredCards: [ExpenseCard] {
+        let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        return appState.userCards.filter { c in
+            // Status filter
+            if statusFilter != "all" && c.status.lowercased() != statusFilter {
+                return false
+            }
+            // Search
+            guard !q.isEmpty else { return true }
+            let holder = c.holderFullName.lowercased()
+            let dept   = c.department.lowercased()
+            let bs     = c.bsControlCode.lowercased()
+            let issuer = (c.bankAccount?.name ?? c.cardIssuer).lowercased()
+            let last4  = c.lastFour.lowercased()
+            return holder.contains(q)
+                || dept.contains(q)
+                || bs.contains(q)
+                || issuer.contains(q)
+                || last4.contains(q)
+        }
+    }
 
     private var tierCount: Int { appState.cardTierConfigRows.count }
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-            ScrollView {
-                VStack(spacing: 12) {
+            VStack(spacing: 0) {
+                // ── Fixed search + status filter toolbar ───────────────
+                // (Stays pinned at the top while the card list scrolls.)
+                HStack(spacing: 8) {
+                    // Search
+                    HStack(spacing: 6) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.gray).font(.system(size: 12))
+                        TextField("Search holder, dept, BS code, last 4…", text: $searchText)
+                            .font(.system(size: 13))
+                        if !searchText.isEmpty {
+                            Button(action: { searchText = "" }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 12)).foregroundColor(.gray)
+                            }.buttonStyle(BorderlessButtonStyle())
+                        }
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 9)
+                    .background(Color.bgSurface).cornerRadius(8)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
 
-                    // MARK: Cards Section
-                    if appState.isLoadingCards && appState.userCards.isEmpty {
-                        LoaderView()
-                    } else if appState.userCards.isEmpty {
-                        VStack(spacing: 12) {
-                            Spacer(minLength: 0)
-                            Image(systemName: "creditcard").font(.system(size: 32)).foregroundColor(.gray.opacity(0.3))
-                            Text("No cards yet").font(.system(size: 14, weight: .semibold)).foregroundColor(.secondary)
-                            Text("Tap Request Card to add one").font(.system(size: 12)).foregroundColor(.gray)
-                            Spacer(minLength: 0)
-                        }.frame(maxWidth: .infinity, minHeight: 480)
-                    } else {
-                        // Hidden NavigationLink for Assign Physical Card
-                        NavigationLink(
-                            destination: Group {
-                                if let c = cardToAssign {
-                                    AssignPhysicalCardPage(card: c).environmentObject(appState)
-                                } else { EmptyView() }
-                            },
-                            isActive: $navigateToAssign
-                        ) { EmptyView() }
-                        .frame(width: 0, height: 0).hidden()
+                    // Status filter
+                    Button(action: { showStatusFilterSheet = true }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "line.3.horizontal.decrease")
+                                .font(.system(size: 10, weight: .medium)).foregroundColor(.goldDark)
+                            Text(statusFilterLabel)
+                                .font(.system(size: 12, weight: .semibold)).foregroundColor(.primary).lineLimit(1)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 8, weight: .medium)).foregroundColor(.gray)
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 9)
+                        .background(Color.bgSurface).cornerRadius(8)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
+                    .selectionActionSheet(
+                        title: "Filter by Status",
+                        isPresented: $showStatusFilterSheet,
+                        options: statusFilters.map { $0.key },
+                        isSelected: { $0 == statusFilter },
+                        label: { key in statusFilters.first { $0.key == key }?.label ?? key },
+                        onSelect: { statusFilter = $0 }
+                    )
+                }
+                .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 8)
 
-                        ForEach(appState.userCards) { card in
-                            ZStack(alignment: .topLeading) {
-                                NavigationLink(
-                                    destination: CardDetailPage(card: card).environmentObject(appState),
-                                    tag: card.id,
-                                    selection: $navigateToCardId
-                                ) { EmptyView() }
-                                .frame(width: 0, height: 0).hidden()
+                // ── Scrollable card list ────────────────────────────────
+                ScrollView {
+                    VStack(spacing: 12) {
 
-                                CardRow(
-                                    card: card,
-                                    isAccountant: true,
-                                    tierCount: tierCount,
-                                    resolvedBankName: {
-                                        if let bankId = card.bankAccount?.id, !bankId.isEmpty {
-                                            return appState.bankAccounts.first { $0.id == bankId }?.name
+                        // MARK: Cards Section
+                        if appState.isLoadingCards && appState.userCards.isEmpty {
+                            LoaderView()
+                        } else if appState.userCards.isEmpty {
+                            VStack(spacing: 12) {
+                                Spacer(minLength: 0)
+                                Image(systemName: "creditcard").font(.system(size: 32)).foregroundColor(.gray.opacity(0.3))
+                                Text("No cards yet").font(.system(size: 14, weight: .semibold)).foregroundColor(.secondary)
+                                Text("Tap Request Card to add one").font(.system(size: 12)).foregroundColor(.gray)
+                                Spacer(minLength: 0)
+                            }.frame(maxWidth: .infinity, minHeight: 480)
+                        } else if filteredCards.isEmpty {
+                            // Search/filter applied but no matches
+                            VStack(spacing: 12) {
+                                Spacer(minLength: 0)
+                                Image(systemName: "magnifyingglass").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
+                                Text(searchText.isEmpty
+                                     ? "No cards match this filter"
+                                     : "No cards match \"\(searchText)\"")
+                                    .font(.system(size: 13)).foregroundColor(.secondary)
+                                Spacer(minLength: 0)
+                            }.frame(maxWidth: .infinity, minHeight: 320)
+                        } else {
+                            // Hidden NavigationLink for Assign Physical Card
+                            NavigationLink(
+                                destination: Group {
+                                    if let c = cardToAssign {
+                                        AssignPhysicalCardPage(card: c).environmentObject(appState)
+                                    } else { EmptyView() }
+                                },
+                                isActive: $navigateToAssign
+                            ) { EmptyView() }
+                            .frame(width: 0, height: 0).hidden()
+
+                            ForEach(filteredCards) { card in
+                                ZStack(alignment: .topLeading) {
+                                    NavigationLink(
+                                        destination: CardDetailPage(card: card).environmentObject(appState),
+                                        tag: card.id,
+                                        selection: $navigateToCardId
+                                    ) { EmptyView() }
+                                    .frame(width: 0, height: 0).hidden()
+
+                                    CardRow(
+                                        card: card,
+                                        isAccountant: true,
+                                        tierCount: tierCount,
+                                        resolvedBankName: {
+                                            if let bankId = card.bankAccount?.id, !bankId.isEmpty {
+                                                return appState.bankAccounts.first { $0.id == bankId }?.name
+                                            }
+                                            return nil
+                                        }(),
+                                        onAssignPhysical: nil,
+                                        onApprove: nil,
+                                        onReject: nil,
+                                        onOverride: nil,
+                                        onActivate: {
+                                            cardToActivate = card
+                                            navigateToActivate = true
                                         }
-                                        return nil
-                                    }(),
-                                    onAssignPhysical: nil,
-                                    onApprove: nil,
-                                    onReject: nil,
-                                    onOverride: nil,
-                                    onActivate: {
-                                        cardToActivate = card
-                                        navigateToActivate = true
-                                    }
-                                )
-                                .contentShape(Rectangle())
-                                .onTapGesture { navigateToCardId = card.id }
+                                    )
+                                    .contentShape(Rectangle())
+                                    .onTapGesture { navigateToCardId = card.id }
+                                }
                             }
                         }
                     }
+                    .padding(.horizontal, 16).padding(.top, 6).padding(.bottom, 90)
                 }
-                .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 90)
             }
 
             Button(action: { navigateToRequestCard = true }) {
@@ -3472,11 +3660,13 @@ struct ReceiptsTabView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(BorderlessButtonStyle())
-                    .compatActionSheet(title: "Filter by Status", isPresented: $showFilterSheet, buttons:
-                        ReceiptFilter.allCases.map { filter in
-                            let label = filter == activeFilter ? "\(filter.rawValue) ✓" : filter.rawValue
-                            return CompatActionSheetButton.default(label) { activeFilter = filter }
-                        } + [.cancel()]
+                    .selectionActionSheet(
+                        title: "Filter by Status",
+                        isPresented: $showFilterSheet,
+                        options: ReceiptFilter.allCases,
+                        isSelected: { $0 == activeFilter },
+                        label: { $0.rawValue },
+                        onSelect: { activeFilter = $0 }
                     )
                 }
                 .padding(.horizontal, 16).padding(.top, 12)
@@ -3681,6 +3871,28 @@ struct CardDetailPage: View {
         let maxApproved = displayCard.approvals.map { $0.tierNumber }.max() ?? 0
         return max(maxApproved + 1, 2)
     }
+
+    /// True only when the current user can approve at this card's
+    /// active tier (mirrors the web's `vis.canApprove`). Drives the
+    /// inline Approve / Reject buttons in the Pending Approval panel.
+    private var canApproveCard: Bool {
+        guard let cfg = ApprovalHelpers.resolveConfig(
+            appState.cardTierConfigRows,
+            deptId: displayCard.departmentId,
+            amount: displayCard.monthlyLimit
+        ) else { return false }
+        var po = PurchaseOrder()
+        po.id = displayCard.id
+        po.userId = displayCard.holderId
+        po.departmentId = displayCard.departmentId
+        po.status = "PENDING"
+        po.approvals = displayCard.approvals
+        po.netAmount = displayCard.monthlyLimit
+        return ApprovalHelpers.getVisibility(po: po, config: cfg, userId: appState.userId).canApprove
+    }
+
+    /// True when the user has card-override privilege.
+    private var canOverrideCard: Bool { appState.cashMeta?.can_override == true }
 
     private var approverName: String {
         guard let id = displayCard.approvedBy, !id.isEmpty else { return "" }
@@ -4000,26 +4212,38 @@ struct CardDetailPage: View {
                                 .padding(.vertical, 4)
                             }
 
-                            HStack(spacing: 10) {
-                                Spacer()
-                                Button(action: { appState.overrideCard(displayCard); presentationMode.wrappedValue.dismiss() }) {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "bolt.fill").font(.system(size: 10, weight: .bold))
-                                        Text("Override").font(.system(size: 13, weight: .bold))
+                            // Action buttons — gated by per-card permissions:
+                            //   • Override: only for users with card-override privilege.
+                            //   • Approve / Reject: only when it's the current user's
+                            //     turn at the active approval tier.
+                            // A non-approver accountant who has override privilege
+                            // sees only the Override button (matches the web).
+                            if canApproveCard || canOverrideCard {
+                                HStack(spacing: 10) {
+                                    Spacer()
+                                    if canOverrideCard {
+                                        Button(action: { appState.overrideCard(displayCard); presentationMode.wrappedValue.dismiss() }) {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "bolt.fill").font(.system(size: 10, weight: .bold))
+                                                Text("Override").font(.system(size: 13, weight: .bold))
+                                            }
+                                            .foregroundColor(.white).padding(.horizontal, 16).padding(.vertical, 10)
+                                            .background(Color.orange).cornerRadius(8)
+                                        }.buttonStyle(BorderlessButtonStyle())
                                     }
-                                    .foregroundColor(.white).padding(.horizontal, 16).padding(.vertical, 10)
-                                    .background(Color.orange).cornerRadius(8)
-                                }.buttonStyle(BorderlessButtonStyle())
-                                Button(action: { showRejectSheet = true }) {
-                                    Text("Reject").font(.system(size: 13, weight: .bold))
-                                        .foregroundColor(.white).padding(.horizontal, 16).padding(.vertical, 10)
-                                        .background(Color.red).cornerRadius(8)
-                                }.buttonStyle(BorderlessButtonStyle())
-                                Button(action: { appState.approveCard(displayCard); presentationMode.wrappedValue.dismiss() }) {
-                                    Text("Approve").font(.system(size: 13, weight: .bold))
-                                        .foregroundColor(.white).padding(.horizontal, 16).padding(.vertical, 10)
-                                        .background(Color.green).cornerRadius(8)
-                                }.buttonStyle(BorderlessButtonStyle())
+                                    if canApproveCard {
+                                        Button(action: { showRejectSheet = true }) {
+                                            Text("Reject").font(.system(size: 13, weight: .bold))
+                                                .foregroundColor(.white).padding(.horizontal, 16).padding(.vertical, 10)
+                                                .background(Color.red).cornerRadius(8)
+                                        }.buttonStyle(BorderlessButtonStyle())
+                                        Button(action: { appState.approveCard(displayCard); presentationMode.wrappedValue.dismiss() }) {
+                                            Text("Approve").font(.system(size: 13, weight: .bold))
+                                                .foregroundColor(.white).padding(.horizontal, 16).padding(.vertical, 10)
+                                                .background(Color.green).cornerRadius(8)
+                                        }.buttonStyle(BorderlessButtonStyle())
+                                    }
+                                }
                             }
                         }
                         .padding(.horizontal, 20).padding(.vertical, 16)
@@ -4301,6 +4525,12 @@ struct CardRow: View {
     var isAccountant: Bool = false
     var tierCount: Int = 0
     var resolvedBankName: String? = nil
+    /// Whether the current user is in the active tier of this card's
+    /// approval chain (mirrors the web's `vis.canApprove`). When false,
+    /// the inline Approve / Reject buttons are hidden — matches the
+    /// web behaviour where an accountant who can override but isn't a
+    /// tier approver only sees the Override button.
+    var canApprove: Bool = false
     var onAssignPhysical: (() -> Void)? = nil
     var onApprove: (() -> Void)? = nil
     var onReject: (() -> Void)? = nil
@@ -4475,11 +4705,22 @@ struct CardRow: View {
                     }
                 }
 
-                // Inline action buttons (accountant only)
-                if isAccountant, onApprove != nil {
+                // Inline action buttons (mirrors the web logic):
+                //   • Override → only when the caller passed an
+                //     `onOverride` handler (i.e. user has card-override
+                //     permission).
+                //   • Approve / Reject → only when the user is in the
+                //     active tier of this card's approval chain
+                //     (`canApprove == true`). If a non-approver
+                //     accountant has override privilege, only the
+                //     Override button shows.
+                let showApprove = canApprove && onApprove != nil
+                let showReject  = canApprove && onReject  != nil
+                let showOverride = onOverride != nil
+                if showApprove || showReject || showOverride {
                     HStack(spacing: 8) {
                         Spacer()
-                        if let ov = onOverride {
+                        if showOverride, let ov = onOverride {
                             Button(action: ov) {
                                 HStack(spacing: 4) {
                                     Image(systemName: "bolt.fill").font(.system(size: 10, weight: .bold))
@@ -4489,14 +4730,14 @@ struct CardRow: View {
                                 .background(Color.orange).cornerRadius(7)
                             }.buttonStyle(BorderlessButtonStyle())
                         }
-                        if let rj = onReject {
+                        if showReject, let rj = onReject {
                             Button(action: rj) {
                                 Text("Reject").font(.system(size: 12, weight: .bold))
                                     .foregroundColor(.white).padding(.horizontal, 12).padding(.vertical, 8)
                                     .background(Color.red).cornerRadius(7)
                             }.buttonStyle(BorderlessButtonStyle())
                         }
-                        if let ap = onApprove {
+                        if showApprove, let ap = onApprove {
                             Button(action: ap) {
                                 Text("Approve").font(.system(size: 12, weight: .bold))
                                     .foregroundColor(.white).padding(.horizontal, 12).padding(.vertical, 8)
@@ -5151,12 +5392,17 @@ struct EditCardRequestPage: View {
                                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                             }
                             .buttonStyle(BorderlessButtonStyle())
-                            .compatActionSheet(title: "Select Bank Account", isPresented: $showBankSheet, buttons:
-                                appState.bankAccounts.map { b in
-                                    CompatActionSheetButton.default(b.name == selectedBankName ? "\(b.name) ✓" : b.name) {
-                                        selectedBankId = b.id
-                                    }
-                                } + [.cancel()]
+                            .selectionActionSheet(
+                                title: "Select Bank Account",
+                                isPresented: $showBankSheet,
+                                options: appState.bankAccounts.map { $0.id },
+                                isSelected: { id in
+                                    appState.bankAccounts.first { $0.id == id }?.name == selectedBankName
+                                },
+                                label: { id in
+                                    appState.bankAccounts.first { $0.id == id }?.name ?? id
+                                },
+                                onSelect: { selectedBankId = $0 }
                             )
                         }
                     }
@@ -5595,8 +5841,35 @@ struct CardsForApprovalTabView: View {
     @State private var rejectTarget: ExpenseCard?
     @State private var rejectReason = ""
     @State private var showRejectSheet = false
+    /// Override sheet state — only relevant when the user has card-
+    /// override permission. Hidden otherwise.
+    @State private var overrideTarget: ExpenseCard?
+    @State private var overrideReason = ""
+    @State private var showOverrideSheet = false
 
     private var cards: [ExpenseCard] { appState.cardsForApproval() }
+
+    /// Per-card visibility check — returns `true` only when the current
+    /// user is allowed to approve at this card's active tier. Used to
+    /// gate the inline Approve / Reject buttons on every row.
+    private func canApprove(_ card: ExpenseCard) -> Bool {
+        guard let cfg = ApprovalHelpers.resolveConfig(
+            appState.cardTierConfigRows,
+            deptId: card.departmentId,
+            amount: card.monthlyLimit
+        ) else { return false }
+        var po = PurchaseOrder()
+        po.id = card.id
+        po.userId = card.holderId
+        po.departmentId = card.departmentId
+        po.status = "PENDING"
+        po.approvals = card.approvals
+        po.netAmount = card.monthlyLimit
+        return ApprovalHelpers.getVisibility(po: po, config: cfg, userId: appState.userId).canApprove
+    }
+
+    /// Whether the current user has card-override privilege.
+    private var canOverride: Bool { appState.cashMeta?.can_override == true }
 
     var body: some View {
         ZStack {
@@ -5612,11 +5885,17 @@ struct CardsForApprovalTabView: View {
                         }.frame(maxWidth: .infinity, minHeight: 480)
                     } else {
                         ForEach(cards) { card in
-                            ApprovalCardRow(card: card, tierConfigs: appState.cardTierConfigRows, onApprove: {
-                                appState.approveCard(card)
-                            }, onReject: {
-                                rejectTarget = card; showRejectSheet = true
-                            })
+                            ApprovalCardRow(
+                                card: card,
+                                tierConfigs: appState.cardTierConfigRows,
+                                canApprove: canApprove(card),
+                                canOverride: canOverride,
+                                onApprove: { appState.approveCard(card) },
+                                onReject: { rejectTarget = card; showRejectSheet = true },
+                                onOverride: canOverride ? {
+                                    overrideTarget = card; showOverrideSheet = true
+                                } : nil
+                            )
                         }
                     }
                 }.padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 20)
@@ -5652,14 +5931,62 @@ struct CardsForApprovalTabView: View {
                 )
             }
         }
+        .sheet(isPresented: $showOverrideSheet) {
+            NavigationView {
+                ZStack {
+                    Color.bgBase.edgesIgnoringSafeArea(.all)
+                    VStack(alignment: .leading, spacing: 16) {
+                        if let c = overrideTarget {
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: "bolt.fill").font(.system(size: 14)).foregroundColor(.orange)
+                                Text("This will approve the card for \(c.holderFullName), bypassing the normal approval chain.")
+                                    .font(.system(size: 12)).foregroundColor(.primary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .padding(10)
+                            .background(Color.orange.opacity(0.08)).cornerRadius(8)
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.orange.opacity(0.3), lineWidth: 1))
+                        }
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Override reason (optional)").font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
+                            TextField("Reason…", text: $overrideReason)
+                                .font(.system(size: 14)).padding(10)
+                                .background(Color.bgSurface).cornerRadius(8)
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                        }
+                        Spacer()
+                    }.padding()
+                }
+                .navigationBarTitle(Text("Override Card Approval"), displayMode: .inline)
+                .navigationBarItems(
+                    leading: Button("Cancel") { showOverrideSheet = false; overrideReason = ""; overrideTarget = nil }.foregroundColor(.goldDark),
+                    trailing: Button("Override") {
+                        guard let c = overrideTarget else { return }
+                        appState.overrideCard(c)
+                        showOverrideSheet = false; overrideReason = ""; overrideTarget = nil
+                    }.foregroundColor(.orange).font(.system(size: 16, weight: .bold))
+                )
+            }
+        }
     }
 }
 
 struct ApprovalCardRow: View {
     let card: ExpenseCard
     let tierConfigs: [ApprovalTierConfig]
+    /// Whether the current user can approve at this card's active tier
+    /// (mirrors the web's `vis.canApprove`). Defaults to `false` so the
+    /// Approve / Reject buttons stay hidden until the caller opts in
+    /// explicitly with the right per-card visibility check.
+    var canApprove: Bool = false
+    /// Whether the current user has card-override privilege. When true,
+    /// an Override button is shown alongside Approve / Reject.
+    var canOverride: Bool = false
     let onApprove: () -> Void
     let onReject: () -> Void
+    /// Optional override handler — only invoked when `canOverride` is
+    /// true and the caller wires it up.
+    var onOverride: (() -> Void)? = nil
 
     private var totalTiers: Int {
         let cfg = ApprovalHelpers.resolveConfig(tierConfigs, deptId: card.departmentId, amount: card.monthlyLimit)
@@ -5758,19 +6085,39 @@ struct ApprovalCardRow: View {
                 .padding(.vertical, 4)
             }
 
-            // Approve / Reject buttons
-            HStack(spacing: 10) {
-                Spacer()
-                Button(action: onReject) {
-                    Text("Reject").font(.system(size: 12, weight: .bold)).foregroundColor(.white)
-                        .padding(.horizontal, 16).padding(.vertical, 8)
-                        .background(Color.red).cornerRadius(8)
-                }.buttonStyle(BorderlessButtonStyle())
-                Button(action: onApprove) {
-                    Text("Approve").font(.system(size: 12, weight: .bold)).foregroundColor(.white)
-                        .padding(.horizontal, 16).padding(.vertical, 8)
-                        .background(Color.green).cornerRadius(8)
-                }.buttonStyle(BorderlessButtonStyle())
+            // Action buttons — gated by the user's actual permissions.
+            //   • Override: shown when `canOverride` AND a handler exists
+            //   • Approve / Reject: shown only when `canApprove` is true
+            // If the user can't approve but can override, only the
+            // Override button appears (matches the web).
+            let showOverride = canOverride && onOverride != nil
+            if canApprove || showOverride {
+                HStack(spacing: 10) {
+                    Spacer()
+                    if showOverride, let ov = onOverride {
+                        Button(action: ov) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "bolt.fill").font(.system(size: 10, weight: .bold))
+                                Text("Override").font(.system(size: 12, weight: .bold))
+                            }
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16).padding(.vertical, 8)
+                            .background(Color.orange).cornerRadius(8)
+                        }.buttonStyle(BorderlessButtonStyle())
+                    }
+                    if canApprove {
+                        Button(action: onReject) {
+                            Text("Reject").font(.system(size: 12, weight: .bold)).foregroundColor(.white)
+                                .padding(.horizontal, 16).padding(.vertical, 8)
+                                .background(Color.red).cornerRadius(8)
+                        }.buttonStyle(BorderlessButtonStyle())
+                        Button(action: onApprove) {
+                            Text("Approve").font(.system(size: 12, weight: .bold)).foregroundColor(.white)
+                                .padding(.horizontal, 16).padding(.vertical, 8)
+                                .background(Color.green).cornerRadius(8)
+                        }.buttonStyle(BorderlessButtonStyle())
+                    }
+                }
             }
         }
         .padding(14).background(Color.bgSurface).cornerRadius(12)
@@ -6638,10 +6985,9 @@ struct EditCardTransactionPage: View {
         .alert(isPresented: $showError) {
             Alert(title: Text("Error"), message: Text(saveError ?? "Unknown error"), dismissButton: .default(Text("OK")))
         }
-        .compatActionSheet(title: "Cost Code", isPresented: $showCodeSheet, buttons:
-            ([CompatActionSheetButton.default("None") { costCode = "" }]
-             + costCodeOptions.map { c in CompatActionSheetButton.default(c.1) { costCode = c.0 } })
-            + [.cancel()]
+        .appActionSheet(title: "Cost Code", isPresented: $showCodeSheet, items:
+            [.action("None") { costCode = "" }]
+            + costCodeOptions.map { c in .action(c.1) { costCode = c.0 } }
         )
         .onAppear {
             merchant = transaction.merchant
@@ -7701,21 +8047,21 @@ struct UploadReceiptPage: View {
         .alert(isPresented: $showError) {
             Alert(title: Text("Error"), message: Text(uploadError ?? "Unknown error"), dismissButton: .default(Text("OK")))
         }
-        .compatActionSheet(title: "Category", isPresented: $showCategorySheet, buttons:
+        .appActionSheet(title: "Category", isPresented: $showCategorySheet, items:
             claimCategories.map { c in
-                CompatActionSheetButton.default(c.1) {
+                .action(c.1) {
                     if drafts.indices.contains(activeDraftIdx) { drafts[activeDraftIdx].category = c.0 }
                 }
-            } + [.cancel()]
+            }
         )
-        .compatActionSheet(title: "Budget Code", isPresented: $showCodeSheet, buttons:
-            ([CompatActionSheetButton.default("None") {
+        .appActionSheet(title: "Budget Code", isPresented: $showCodeSheet, items:
+            [.action("None") {
                 if drafts.indices.contains(activeDraftIdx) { drafts[activeDraftIdx].budgetCode = "" }
             }] + costCodeOptions.map { c in
-                CompatActionSheetButton.default(c.1) {
+                .action(c.1) {
                     if drafts.indices.contains(activeDraftIdx) { drafts[activeDraftIdx].budgetCode = c.0 }
                 }
-            }) + [.cancel()]
+            }
         )
     }
 

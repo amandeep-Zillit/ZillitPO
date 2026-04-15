@@ -700,11 +700,10 @@ struct EditTemplateFormView: View {
             .listStyle(GroupedListStyle())
             .dismissKeyboardOnTap()
             .onAppear { loadTemplateData() }
-            .compatActionSheet(title: "Attach", isPresented: $showAttachSheet, buttons: [
-                CompatActionSheetButton.default("Quote") { /* TODO: attach quote */ },
-                CompatActionSheetButton.default("Email") { /* TODO: attach email */ },
-                CompatActionSheetButton.default("Attachment") { /* TODO: attach file */ },
-                CompatActionSheetButton.cancel()
+            .appActionSheet(title: "Attach", isPresented: $showAttachSheet, items: [
+                .action("Quote") { /* TODO: attach quote */ },
+                .action("Email") { /* TODO: attach email */ },
+                .action("Attachment") { /* TODO: attach file */ }
             ])
             .sheet(isPresented: $showSaveAsNameSheet) {
                 TemplateNameSheet(templateName: $saveAsTemplateName, isPresented: $showSaveAsNameSheet) {
@@ -722,11 +721,10 @@ struct EditTemplateFormView: View {
                 isActive: $showLineItemsPage
             ) { EmptyView() }
             .hidden()
-            .compatActionSheet(title: "Save Options", isPresented: $showSaveSheet, buttons: [
-                CompatActionSheetButton.default("Save") { updateTemplate() },
-                CompatActionSheetButton.default("Save As") { saveAsTemplateName = templateName; showSaveAsNameSheet = true },
-                CompatActionSheetButton.default("Save as Draft") { saveAsDraft() },
-                CompatActionSheetButton.cancel()
+            .appActionSheet(title: "Save Options", isPresented: $showSaveSheet, items: [
+                .action("Save") { updateTemplate() },
+                .action("Save As") { saveAsTemplateName = templateName; showSaveAsNameSheet = true },
+                .action("Save as Draft") { saveAsDraft() }
             ])
         }
     }
@@ -1375,11 +1373,10 @@ struct CreateTemplateFormView: View {
             .listStyle(GroupedListStyle())
             .dismissKeyboardOnTap()
             .onAppear { ctLoadDefaults() }
-            .compatActionSheet(title: "Attach", isPresented: $showAttachSheet, buttons: [
-                CompatActionSheetButton.default("Quote") { /* TODO: attach quote */ },
-                CompatActionSheetButton.default("Email") { /* TODO: attach email */ },
-                CompatActionSheetButton.default("Attachment") { /* TODO: attach file */ },
-                CompatActionSheetButton.cancel()
+            .appActionSheet(title: "Attach", isPresented: $showAttachSheet, items: [
+                .action("Quote") { /* TODO: attach quote */ },
+                .action("Email") { /* TODO: attach email */ },
+                .action("Attachment") { /* TODO: attach file */ }
             ])
             .overlay(
                 Group {

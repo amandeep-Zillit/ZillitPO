@@ -24,6 +24,8 @@ enum CashExpenseCodableTask {
     case getFloat(String, (Result<APIResponse<FloatRequestRaw>?, Error>) -> Void)
     case approveFloat(String, [String: Any], (Result<Data?, Error>) -> Void)
     case rejectFloat(String, [String: Any], (Result<Data?, Error>) -> Void)
+    case recordFloatReturn(String, [String: Any], (Result<Data?, Error>) -> Void)
+    case fetchFloatHistory(String, (Result<APIResponse<[FloatHistoryEntry]>?, Error>) -> Void)
     case createClaimBatch([String: Any], (Result<Data?, Error>) -> Void)
     case saveClaims(String, [String: Any], (Result<Data?, Error>) -> Void)
     case saveAndSubmit(String, [String: Any], (Result<Data?, Error>) -> Void)
@@ -86,6 +88,12 @@ extension CashExpenseCodableTask: PODataTaskProtocol {
         case .rejectFloat(let id, let body, let c):
             guard let r = CashExpenseRequest.rejectFloat(id, body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: r, completion: c)
+        case .recordFloatReturn(let id, let body, let c):
+            guard let r = CashExpenseRequest.recordFloatReturn(id, body).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: r, completion: c)
+        case .fetchFloatHistory(let id, let c):
+            guard let r = CashExpenseRequest.fetchFloatHistory(id).urlRequest else { return nil }
+            return APIClient.shared.codableResultTask(with: r, completion: c)
         case .createClaimBatch(let body, let c):
             guard let r = CashExpenseRequest.createClaimBatch(body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: r, completion: c)

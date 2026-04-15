@@ -42,6 +42,7 @@ enum PORequest {
     case approveInvoice(String, [String: Any])      // id, body
     case rejectInvoice(String, [String: Any])       // id, body
     case fetchInvoiceHistory(String)                // id
+    case fetchInvoiceQueries(String)                // id — /queries/entity/invoice/{id}
 
     // MARK: - Invoice Approval Tiers
     case fetchInvoiceApprovalTiers
@@ -160,7 +161,16 @@ extension PORequest: POURLRequestProtocol {
             return APIClient.shared.buildRequest(.post, endPoint, body: body)
 
         case .fetchInvoiceHistory(let id):
-            return APIClient.shared.buildRequest(.get, "/api/v2/invoices/\(id)/history")
+            // Include `perPage=200` so the backend returns the full history
+            // in a single request — mirrors the invoice list call which
+            // also passes `perPage=200` to avoid server-side pagination
+            // truncating the audit trail.
+            return APIClient.shared.buildRequest(.get, "/api/v2/invoices/\(id)/history?perPage=200")
+
+        case .fetchInvoiceQueries(let id):
+            // Queries raised against an invoice (notes / questions / audit
+            // flags). Endpoint returns all queries for the entity.
+            return APIClient.shared.buildRequest(.get, "/api/v2/account-hub/queries/entity/invoice/\(id)")
 
         // MARK: Invoice Approval Tiers
         case .fetchInvoiceApprovalTiers:

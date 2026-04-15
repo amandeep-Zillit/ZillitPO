@@ -2,131 +2,180 @@
 //  CompatActionSheet.swift
 //  ZillitPO
 //
-//  ActionSheet replacement that works on iOS 13–26
+//  Reusable wrappers around SwiftUI's native `actionSheet` modifier.
+//  Cuts the per-call-site boilerplate of building `ActionSheet.Button`
+//  arrays, appending `.cancel()`, and rendering selection checkmarks.
+//
+//  Two equivalent entry points:
+//
+//   • `.appActionSheet(title:isPresented:items:)`
+//        — generic version: pass an array of `AppActionSheetItem`s
+//          (selectable / action / destructive). Cancel is appended
+//          automatically.
+//
+//   • `.selectionActionSheet(title:isPresented:options:isSelected:label:onSelect:)`
+//        — filter/picker convenience: pass any Hashable list, a
+//          label closure, and an `onSelect` callback. Adds a "✓"
+//          to the currently-selected option's label.
+//
+//  Note on file name: this file is named `CompatActionSheet.swift` for
+//  historical reasons (Xcode project reference). The current contents
+//  are the new `AppActionSheet*` types.
 //
 
 import SwiftUI
 
-struct CompatActionSheetButton {
-    let title: String
-    let role: CompatButtonRole
+// MARK: - Item type used by .appActionSheet(...)
+
+struct AppActionSheetItem {
+    enum Role { case `default`, destructive }
+    let label: String
+    let isSelected: Bool
+    let role: Role
+    /// Optional SF Symbol name shown on the leading edge — used by the
+    /// dropdown menu variant. The action sheet variant ignores it.
+    let systemImage: String?
     let action: () -> Void
 
-    enum CompatButtonRole { case `default`, cancel, destructive }
-
-    static func `default`(_ title: String, action: @escaping () -> Void) -> CompatActionSheetButton {
-        CompatActionSheetButton(title: title, role: .default, action: action)
-    }
-    static func cancel() -> CompatActionSheetButton {
-        CompatActionSheetButton(title: "Cancel", role: .cancel, action: {})
-    }
-    static func destructive(_ title: String, action: @escaping () -> Void) -> CompatActionSheetButton {
-        CompatActionSheetButton(title: title, role: .destructive, action: action)
-    }
-}
-
-// MARK: - Custom bottom sheet view (works reliably on all iOS versions)
-
-struct CompatActionSheetContent: View {
-    let title: String
-    let buttons: [CompatActionSheetButton]
-    @Binding var isPresented: Bool
-    @ObservedObject private var theme = ThemeManager.shared
-
-    var body: some View {
-        VStack(spacing: 0) {
-            // Drag handle
-            RoundedRectangle(cornerRadius: 3)
-                .fill(Color.gray.opacity(0.4))
-                .frame(width: 40, height: 5)
-                .padding(.top, 10)
-                .padding(.bottom, 14)
-
-            // Title
-            if !title.isEmpty {
-                Text(title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.secondary)
-                    .padding(.bottom, 12)
-            }
-
-            // Buttons
-            VStack(spacing: 0) {
-                ForEach(buttons.indices, id: \.self) { i in
-                    let btn = buttons[i]
-                    if btn.role != .cancel {
-                        if i > 0 && buttons[i - 1].role != .cancel {
-                            Divider()
-                        }
-                        Button(action: {
-                            isPresented = false
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { btn.action() }
-                        }) {
-                            Text(btn.title)
-                                .font(.system(size: 17))
-                                .foregroundColor(btn.role == .destructive ? .red : .primary)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(BorderlessButtonStyle())
-                    }
-                }
-            }
-            .background(Color.bgRaised)
-            .cornerRadius(12)
-            .padding(.horizontal, 16)
-
-            // Cancel button
-            Button(action: { isPresented = false }) {
-                Text("Cancel")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundColor(.primary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(BorderlessButtonStyle())
-            .background(Color.bgRaised)
-            .cornerRadius(12)
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 16)
-        }
-        .background(Color.bgBase.edgesIgnoringSafeArea(.all))
-        .environment(\.colorScheme, theme.isDark ? .dark : .light)
-    }
-}
-
-// MARK: - View Modifier
-
-struct CompatActionSheet: ViewModifier {
-    let title: String
-    @Binding var isPresented: Bool
-    let buttons: [CompatActionSheetButton]
-    @ObservedObject private var theme = ThemeManager.shared
-
-    func body(content: Content) -> some View {
-        content.sheet(isPresented: $isPresented) {
-            if #available(iOS 16.4, *) {
-                CompatActionSheetContent(title: title, buttons: buttons, isPresented: $isPresented)
-                    .presentationDetents([.height(CGFloat(actionButtons.count * 50 + 140))])
-                    .presentationDragIndicator(.hidden)
-                    .environment(\.colorScheme, theme.isDark ? .dark : .light)
-            } else {
-                CompatActionSheetContent(title: title, buttons: buttons, isPresented: $isPresented)
-                    .environment(\.colorScheme, theme.isDark ? .dark : .light)
-            }
-        }
+    /// Selectable row — adds a "✓" to the label when `isSelected` is true.
+    static func selectable(_ label: String,
+                           isSelected: Bool,
+                           systemImage: String? = nil,
+                           action: @escaping () -> Void) -> AppActionSheetItem {
+        AppActionSheetItem(label: label, isSelected: isSelected, role: .default,
+                           systemImage: systemImage, action: action)
     }
 
-    private var actionButtons: [CompatActionSheetButton] {
-        buttons.filter { $0.role != .cancel }
+    /// Plain action row — no checkmark.
+    static func action(_ label: String,
+                       systemImage: String? = nil,
+                       action: @escaping () -> Void) -> AppActionSheetItem {
+        AppActionSheetItem(label: label, isSelected: false, role: .default,
+                           systemImage: systemImage, action: action)
+    }
+
+    /// Destructive (red) row.
+    static func destructive(_ label: String,
+                            systemImage: String? = nil,
+                            action: @escaping () -> Void) -> AppActionSheetItem {
+        AppActionSheetItem(label: label, isSelected: false, role: .destructive,
+                           systemImage: systemImage, action: action)
     }
 }
 
 extension View {
-    func compatActionSheet(title: String, isPresented: Binding<Bool>, buttons: [CompatActionSheetButton]) -> some View {
-        modifier(CompatActionSheet(title: title, isPresented: isPresented, buttons: buttons))
+    /// Generic reusable action sheet. Cancel button is appended.
+    func appActionSheet(title: String,
+                        isPresented: Binding<Bool>,
+                        items: [AppActionSheetItem]) -> some View {
+        actionSheet(isPresented: isPresented) {
+            ActionSheet(
+                title: Text(title),
+                buttons: items.map { item -> ActionSheet.Button in
+                    let txt = item.isSelected ? Text("\(item.label) ✓") : Text(item.label)
+                    switch item.role {
+                    case .default:     return .default(txt, action: item.action)
+                    case .destructive: return .destructive(txt, action: item.action)
+                    }
+                } + [.cancel()]
+            )
+        }
+    }
+
+    /// Filter/picker convenience — auto-builds a selectable item list
+    /// from any Hashable collection. Cancel button is appended.
+    func selectionActionSheet<T: Hashable>(title: String,
+                                            isPresented: Binding<Bool>,
+                                            options: [T],
+                                            isSelected: (T) -> Bool,
+                                            label: (T) -> String,
+                                            onSelect: @escaping (T) -> Void) -> some View {
+        let items = options.map { opt in
+            AppActionSheetItem.selectable(label(opt), isSelected: isSelected(opt)) {
+                onSelect(opt)
+            }
+        }
+        return appActionSheet(title: title, isPresented: isPresented, items: items)
+    }
+
+    /// Dropdown popup menu using the same `AppActionSheetItem` model.
+    /// Renders a small card overlaid on the trailing edge of the view
+    /// (typically used on a page that has an ellipsis nav-bar trigger).
+    /// Tapping outside the card or on an item dismisses it.
+    ///
+    /// Usage:
+    /// ```
+    /// .appDropdownMenu(isPresented: $showMenu, items: [
+    ///     .action("Query",   systemImage: "text.bubble") { … },
+    ///     .action("History", systemImage: "clock.arrow.circlepath") { … }
+    /// ])
+    /// ```
+    func appDropdownMenu(isPresented: Binding<Bool>,
+                         width: CGFloat = 180,
+                         items: [AppActionSheetItem]) -> some View {
+        ZStack(alignment: .topTrailing) {
+            self
+            if isPresented.wrappedValue {
+                // Full-screen tap catcher dismisses on outside taps.
+                Color.black.opacity(0.001)
+                    .edgesIgnoringSafeArea(.all)
+                    .onTapGesture { isPresented.wrappedValue = false }
+
+                AppDropdownMenuCard(width: width, items: items) {
+                    isPresented.wrappedValue = false
+                }
+                .padding(.trailing, 12)
+                .padding(.top, 4)
+                .transition(.opacity)
+            }
+        }
+    }
+}
+
+// MARK: - Dropdown card view (private to this file)
+
+private struct AppDropdownMenuCard: View {
+    let width: CGFloat
+    let items: [AppActionSheetItem]
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
+                Button(action: {
+                    onDismiss()
+                    item.action()
+                }) {
+                    HStack(spacing: 10) {
+                        if let sym = item.systemImage {
+                            Image(systemName: sym)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(item.role == .destructive ? .red : .goldDark)
+                                .frame(width: 18, alignment: .center)
+                        }
+                        Text(item.label)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(item.role == .destructive ? .red : .primary)
+                        Spacer()
+                        if item.isSelected {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.goldDark)
+                        }
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 10)
+                    .contentShape(Rectangle())
+                }.buttonStyle(PlainButtonStyle())
+
+                if idx < items.count - 1 {
+                    Divider().padding(.leading, item.systemImage != nil ? 34 : 12)
+                }
+            }
+        }
+        .frame(width: width)
+        .background(Color.bgSurface)
+        .cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+        .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
     }
 }

@@ -21,6 +21,8 @@ enum CashExpenseRequest {
     case getFloat(String)                         // id → /float-requests/{id}
     case approveFloat(String, [String: Any])      // id, body → /float-requests/{id}/approve
     case rejectFloat(String, [String: Any])       // id, body → /float-requests/{id}/reject
+    case recordFloatReturn(String, [String: Any]) // id, body → /float-requests/{id}/record-return
+    case fetchFloatHistory(String)                // id → /float-requests/{id}/history
     // Claims
     case fetchMyClaims
     case fetchMyBatches
@@ -73,6 +75,10 @@ extension CashExpenseRequest: POURLRequestProtocol {
             return buildLocal(.post, "/api/v2/cash-expenses/float-requests/\(id)/approve", body: body)
         case .rejectFloat(let id, let body):
             return buildLocal(.post, "/api/v2/cash-expenses/float-requests/\(id)/reject", body: body)
+        case .recordFloatReturn(let id, let body):
+            return buildLocal(.post, "/api/v2/cash-expenses/float-requests/\(id)/record-return", body: body)
+        case .fetchFloatHistory(let id):
+            return buildLocal(.get, "/api/v2/cash-expenses/float-requests/\(id)/history")
         case .fetchMyClaims:         return buildLocal(.get, "/api/v2/cash-expenses/claims/my-claims")
         case .fetchMyBatches:        return buildLocal(.get, "/api/v2/cash-expenses/claims/my-batches")
         case .fetchAllClaims:        return buildLocal(.get, "/api/v2/cash-expenses/claims")
