@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+
+# Xcode
+build/
+DerivedData/
+*.xcuserdata/
+*.xcuserstate
+xcuserdata/
+*.swp
+
+# Xcode project user settings
+ZillitPO.xcodeproj/xcuserdata/
+ZillitPO.xcodeproj/project.xcworkspace/xcuserdata/
+ZillitPO.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
+
+# Swift Package Manager
+.swiftpm/
+Package.resolved
+.build/
+
+# Local Claude workspaces (worktrees + session metadata)
+.claude/
+
+# Archives
+*.zip
+*.ipa
+*.dSYM.zip

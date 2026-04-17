@@ -1,0 +1,46 @@
+import SwiftUI
+
+struct PODraftsListView: View {
+    @EnvironmentObject var appState: POViewModel
+
+    var body: some View {
+        // Stat cards (Drafts count + Draft Value) removed — the list now
+        // starts directly with the draft rows (or empty state). Matches
+        // the All Purchase Orders screen which also dropped its stat
+        // cards; keeps the drafts screen focused on the rows themselves.
+        VStack(alignment: .leading, spacing: 12) {
+            if appState.drafts.isEmpty {
+                VStack(spacing: 12) {
+                    Spacer(minLength: 0)
+                    Image(systemName: "doc.text").font(.system(size: 28)).foregroundColor(.gray.opacity(0.3))
+                    Text("No drafts yet").font(.system(size: 13)).foregroundColor(.secondary)
+                    Spacer(minLength: 0)
+                }.frame(maxWidth: .infinity, minHeight: 480)
+            } else {
+                ForEach(appState.drafts, id: \.id) { draft in
+                    HStack(spacing: 0) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text((draft.poNumber ?? "").isEmpty ? "—" : draft.poNumber ?? "").font(.system(size: 11, design: .monospaced)).foregroundColor(.goldDark)
+                                Text((draft.vendor ?? "").isEmpty ? "—" : draft.vendor ?? "").font(.system(size: 13, weight: .medium)).foregroundColor(.primary).lineLimit(1)
+                            }
+                            Spacer()
+                            Text(FormatUtils.formatCurrency(draft.netAmount ?? 0, code: draft.currency ?? "GBP")).font(.system(size: 13, design: .monospaced)).foregroundColor(.primary)
+                            Text("Draft").font(.system(size: 10, weight: .medium)).foregroundColor(.goldDark)
+                                .padding(.horizontal, 6).padding(.vertical, 2).background(Color.gold.opacity(0.15)).cornerRadius(4)
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture { appState.resumeDraft = draft }
+
+                        Image(systemName: "trash").font(.system(size: 11)).foregroundColor(.red.opacity(0.6))
+                            .padding(10)
+                            .contentShape(Rectangle())
+                            .onTapGesture { appState.deleteDraftId = draft.id }
+                    }.padding(12)
+                    .background(Color.bgSurface).cornerRadius(8)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                }
+            }
+        }
+    }
+}
