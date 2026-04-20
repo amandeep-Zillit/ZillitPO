@@ -43,7 +43,10 @@ struct CreateTemplateFormView: View {
     @State private var deliveryDate = Date()
     @State private var hasDelDate = false
     @State private var notes = ""
-    @State private var lineItems: [LineItem] = [LineItem()]
+    // Start with NO line items — the summary card shows an "Add Line
+    // Items" button until the user adds their first one on the Line
+    // Items page. Matches POFormView's behaviour.
+    @State private var lineItems: [LineItem] = []
     @State private var customFieldValues: [String: String] = [:]
     @State private var lineItemCustomValues: [String: [String: String]] = [:]
 
@@ -64,6 +67,7 @@ struct CreateTemplateFormView: View {
     @State private var showCtValidationAlert = false
     @State private var ctValidationMessage = ""
     @State private var showTemplateNameSheet = false
+    @State private var showCountryPicker = false  // delivery address country picker
 
     private var sortedSections: [FormSection]? {
         appState.formTemplate?.template?.sorted { ($0.order ?? 0) < ($1.order ?? 0) }
@@ -77,34 +81,56 @@ struct CreateTemplateFormView: View {
         return []
     }
 
+    @ViewBuilder
     private var ctLineItemsSummaryCard: some View {
-        Button(action: { showLineItemsPage = true }) {
-            VStack(spacing: 10) {
-                ForEach(Array(lineItems.enumerated()), id: \.element.id) { idx, item in
+        // Empty state → just an "Add Line Items" button. Matches the
+        // POForm line items card (no "Untitled Item" placeholder rows).
+        if lineItems.isEmpty {
+            Button(action: {
+                // Seed with form-level defaults so the destination page
+                // opens with one row ready to edit.
+                lineItems.append(LineItem(account: nominalCode, department: departmentId))
+                showLineItemsPage = true
+            }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus.circle.fill").font(.system(size: 14))
+                    Text("Add Line Items").font(.system(size: 13, weight: .semibold))
+                }
+                .foregroundColor(.goldDark)
+                .frame(maxWidth: .infinity).padding(.vertical, 14)
+                .background(Color.gold.opacity(0.08))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.goldDark.opacity(0.3), lineWidth: 1))
+                .cornerRadius(8)
+            }.buttonStyle(BorderlessButtonStyle())
+        } else {
+            Button(action: { showLineItemsPage = true }) {
+                VStack(spacing: 10) {
+                    ForEach(Array(lineItems.enumerated()), id: \.element.id) { idx, item in
+                        HStack {
+                            Text("\(idx + 1).").font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundColor(.goldDark)
+                            Text((item.description ?? "").isEmpty ? "Untitled Item" : item.description ?? "")
+                                .font(.system(size: 13, weight: .medium)).foregroundColor(.primary).lineLimit(1)
+                            Spacer()
+                            Text("×\(Int(item.quantity ?? 0))").font(.system(size: 11, design: .monospaced)).foregroundColor(.secondary)
+                            Text(FormatUtils.formatCurrency((item.quantity ?? 0) * (item.unitPrice ?? 0), code: currency))
+                                .font(.system(size: 13, weight: .medium, design: .monospaced)).foregroundColor(.primary)
+                        }
+                    }
+                    Divider()
                     HStack {
-                        Text("\(idx + 1).").font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundColor(.goldDark)
-                        Text((item.description ?? "").isEmpty ? "Untitled Item" : item.description ?? "")
-                            .font(.system(size: 13, weight: .medium)).foregroundColor(.primary).lineLimit(1)
+                        HStack(spacing: 4) {
+                            Image(systemName: "pencil").font(.system(size: 10))
+                            Text("Tap to edit line items").font(.system(size: 11))
+                        }.foregroundColor(.goldDark)
                         Spacer()
-                        Text("×\(Int(item.quantity ?? 0))").font(.system(size: 11, design: .monospaced)).foregroundColor(.secondary)
-                        Text(FormatUtils.formatCurrency((item.quantity ?? 0) * (item.unitPrice ?? 0), code: currency))
-                            .font(.system(size: 13, weight: .medium, design: .monospaced)).foregroundColor(.primary)
+                        Text("\(lineItems.count) item\(lineItems.count == 1 ? "" : "s")").font(.system(size: 11, weight: .medium)).foregroundColor(.secondary)
+                        Text(FormatUtils.formatCurrency(ctNetTotal, code: currency)).font(.system(size: 15, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
                     }
                 }
-                Divider()
-                HStack {
-                    HStack(spacing: 4) {
-                        Image(systemName: "pencil").font(.system(size: 10))
-                        Text("Tap to edit line items").font(.system(size: 11))
-                    }.foregroundColor(.goldDark)
-                    Spacer()
-                    Text("\(lineItems.count) item\(lineItems.count == 1 ? "" : "s")").font(.system(size: 11, weight: .medium)).foregroundColor(.secondary)
-                    Text(FormatUtils.formatCurrency(ctNetTotal, code: currency)).font(.system(size: 15, weight: .bold, design: .monospaced)).foregroundColor(.goldDark)
-                }
-            }
-            .padding(12).background(Color.bgBase).cornerRadius(8)
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.goldDark.opacity(0.3), lineWidth: 1))
-        }.buttonStyle(BorderlessButtonStyle())
+                .padding(12).background(Color.bgBase).cornerRadius(8)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.goldDark.opacity(0.3), lineWidth: 1))
+            }.buttonStyle(BorderlessButtonStyle())
+        }
     }
 
     var body: some View {
@@ -189,6 +215,9 @@ struct CreateTemplateFormView: View {
                 .action("Email") { /* TODO: attach email */ },
                 .action("Attachment") { /* TODO: attach file */ }
             ])
+            .sheet(isPresented: $showCountryPicker) {
+                CountryNamePickerSheet(selectedName: $daCountry, isPresented: $showCountryPicker)
+            }
             .overlay(
                 Group {
                     if showTemplateNameSheet {
@@ -258,8 +287,18 @@ struct CreateTemplateFormView: View {
         if sectionKey == "po_details" {
             Section(header: ctSectionHeader(icon: "doc.text", title: (section.label ?? "").uppercased())) {
                 VStack(spacing: 14) {
-                    ForEach(section.visibleFields, id: \.id) { field in
-                        self.ctPOField(field)
+                    // Pair currency + delivery_date onto one row so two
+                    // narrow inputs share a line (matches POFormView).
+                    let rows = ctPODetailRows(from: section.visibleFields)
+                    ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                        if row.count == 2 {
+                            HStack(alignment: .top, spacing: 10) {
+                                self.ctPOField(row[0]).frame(maxWidth: .infinity)
+                                self.ctPOField(row[1]).frame(maxWidth: .infinity)
+                            }
+                        } else {
+                            self.ctPOField(row[0])
+                        }
                     }
                 }
             }
@@ -406,6 +445,55 @@ struct CreateTemplateFormView: View {
         )
     }
 
+    /// Pair `currency` + `delivery_date` on one row. Every other field
+    /// stays on its own. Mirrors POFormView's `poDetailRows` helper.
+    /// Tap-to-open country picker button — visually matches the
+    /// surrounding `InputField`s. Presents `CountryNamePickerSheet`
+    /// via the outer-body `.sheet` modifier.
+    private var ctCountryPickerButton: some View {
+        let flag: String = {
+            countryCodes.first { $0.name.lowercased() == daCountry.lowercased() }?.flag ?? ""
+        }()
+        return Button(action: { showCountryPicker = true }) {
+            HStack(spacing: 6) {
+                if !flag.isEmpty { Text(flag).font(.system(size: 14)) }
+                Text(daCountry.isEmpty ? "Select country" : daCountry)
+                    .font(.system(size: 13))
+                    .foregroundColor(daCountry.isEmpty ? .gray : .primary)
+                    .lineLimit(1)
+                Spacer()
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.gray)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 9)
+            .background(Color.bgSurface).cornerRadius(6)
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
+            .contentShape(Rectangle())
+        }.buttonStyle(PlainButtonStyle())
+    }
+
+    private func ctPODetailRows(from fields: [FormField]) -> [[FormField]] {
+        let currencyField = fields.first { $0.label == "currency" }
+        let deliveryField = fields.first { $0.label == "delivery_date" }
+        guard let c = currencyField, let d = deliveryField else {
+            return fields.map { [$0] }
+        }
+        var rows: [[FormField]] = []
+        var skipDeliveryOnce = false
+        for field in fields {
+            if field.id == c.id {
+                rows.append([c, d])
+                skipDeliveryOnce = true
+            } else if field.id == d.id && skipDeliveryOnce {
+                continue
+            } else {
+                rows.append([field])
+            }
+        }
+        return rows
+    }
+
     private let ctPOSystemLabels: Set<String> = [
         "vendor", "vendor_address", "department", "account_code", "description",
         "currency", "vat", "delivery_date", "effective_date", "notes"
@@ -439,7 +527,11 @@ struct CreateTemplateFormView: View {
         } else if field.label == "delivery_postal_code" {
             FieldGroup(label: (field.name ?? "").uppercased(), optional: !field.isRequired) { InputField(text: $daPostal, placeholder: "Postal code...") }
         } else if field.label == "country" {
-            FieldGroup(label: (field.name ?? "").uppercased(), optional: !field.isRequired) { InputField(text: $daCountry, placeholder: "Country") }
+            // Tap-to-open picker (matches POFormView). Native text
+            // input replaced with a searchable country list sheet.
+            FieldGroup(label: (field.name ?? "").uppercased(), optional: !field.isRequired) {
+                ctCountryPickerButton
+            }
         } else if !ctDeliverySystemLabels.contains(field.label ?? "") {
             ctCustomFieldView(sectionKey: "delivery_address", field: field)
         }
@@ -587,7 +679,7 @@ struct CreateTemplateFormView: View {
             }
             HStack(spacing: 10) {
                 FieldGroup(label: "POSTAL CODE") { InputField(text: $daPostal, placeholder: "Postal code...") }
-                FieldGroup(label: "COUNTRY") { InputField(text: $daCountry, placeholder: "Country") }
+                FieldGroup(label: "COUNTRY") { ctCountryPickerButton }
             }
         }
     }
