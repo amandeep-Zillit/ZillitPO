@@ -13,6 +13,7 @@ struct ActivateCardPage: View {
     @State private var cardNumber: String = ""
     @State private var submitting = false
     @State private var showSuccess = false
+    @State private var errorMessage: String? = nil
 
     private var rawDigits: String { cardNumber.filter { $0.isNumber } }
     private var isValid: Bool { rawDigits.count == 16 }
@@ -143,10 +144,15 @@ struct ActivateCardPage: View {
 
     private func submit() {
         guard let type = selectedType, isValid else { return }
+        errorMessage = nil
         submitting = true
-        appState.activateCard(id: card.id, cardNumber: rawDigits, cardType: type) { success in
+        appState.activateCard(id: card.id, cardNumber: rawDigits, cardType: type) { success, error in
             submitting = false
-            if success { showSuccess = true }
+            if success {
+                showSuccess = true
+            } else {
+                errorMessage = error ?? "Failed to activate card. Please try again."
+            }
         }
     }
 }

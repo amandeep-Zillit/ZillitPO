@@ -81,6 +81,7 @@
 		AC65AE01506C45B52DF9ABAE /* VendorsPinnedHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EC99264A3937D962FF532ED /* VendorsPinnedHeader.swift */; };
 		AD8D93DFA0BD8B60AFFED06E /* TopUpDetailPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EDD504297B1BF568F5D9A56 /* TopUpDetailPage.swift */; };
 		B00C7EBAB11F955F089FCB49 /* InvoiceQueriesPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F276B85045E5C5D3536AE24 /* InvoiceQueriesPage.swift */; };
+		B0EBAC9EB6FAA9721FE93738 /* VendorHistoryPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECCC554195FED8BF2FE1E7BC /* VendorHistoryPage.swift */; };
 		B6817B596555DB7E3D4AB179 /* CashExpenseRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FB867D43BE6C60094565AE4 /* CashExpenseRequest.swift */; };
 		B6CEC26AE7A3748A629B8FC3 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2381E2B5CA72D943987DCF8D /* APIClient.swift */; };
 		B9927BE72490302246F05FFA /* PickerSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C017CA5D9CDAF9BA2F693F8 /* PickerSheetView.swift */; };
@@ -244,6 +245,7 @@
 		E45CB1E49E570A54BAB7552A /* POTableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = POTableView.swift; sourceTree = "<group>"; };
 		E4A94C2DD016F5C285B4A753 /* PDFViewerPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFViewerPage.swift; sourceTree = "<group>"; };
 		E782E65AF99DED7E1162CA30 /* FloatRequestListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatRequestListView.swift; sourceTree = "<group>"; };
+		ECCC554195FED8BF2FE1E7BC /* VendorHistoryPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VendorHistoryPage.swift; sourceTree = "<group>"; };
 		EF38B0F1B39DE5E18FF0FEED /* LoaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoaderView.swift; sourceTree = "<group>"; };
 		EFC1C2C4F0F74868F1E03A6A /* FloatRequestFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatRequestFormView.swift; sourceTree = "<group>"; };
 		F1A88473ECF61A28888BA4BD /* CardExpensesModuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardExpensesModuleView.swift; sourceTree = "<group>"; };
@@ -568,6 +570,7 @@
 			children = (
 				63260BDFF19DBF4A6DC6DAE6 /* VendorDetailPage.swift */,
 				3865A42F7F268790BEEA50E5 /* VendorFormPage.swift */,
+				ECCC554195FED8BF2FE1E7BC /* VendorHistoryPage.swift */,
 				6812F1C01215B74AA4C1BEAC /* VendorsModuleView.swift */,
 				8EC99264A3937D962FF532ED /* VendorsPinnedHeader.swift */,
 				CFD9B1A556FB9F29CBD0562B /* VendorsScrollableList.swift */,
@@ -743,6 +746,7 @@
 				EBC789D2BBF282BFC8E76483 /* VATHelpers.swift in Sources */,
 				DB24F6D2A873AEC8E474C625 /* VendorDetailPage.swift in Sources */,
 				E425E9D03CB659F20DAA9001 /* VendorFormPage.swift in Sources */,
+				B0EBAC9EB6FAA9721FE93738 /* VendorHistoryPage.swift in Sources */,
 				19AC6962ECA87E24DC36C0CF /* VendorSearchField.swift in Sources */,
 				670B7CB8CFD3440F3E658CB9 /* VendorsModuleView.swift in Sources */,
 				AC65AE01506C45B52DF9ABAE /* VendorsPinnedHeader.swift in Sources */,

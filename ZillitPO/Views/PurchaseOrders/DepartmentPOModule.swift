@@ -80,7 +80,10 @@ struct DepartmentPOModule: View {
         .onAppear {
             // Reset search on re-appear (e.g. after returning from a tapped PO)
             appState.searchText = ""
-            appState.loadPOs()
+            // Initial fetch honours the current tab + role so a
+            // non-accountant on the Approval Queue tab doesn't flash
+            // the generic list before the per-tab call fires.
+            loadForCurrentTab()
             if appState.vendors.isEmpty { appState.loadVendors() }
             if appState.tierConfigRows.isEmpty { appState.loadApprovalTiers() }
             if appState.formTemplate == nil { appState.loadFormTemplate() }
@@ -150,6 +153,39 @@ struct DepartmentPOModule: View {
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
     }
 
+    /// Non-accountants see "Approval Queue" (server-filtered via the
+    /// `/approval` endpoint) instead of the generic "All POs" — it's
+    /// the web app's April 2026 flow, and the data source is distinct
+    /// enough that the label change keeps users oriented.
+    private var isAccountant: Bool { appState.currentUser?.isAccountant == true }
+    private func tabLabel(_ tab: DeptTab) -> String {
+        if tab == .all && !isAccountant { return "Approval Queue" }
+        return tab.rawValue
+    }
+
+    /// Dispatch to the right endpoint for the currently-active tab.
+    /// Accountants keep the generic list endpoint for the first tab
+    /// (full project scope needed for bulk ops); everyone else gets
+    /// the dedicated per-tab route so the server does the filtering.
+    ///
+    ///  - **All POs** (accountant only)   → `GET /purchase-orders`
+    ///  - **Approval Queue** (non-acct)   → `GET /purchase-orders/approval`
+    ///  - **My POs**                       → `GET /purchase-orders/my`
+    ///  - **My Dept**                      → `GET /purchase-orders?department_id=…`
+    private func loadForCurrentTab() {
+        switch appState.activeTab {
+        case .all:
+            if isAccountant { appState.loadPOs() }
+            else            { appState.loadApprovalQueue() }
+        case .my:
+            appState.loadMyPOs()
+        case .department:
+            appState.loadDepartmentPOs()
+        default:
+            appState.loadPOs()
+        }
+    }
+
     private var tabBar: some View {
         HStack(spacing: 0) {
             ForEach([DeptTab.all, .my, .department], id: \.self) { tabButton($0) }
@@ -157,9 +193,13 @@ struct DepartmentPOModule: View {
     }
 
     private func tabButton(_ tab: DeptTab) -> some View {
-        Button(action: { appState.activeTab = tab; appState.activeFilter = .all }) {
+        Button(action: {
+            appState.activeTab = tab
+            appState.activeFilter = .all
+            loadForCurrentTab()
+        }) {
             HStack(spacing: 4) {
-                Text(tab.rawValue).font(.system(size: 12, weight: appState.activeTab == tab ? .semibold : .regular)).lineLimit(1)
+                Text(tabLabel(tab)).font(.system(size: 12, weight: appState.activeTab == tab ? .semibold : .regular)).lineLimit(1)
                 if let count = appState.tabCounts[tab] {
                     Text("\(count)").font(.system(size: 9, design: .monospaced)).padding(.horizontal, 5).padding(.vertical, 2)
                         .background(appState.activeTab == tab ? Color.gold.opacity(0.2) : Color.bgRaised).cornerRadius(10)

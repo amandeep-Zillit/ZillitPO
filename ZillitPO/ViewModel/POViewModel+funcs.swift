@@ -12,11 +12,20 @@ extension POViewModel {
     var filteredPOs: [PurchaseOrder] {
         guard let user = currentUser else { return [] }
         var list = purchaseOrders
+        // Each tab now populates `purchaseOrders` via a dedicated
+        // server-filtered endpoint (see loadApprovalQueue / loadMyPOs /
+        // loadDepartmentPOs in POViewModel+apis.swift), so the client
+        // can render the list as-is. The only path that still needs a
+        // client-side pass is the accountant's "All POs" tab, which
+        // hits the generic list endpoint and narrows it with the
+        // `isVisible` approval-scope check.
         switch activeTab {
-        case .all: list = list.filter { isVisible($0) }
-        case .my: list = list.filter { $0.userId == user.id }
-        case .department: list = list.filter { ($0.departmentId ?? "") == (user.departmentId ?? "") && $0.userId != user.id }
-        default: return []
+        case .all:
+            if user.isAccountant { list = list.filter { isVisible($0) } }
+        case .my, .department:
+            break      // server already filtered via /my or ?department_id=
+        default:
+            return []
         }
         switch activeFilter {
         case .all: break
@@ -47,10 +56,25 @@ extension POViewModel {
     }
 
     var tabCounts: [DeptTab: Int] {
+        // Each tab now loads its own server-filtered list, so only the
+        // currently-active tab has a meaningful count — the cached
+        // values for other tabs would be stale (or worse, reflect the
+        // last tab's data). Returning a count only for `activeTab`
+        // keeps the badge honest without tracking three lists in
+        // parallel.
         guard let u = currentUser else { return [:] }
-        return [.all: purchaseOrders.filter { isVisible($0) }.count,
-                .my: purchaseOrders.filter { $0.userId == u.id }.count,
-                .department: purchaseOrders.filter { ($0.departmentId ?? "") == (u.departmentId ?? "") && $0.userId != u.id }.count]
+        let count: Int
+        switch activeTab {
+        case .all:
+            count = u.isAccountant
+                ? purchaseOrders.filter { isVisible($0) }.count
+                : purchaseOrders.count
+        case .my, .department:
+            count = purchaseOrders.count
+        default:
+            return [:]
+        }
+        return [activeTab: count]
     }
 
     var pendingCount: Int { filteredPOs.filter { $0.poStatus == .pending }.count }

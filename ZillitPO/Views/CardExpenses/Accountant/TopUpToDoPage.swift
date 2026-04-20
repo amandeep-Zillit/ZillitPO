@@ -13,6 +13,11 @@ struct TopUpToDoPage: View {
     @State private var skippingGroupKey: String? = nil
     @State private var markingGroupKey: String? = nil
     @State private var errorMessage: String? = nil
+    /// Drives the hidden NavigationLink used for detail navigation.
+    /// Set when the user taps any non-button area of a pending card
+    /// (or a history row) → cleared automatically on back-nav.
+    @State private var detailItem: TopUpItem? = nil
+    @State private var detailActive: Bool = false
 
     // MARK: - Filter to card-only top-ups
     // Cash float top-ups live on a separate page; treat missing entityType as "card" for
@@ -99,6 +104,22 @@ struct TopUpToDoPage: View {
                 .background(Color.bgBase)
             }
         }
+        // Hidden NavigationLink that the whole-card tap gestures
+        // trigger via `detailActive`. One link serves every card —
+        // `detailItem` is swapped immediately before `detailActive`
+        // flips, so the destination sees the right top-up item.
+        .background(
+            NavigationLink(
+                destination: Group {
+                    if let item = detailItem {
+                        TopUpDetailPage(item: item).environmentObject(appState)
+                    } else {
+                        EmptyView()
+                    }
+                },
+                isActive: $detailActive
+            ) { EmptyView() }.hidden()
+        )
         .navigationBarTitle(Text("Top-Up To Do"), displayMode: .inline)
         .onAppear { appState.loadTopUpQueue() }
         .sheet(item: $partialGroup) { group in
@@ -232,92 +253,107 @@ struct TopUpToDoPage: View {
         let isSkipping = skippingGroupKey == group.key
         let isMarking = markingGroupKey == group.key
         let groupBusy = isSkipping || isMarking
-        return VStack(alignment: .leading, spacing: 12) {
-            // Header
-            HStack(spacing: 10) {
-                if group.hasUrgent {
-                    Image(systemName: "flame.fill").font(.system(size: 11)).foregroundColor(.orange)
-                }
-                ZStack {
-                    Circle().fill(Color(red: 0.95, green: 0.55, blue: 0.15)).frame(width: 30, height: 30)
-                    Text(initials).font(.system(size: 10, weight: .bold)).foregroundColor(.white)
-                }
-                VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 6) {
-                        Text(user?.fullName ?? (item.holderName ?? "")).font(.system(size: 14, weight: .bold))
-                        if !(item.cardLastFour ?? "").isEmpty {
-                            Text("—").font(.system(size: 11)).foregroundColor(.gray)
-                            Text("•••• \(item.cardLastFour ?? "")").font(.system(size: 11, design: .monospaced)).foregroundColor(.primary)
+        // Whole card wrapped in a Button for rock-solid hit testing —
+        // `.contentShape + .onTapGesture` on a VStack was only catching
+        // taps on non-empty areas in practice. A Button with
+        // PlainButtonStyle fills its entire rendered frame as the
+        // touch target, and SwiftUI correctly routes taps to inner
+        // Buttons (Mark / Partial / Skip) before this outer one fires.
+        return Button(action: {
+            detailItem = item
+            detailActive = true
+        }) {
+            VStack(alignment: .leading, spacing: 12) {
+            // Informational content.
+            VStack(alignment: .leading, spacing: 12) {
+                    // Header
+                    HStack(spacing: 10) {
+                        if group.hasUrgent {
+                            Image(systemName: "flame.fill").font(.system(size: 11)).foregroundColor(.orange)
                         }
-                    }
-                    HStack(spacing: 4) {
-                        if !(item.cardLastFour ?? "").isEmpty {
-                            Text("Card •••• \(item.cardLastFour ?? "")").font(.system(size: 9)).foregroundColor(.gray)
+                        ZStack {
+                            Circle().fill(Color(red: 0.95, green: 0.55, blue: 0.15)).frame(width: 30, height: 30)
+                            Text(initials).font(.system(size: 10, weight: .bold)).foregroundColor(.white)
                         }
-                        if !(item.bsControlCode ?? "").isEmpty {
-                            Text("· BS: \(item.bsControlCode ?? "")").font(.system(size: 9)).foregroundColor(.gray)
-                        }
-                    }
-                }
-                Spacer()
-                if group.hasUrgent {
-                    Text("URGENT")
-                        .font(.system(size: 9, weight: .bold)).foregroundColor(.red)
-                        .padding(.horizontal, 7).padding(.vertical, 3)
-                        .background(Color.red.opacity(0.1))
-                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.red.opacity(0.4), lineWidth: 1))
-                        .cornerRadius(4)
-                }
-            }
-
-            // Details grid 2x2
-            VStack(spacing: 10) {
-                HStack(alignment: .top, spacing: 12) {
-                    detailCell(label: "CURRENT BAL", value: FormatUtils.formatGBP(group.cardBalance), color: Color(red: 0.0, green: 0.6, blue: 0.5), mono: true)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("CARD LIMIT").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
-                        Text(FormatUtils.formatGBP(group.cardLimit)).font(.system(size: 14, weight: .bold, design: .monospaced))
-                        // Progress bar
-                        GeometryReader { geo in
-                            ZStack(alignment: .leading) {
-                                Rectangle().fill(Color.gray.opacity(0.15)).frame(height: 4).cornerRadius(2)
-                                Rectangle().fill(Color(red: 0.95, green: 0.55, blue: 0.15)).frame(width: geo.size.width * CGFloat(spentPct), height: 4).cornerRadius(2)
+                        VStack(alignment: .leading, spacing: 1) {
+                            HStack(spacing: 6) {
+                                Text(user?.fullName ?? (item.holderName ?? "")).font(.system(size: 14, weight: .bold))
+                                if !(item.cardLastFour ?? "").isEmpty {
+                                    Text("—").font(.system(size: 11)).foregroundColor(.gray)
+                                    Text("•••• \(item.cardLastFour ?? "")").font(.system(size: 11, design: .monospaced)).foregroundColor(.primary)
+                                }
                             }
-                        }.frame(height: 4)
-                        Text("Spent \(FormatUtils.formatGBP(item.cardSpent ?? 0))").font(.system(size: 9)).foregroundColor(.gray)
-                    }.frame(maxWidth: .infinity, alignment: .leading)
-                }
-                HStack(alignment: .top, spacing: 12) {
-                    detailCell(label: "TOP-UP METHOD", value: (item.method ?? "").lowercased() == "restore" ? "Restore float" : item.methodDisplay, color: .primary, mono: false)
-                    detailCell(label: "TOP-UP AMOUNT", value: FormatUtils.formatGBP(totalAmount), color: Color(red: 0.95, green: 0.55, blue: 0.15), mono: true)
-                }
-            }
+                            HStack(spacing: 4) {
+                                if !(item.cardLastFour ?? "").isEmpty {
+                                    Text("Card •••• \(item.cardLastFour ?? "")").font(.system(size: 9)).foregroundColor(.gray)
+                                }
+                                if !(item.bsControlCode ?? "").isEmpty {
+                                    Text("· BS: \(item.bsControlCode ?? "")").font(.system(size: 9)).foregroundColor(.gray)
+                                }
+                            }
+                        }
+                        Spacer()
+                        if group.hasUrgent {
+                            Text("URGENT")
+                                .font(.system(size: 9, weight: .bold)).foregroundColor(.red)
+                                .padding(.horizontal, 7).padding(.vertical, 3)
+                                .background(Color.red.opacity(0.1))
+                                .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.red.opacity(0.4), lineWidth: 1))
+                                .cornerRadius(4)
+                        }
+                    }
 
-            // Source line (aggregated across all receipts in the group)
-            if let sourceLine = sourceLine {
-                Text(sourceLine)
-                    .font(.system(size: 10)).foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+                    // Details grid 2x2
+                    VStack(spacing: 10) {
+                        HStack(alignment: .top, spacing: 12) {
+                            detailCell(label: "CURRENT BAL", value: FormatUtils.formatGBP(group.cardBalance), color: Color(red: 0.0, green: 0.6, blue: 0.5), mono: true)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("CARD LIMIT").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
+                                Text(FormatUtils.formatGBP(group.cardLimit)).font(.system(size: 14, weight: .bold, design: .monospaced))
+                                // Progress bar
+                                GeometryReader { geo in
+                                    ZStack(alignment: .leading) {
+                                        Rectangle().fill(Color.gray.opacity(0.15)).frame(height: 4).cornerRadius(2)
+                                        Rectangle().fill(Color(red: 0.95, green: 0.55, blue: 0.15)).frame(width: geo.size.width * CGFloat(spentPct), height: 4).cornerRadius(2)
+                                    }
+                                }.frame(height: 4)
+                                Text("Spent \(FormatUtils.formatGBP(item.cardSpent ?? 0))").font(.system(size: 9)).foregroundColor(.gray)
+                            }.frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        HStack(alignment: .top, spacing: 12) {
+                            detailCell(label: "TOP-UP METHOD", value: (item.method ?? "").lowercased() == "restore" ? "Restore float" : item.methodDisplay, color: .primary, mono: false)
+                            detailCell(label: "TOP-UP AMOUNT", value: FormatUtils.formatGBP(totalAmount), color: Color(red: 0.95, green: 0.55, blue: 0.15), mono: true)
+                        }
+                    }
 
-            // Note (if any group item has a partial-topup note attached)
-            if let note = noteText {
-                HStack(alignment: .top, spacing: 6) {
-                    Image(systemName: "pencil").font(.system(size: 9)).foregroundColor(.orange)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("Note:").font(.system(size: 10, weight: .bold)).foregroundColor(.orange)
-                        Text(note).font(.system(size: 10)).foregroundColor(.primary)
+                    // Source line (aggregated across all receipts in the group)
+                    if let sourceLine = sourceLine {
+                        Text(sourceLine)
+                            .font(.system(size: 10)).foregroundColor(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+
+                // Note (if any group item has a partial-topup note attached)
+                if let note = noteText {
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: "pencil").font(.system(size: 9)).foregroundColor(.orange)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Note:").font(.system(size: 10, weight: .bold)).foregroundColor(.orange)
+                            Text(note).font(.system(size: 10)).foregroundColor(.primary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .padding(.horizontal, 8).padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.orange.opacity(0.08))
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.orange.opacity(0.25), lineWidth: 1))
+                    .cornerRadius(6)
                 }
-                .padding(.horizontal, 8).padding(.vertical, 6)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.orange.opacity(0.08))
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.orange.opacity(0.25), lineWidth: 1))
-                .cornerRadius(6)
             }
 
-            // Action buttons — batch over all pending items in the group
+            // Action buttons — batch over all pending items in the group.
+            // Kept OUTSIDE the NavigationLink so each button captures its
+            // own tap without navigating.
             HStack(spacing: 8) {
                 Button(action: { markGroupCompleted(group) }) {
                     HStack(spacing: 4) {
@@ -365,8 +401,11 @@ struct TopUpToDoPage: View {
 
                 Spacer()
             }
-        }
-        .padding(14)
+            } // inner VStack close
+            .padding(14)
+            .contentShape(Rectangle())
+        } // Button closure close
+        .buttonStyle(PlainButtonStyle())
     }
 
     private func detailCell(label: String, value: String, color: Color, mono: Bool) -> some View {

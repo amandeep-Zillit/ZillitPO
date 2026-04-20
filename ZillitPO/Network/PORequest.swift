@@ -6,10 +6,14 @@
 import Foundation
 
 enum PORequest {
+    static let baseURL = "http://192.168.29.92:3001"
+    
     // MARK: - Vendors
     case fetchVendors
     case createVendor([String: Any])
+    case updateVendor(String, [String: Any])     // id, body → PATCH /vendors/{id}
     case deleteVendor(String)
+    case fetchVendorHistory(String)              // id → GET /vendors/{id}/history
 
     // MARK: - Approval Tiers
     case fetchApprovalTiers
@@ -25,6 +29,12 @@ enum PORequest {
     case generatePDF(String, [String: Any])         // id, body
     case fetchPOHistory(String)                     // id → /purchase-orders/{id}/history
     case fetchPOQueries(String)                     // id → /account-hub/queries/entity/purchase_order/{id}
+    // New endpoints (Apr 2026):
+    case fetchApprovalQueue                         // GET  /purchase-orders/approval
+    case fetchMyPOs                                 // GET  /purchase-orders/my
+    case bulkUpdatePOs([String: Any])               // PATCH /purchase-orders/bulk
+    case postPO(String, [String: Any])              // POST /purchase-orders/{id}/post
+    case closePO(String, [String: Any])             // POST /purchase-orders/{id}/close
 
     // MARK: - Templates
     case fetchTemplates
@@ -74,9 +84,18 @@ extension PORequest: POURLRequestProtocol {
             let endPoint = "/api/v2/vendors"
             return APIClient.shared.buildRequest(.post, endPoint, body: body)
 
+        case .updateVendor(let id, let body):
+            let endPoint = "/api/v2/vendors/\(id)"
+            return APIClient.shared.buildRequest(.patch, endPoint, body: body)
+
         case .deleteVendor(let id):
             let endPoint = "/api/v2/vendors/\(id)"
             return APIClient.shared.buildRequest(.delete, endPoint)
+
+        case .fetchVendorHistory(let id):
+            // perPage=200 so the audit trail arrives in one call —
+            // matches the invoice + PO history convention.
+            return APIClient.shared.buildRequest(.get, "/api/v2/vendors/\(id)/history?perPage=200")
 
         // MARK: Approval Tiers
         case .fetchApprovalTiers:
@@ -84,63 +103,91 @@ extension PORequest: POURLRequestProtocol {
             return APIClient.shared.buildRequest(.get, endPoint)
 
         // MARK: Purchase Orders
+        //
+        // PO + template endpoints route to the dedicated
+        // `purchase-order-server` microservice (localhost:3001 in dev,
+        // see `PORequest.baseURL`). Everything else — vendors, invoices,
+        // account-hub queries / approval-tiers / form-templates —
+        // continues to use `APIClient.shared.baseURL` (the hosted
+        // gateway). `APIClient.buildRequest` treats any `path` starting
+        // with "http" as an absolute URL and skips the shared-baseURL
+        // prefix, so these lines keep the rest of the pipeline
+        // (headers, JSON body, timeout) intact.
         case .fetchPurchaseOrders(let path):
-            return APIClient.shared.buildRequest(.get, path)
+            // Caller passes a path that already starts with
+            // "/api/v2/purchase-orders?..." — prepend the PO server's
+            // baseURL unless they handed us an absolute URL.
+            let url = path.hasPrefix("http") ? path : "\(Self.baseURL)\(path)"
+            return APIClient.shared.buildRequest(.get, url)
 
         case .fetchDrafts:
-            let endPoint = "/api/v2/purchase-orders?status=DRAFT"
-            return APIClient.shared.buildRequest(.get, endPoint)
+            return APIClient.shared.buildRequest(.get, "\(Self.baseURL)/api/v2/purchase-orders?status=DRAFT")
 
         case .createPO(let body):
-            let endPoint = "/api/v2/purchase-orders"
-            return APIClient.shared.buildRequest(.post, endPoint, body: body)
+            return APIClient.shared.buildRequest(.post, "\(Self.baseURL)/api/v2/purchase-orders", body: body)
 
         case .updatePO(let id, let body):
-            let endPoint = "/api/v2/purchase-orders/\(id)"
-            return APIClient.shared.buildRequest(.patch, endPoint, body: body)
+            return APIClient.shared.buildRequest(.patch, "\(Self.baseURL)/api/v2/purchase-orders/\(id)", body: body)
 
         case .deletePO(let id):
-            let endPoint = "/api/v2/purchase-orders/\(id)"
-            return APIClient.shared.buildRequest(.delete, endPoint)
+            return APIClient.shared.buildRequest(.delete, "\(Self.baseURL)/api/v2/purchase-orders/\(id)")
 
         case .approvePO(let id, let body):
-            let endPoint = "/api/v2/purchase-orders/\(id)/approve"
-            return APIClient.shared.buildRequest(.post, endPoint, body: body)
+            return APIClient.shared.buildRequest(.post, "\(Self.baseURL)/api/v2/purchase-orders/\(id)/approve", body: body)
 
         case .rejectPO(let id, let body):
-            let endPoint = "/api/v2/purchase-orders/\(id)/reject"
-            return APIClient.shared.buildRequest(.post, endPoint, body: body)
+            return APIClient.shared.buildRequest(.post, "\(Self.baseURL)/api/v2/purchase-orders/\(id)/reject", body: body)
 
         case .generatePDF(let id, let body):
-            let endPoint = "/api/v2/purchase-orders/\(id)/pdf"
-            return APIClient.shared.buildRequest(.post, endPoint, body: body)
+            return APIClient.shared.buildRequest(.post, "\(Self.baseURL)/api/v2/purchase-orders/\(id)/pdf", body: body)
 
         case .fetchPOHistory(let id):
             // perPage=200 so the full audit trail is returned in one call —
             // matches the invoice history convention.
-            return APIClient.shared.buildRequest(.get, "/api/v2/purchase-orders/\(id)/history?perPage=200")
+            return APIClient.shared.buildRequest(.get, "\(Self.baseURL)/api/v2/purchase-orders/\(id)/history?perPage=200")
 
         case .fetchPOQueries(let id):
-            // Generic account-hub queries endpoint. Entity type for POs is
-            // `purchase_order` (matches the backend's entity-kind enum).
+            // Queries live on the account-hub service (generic entity
+            // queries endpoint) — stays on the shared base URL.
             return APIClient.shared.buildRequest(.get, "/api/v2/account-hub/queries/entity/purchase_order/\(id)")
 
-        // MARK: Templates
+        case .fetchApprovalQueue:
+            // POs where the current user is an approver (server-driven —
+            // replaces the client-side approval-tier filtering).
+            return APIClient.shared.buildRequest(.get, "\(Self.baseURL)/api/v2/purchase-orders/approval")
+
+        case .fetchMyPOs:
+            // POs raised by the current user (non-DRAFT).
+            return APIClient.shared.buildRequest(.get, "\(Self.baseURL)/api/v2/purchase-orders/my")
+
+        case .bulkUpdatePOs(let body):
+            // Body: { po_ids: [String], data: { assigned_to? / reassignment_reason? /
+            // effective_date? / status?=CLOSED / closure_reason? } }.
+            return APIClient.shared.buildRequest(.patch, "\(Self.baseURL)/api/v2/purchase-orders/bulk", body: body)
+
+        case .postPO(let id, let body):
+            // Accountant-only transition APPROVED / ACCT_ENTERED → POSTED.
+            // Body carries camelCase totals + snake_case poDetails (matches the
+            // web client payload exactly).
+            return APIClient.shared.buildRequest(.post, "\(Self.baseURL)/api/v2/purchase-orders/\(id)/post", body: body)
+
+        case .closePO(let id, let body):
+            // Accountant-only transition POSTED → CLOSED.
+            // Body: { reason, effective_date }.
+            return APIClient.shared.buildRequest(.post, "\(Self.baseURL)/api/v2/purchase-orders/\(id)/close", body: body)
+
+        // MARK: Templates (served by the same PO microservice)
         case .fetchTemplates:
-            let endPoint = "/api/v2/purchase-orders/templates"
-            return APIClient.shared.buildRequest(.get, endPoint)
+            return APIClient.shared.buildRequest(.get, "\(Self.baseURL)/api/v2/purchase-orders/templates")
 
         case .createTemplate(let body):
-            let endPoint = "/api/v2/purchase-orders/templates"
-            return APIClient.shared.buildRequest(.post, endPoint, body: body)
+            return APIClient.shared.buildRequest(.post, "\(Self.baseURL)/api/v2/purchase-orders/templates", body: body)
 
         case .updateTemplate(let id, let body):
-            let endPoint = "/api/v2/purchase-orders/templates/\(id)"
-            return APIClient.shared.buildRequest(.patch, endPoint, body: body)
+            return APIClient.shared.buildRequest(.patch, "\(Self.baseURL)/api/v2/purchase-orders/templates/\(id)", body: body)
 
         case .deleteTemplate(let id):
-            let endPoint = "/api/v2/purchase-orders/templates/\(id)"
-            return APIClient.shared.buildRequest(.delete, endPoint)
+            return APIClient.shared.buildRequest(.delete, "\(Self.baseURL)/api/v2/purchase-orders/templates/\(id)")
 
         // MARK: Form Template
         case .fetchFormTemplate:

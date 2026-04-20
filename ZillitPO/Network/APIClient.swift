@@ -252,6 +252,7 @@ struct PurchaseOrderRaw: Codable {
     var closure_reason: String?; var closed_by: String?; var closed_at: Int?
     var vat_amount: Double?; var gross_total: Double?
     var custom_fields: FlexibleCustomFields?
+    var updated_by: String?       // new — server populates on every mutation
     var created_at: Int?; var updated_at: Int?
 
     enum CodingKeys: String, CodingKey {
@@ -260,7 +261,7 @@ struct PurchaseOrderRaw: Codable {
         case raised_by, user_id, approvals, vat_treatment, delivery_address, delivery_date
         case rejection_reason, rejected_by, rejected_at, reassignment_reason, reassigned_by
         case reassigned_at, closure_reason, closed_by, closed_at, vat_amount, gross_total
-        case custom_fields, created_at, updated_at
+        case custom_fields, updated_by, created_at, updated_at
     }
 
     init(from decoder: Decoder) throws {
@@ -285,6 +286,7 @@ struct PurchaseOrderRaw: Codable {
         reassigned_by = try? c.decode(String.self, forKey: .reassigned_by)
         closure_reason = try? c.decode(String.self, forKey: .closure_reason)
         closed_by = try? c.decode(String.self, forKey: .closed_by)
+        updated_by = try? c.decode(String.self, forKey: .updated_by)
         line_items = try? c.decode(FlexibleLineItems.self, forKey: .line_items)
         approvals = try? c.decode(FlexibleApprovals.self, forKey: .approvals)
         delivery_address = try? c.decode(FlexibleDeliveryAddress.self, forKey: .delivery_address)
@@ -310,10 +312,14 @@ struct LineItemRaw: Codable {
     var vat_treatment: String?
     var rental_start: Int?; var rental_end: Int?
     var split_parent_id: String?; var custom_fields: [CustomFieldValue]?
+    var tax_type: String?      // new (Apr 2026): per-line tax enum
+    var tax_rate: Double?      // new: percentage 0-100
+    var tags: [String]?        // new: free-form tag list
 
     enum CodingKeys: String, CodingKey {
         case id, description, quantity, unit_price, total, account, department
         case expenditure_type, vat_treatment, rental_start, rental_end, split_parent_id, custom_fields
+        case tax_type, tax_rate, tags
     }
 
     init(from decoder: Decoder) throws {
@@ -326,10 +332,13 @@ struct LineItemRaw: Codable {
         vat_treatment = try? c.decode(String.self, forKey: .vat_treatment)
         split_parent_id = try? c.decode(String.self, forKey: .split_parent_id)
         custom_fields = try? c.decode([CustomFieldValue].self, forKey: .custom_fields)
+        tax_type = try? c.decode(String.self, forKey: .tax_type)
+        tags = try? c.decode([String].self, forKey: .tags)
         // Flexible fields
         quantity = flexibleDoubleDecode(c, .quantity)
         unit_price = flexibleDoubleDecode(c, .unit_price)
         total = flexibleDoubleDecode(c, .total)
+        tax_rate = flexibleDoubleDecode(c, .tax_rate)
         rental_start = flexibleIntDecode(c, .rental_start)
         rental_end = flexibleIntDecode(c, .rental_end)
     }
@@ -734,7 +743,8 @@ extension PurchaseOrderRaw {
                      quantity: raw.quantity ?? 1, unitPrice: raw.unit_price ?? 0,
                      total: raw.total ?? 0, account: raw.account ?? "",
                      department: raw.department ?? "", expenditureType: raw.expenditure_type ?? "Purchase",
-                     vatTreatment: liVat)
+                     vatTreatment: liVat,
+                     taxType: raw.tax_type, taxRate: raw.tax_rate, tags: raw.tags)
             // Preserve other custom fields (exclude "vat" since it's now on the model)
             li.customFields = (raw.custom_fields ?? []).filter { $0.name != "vat" }
             return li
@@ -760,6 +770,7 @@ extension PurchaseOrderRaw {
         po.closedAt = closed_at.map { Int64($0) }; po.closureReason = closure_reason
         po.customFields = custom_fields?.items ?? []; po.vatAmount = vat_amount
         po.grossTotal = gross_total; po.approvals = apps
+        po.updatedBy = updated_by
         po.createdAt = Int64(created_at ?? 0); po.updatedAt = Int64(updated_at ?? 0)
         po.vendor = v?.name ?? ""; po.department = d?.displayName ?? ""; po.lineItems = items
         po.vendorAddress = [v?.address?.line1, v?.address?.city, v?.address?.postalCode]

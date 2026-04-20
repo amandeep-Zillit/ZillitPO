@@ -237,6 +237,121 @@ extension POViewModel {
         }.urlDataTask?.resume()
     }
 
+    /// Non-accountant Approval Queue — POs where the signed-in user
+    /// is listed as an approver (server-driven filtering; replaces the
+    /// client-side `isVisible` filter used on the generic list). Hits
+    /// `GET /api/v2/purchase-orders/approval` on the PO microservice.
+    /// Populates `purchaseOrders` on success so the existing table UI
+    /// picks it up without further changes.
+    func loadApprovalQueue(onComplete: (() -> Void)? = nil) {
+        isLoading = true
+        POCodableTask.fetchApprovalQueue { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let response):
+                    let raw = response?.data ?? []
+                    let v = self?.vendors ?? []
+                    let d = DepartmentsData.all
+                    // Server already filters to non-DRAFT; we keep the
+                    // belt-and-braces filter so stray drafts don't leak
+                    // into the list if the backend changes.
+                    let pos = raw.filter { ($0.status ?? "") != "DRAFT" }
+                                 .map { $0.toPO(vendors: v, departments: d) }
+                    self?.purchaseOrders = pos
+                    print("✅ Loaded \(pos.count) approval-queue POs")
+                case .failure(let error):
+                    print("❌ Fetch approval queue failed: \(error)")
+                }
+                self?.isLoading = false
+                onComplete?()
+            }
+        }.urlDataTask?.resume()
+    }
+
+    /// My POs tab — POs raised by the signed-in user (non-DRAFT).
+    /// Hits `GET /api/v2/purchase-orders/my`. Server-filtered, so the
+    /// view-model stores the result directly in `purchaseOrders`
+    /// without a secondary `userId`-equality pass.
+    func loadMyPOs(onComplete: (() -> Void)? = nil) {
+        isLoading = true
+        POCodableTask.fetchMyPOs { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let response):
+                    let raw = response?.data ?? []
+                    let v = self?.vendors ?? []
+                    let d = DepartmentsData.all
+                    let pos = raw.filter { ($0.status ?? "") != "DRAFT" }
+                                 .map { $0.toPO(vendors: v, departments: d) }
+                    self?.purchaseOrders = pos
+                    print("✅ Loaded \(pos.count) my-POs")
+                case .failure(let error):
+                    print("❌ Fetch my POs failed: \(error)")
+                }
+                self?.isLoading = false
+                onComplete?()
+            }
+        }.urlDataTask?.resume()
+    }
+
+    /// Refresh whichever tab is currently active. Used by the
+    /// mutation flows (approve / reject / delete / post / close) so
+    /// after an action the list shown to the user picks up the new
+    /// state from the endpoint that populated it in the first place.
+    /// Accountants on "All POs" still hit the generic list; everyone
+    /// else routes to their per-tab endpoint.
+    func refreshCurrentTab() {
+        let acct = currentUser?.isAccountant == true
+        switch activeTab {
+        case .all:
+            if acct { loadPOs() } else { loadApprovalQueue() }
+        case .my:
+            loadMyPOs()
+        case .department:
+            loadDepartmentPOs()
+        default:
+            loadPOs()
+        }
+    }
+
+    /// My Department POs tab — POs under the user's department,
+    /// scoped server-side via `?department_id=…`. Falls back to the
+    /// current user's department when no id is passed. Returns early
+    /// (clears the list) when there's no resolvable department, so
+    /// the UI shows an empty state instead of the previous tab's
+    /// cached rows.
+    func loadDepartmentPOs(departmentId: String? = nil, onComplete: (() -> Void)? = nil) {
+        let deptId = (departmentId?.isEmpty == false)
+            ? (departmentId ?? "")
+            : (currentUser?.departmentId ?? "")
+        guard !deptId.isEmpty else {
+            purchaseOrders = []
+            isLoading = false
+            onComplete?()
+            return
+        }
+        isLoading = true
+        let path = "/api/v2/purchase-orders?department_id=\(deptId)"
+        POCodableTask.fetchPurchaseOrders(path) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let response):
+                    let raw = response?.data ?? []
+                    let v = self?.vendors ?? []
+                    let d = DepartmentsData.all
+                    let pos = raw.filter { ($0.status ?? "") != "DRAFT" }
+                                 .map { $0.toPO(vendors: v, departments: d) }
+                    self?.purchaseOrders = pos
+                    print("✅ Loaded \(pos.count) department POs (\(deptId))")
+                case .failure(let error):
+                    print("❌ Fetch department POs failed: \(error)")
+                }
+                self?.isLoading = false
+                onComplete?()
+            }
+        }.urlDataTask?.resume()
+    }
+
     func loadDrafts() {
         POCodableTask.fetchDrafts { [weak self] result in
             DispatchQueue.main.async {
@@ -405,7 +520,7 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    self?.loadPOs(); self?.selectedPO = nil
+                    self?.refreshCurrentTab(); self?.selectedPO = nil
                 case .failure(let error):
                     print("❌ Approve PO failed: \(error)")
                 }
@@ -420,7 +535,7 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    self?.loadPOs(); self?.rejectTarget = nil; self?.rejectReason = ""; self?.showRejectSheet = false; self?.selectedPO = nil
+                    self?.refreshCurrentTab(); self?.rejectTarget = nil; self?.rejectReason = ""; self?.showRejectSheet = false; self?.selectedPO = nil
                 case .failure(let error):
                     print("❌ Reject PO failed: \(error)")
                 }
@@ -433,11 +548,142 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ PO deleted"); self?.loadPOs(); self?.loadDrafts(); self?.popToRoot = true
+                    print("✅ PO deleted"); self?.refreshCurrentTab(); self?.loadDrafts(); self?.popToRoot = true
                 case .failure(let error):
                     print("❌ Delete PO failed: \(error)")
                 }
                 self?.deleteTarget = nil
+            }
+        }.urlDataTask?.resume()
+    }
+
+    // MARK: - Post / Close (accountant-only lifecycle transitions)
+    //
+    // These wrap the new `/post` and `/close` endpoints introduced
+    // alongside the web app's April 2026 PO overhaul. Post moves
+    // APPROVED / ACCT_ENTERED → POSTED; close moves POSTED → CLOSED.
+    // Both refresh the PO list on success so the list UI picks up the
+    // new status + computed totals.
+
+    /// Post an APPROVED / ACCT_ENTERED PO.
+    /// - parameter po: the PO whose id drives the route.
+    /// - parameter effectiveDate: optional override (ms since epoch).
+    ///   When nil, the server keeps the existing `effective_date`.
+    /// - parameter onComplete: fires on the main queue with success/error.
+    func postPO(_ po: PurchaseOrder,
+                effectiveDate: Int64? = nil,
+                onComplete: @escaping (Bool, String?) -> Void) {
+        // Body shape matches the web client exactly: camelCase for the
+        // computed totals + line items, a nested snake_case `poDetails`
+        // block so the server can recompute derived fields (gross total,
+        // department display, etc.) without a second round-trip.
+        let lineItemPayload: [[String: Any]] = (po.lineItems ?? []).map { item in
+            var li: [String: Any] = [
+                "id": item.id,
+                "description": item.description ?? "",
+                "quantity": item.quantity ?? 0,
+                "unit_price": item.unitPrice ?? 0,
+                "total": item.total ?? 0,
+                "account": item.account ?? "",
+                "department": item.department ?? "",
+                "expenditure_type": item.expenditureType ?? "",
+                "vat_treatment": item.vatTreatment ?? ""
+            ]
+            if let t = item.taxType    { li["tax_type"] = t }
+            if let r = item.taxRate    { li["tax_rate"] = r }
+            if let tags = item.tags    { li["tags"] = tags }
+            return li
+        }
+        var poDetails: [String: Any] = [
+            "description": po.description ?? "",
+            "vendor_id": po.vendorId ?? "",
+            "department_id": po.departmentId ?? "",
+            "nominal_code": po.nominalCode ?? "",
+            "currency": po.currency ?? "GBP",
+            "notes": po.notes ?? ""
+        ]
+        if let da = po.deliveryAddress {
+            poDetails["delivery_address"] = [
+                "name": da.name ?? "", "email": da.email ?? "",
+                "phone": da.phone ?? "", "phone_code": da.phoneCode ?? "",
+                "line1": da.line1 ?? "", "line2": da.line2 ?? "",
+                "city": da.city ?? "", "state": da.state ?? "",
+                "postal_code": da.postalCode ?? "", "country": da.country ?? ""
+            ]
+        }
+        if let dd = po.deliveryDate { poDetails["delivery_date"] = dd }
+
+        var body: [String: Any] = [
+            "vatTreatment": po.vatTreatment ?? "pending",
+            "netTotal": po.netAmount ?? 0,
+            "vatAmount": po.vatAmount ?? 0,
+            "grossTotal": po.grossTotal ?? po.netAmount ?? 0,
+            "lineItems": lineItemPayload,
+            "poDetails": poDetails
+        ]
+        if let ed = effectiveDate ?? po.effectiveDate { body["effectiveDate"] = ed }
+
+        POCodableTask.postPO(po.id, body) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    print("✅ PO posted (\(po.id))")
+                    self?.refreshCurrentTab()
+                    onComplete(true, nil)
+                case .failure(let error):
+                    let msg = error.localizedDescription
+                    print("❌ Post PO failed: \(msg)")
+                    onComplete(false, msg)
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    /// Close a POSTED PO. `reason` is required by validation; the
+    /// server rejects an empty string but accepts nil (omitted field).
+    func closePO(_ po: PurchaseOrder,
+                 reason: String,
+                 effectiveDate: Int64? = nil,
+                 onComplete: @escaping (Bool, String?) -> Void) {
+        var body: [String: Any] = ["reason": reason]
+        if let d = effectiveDate { body["effective_date"] = d }
+
+        POCodableTask.closePO(po.id, body) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    print("✅ PO closed (\(po.id))")
+                    self?.refreshCurrentTab()
+                    onComplete(true, nil)
+                case .failure(let error):
+                    let msg = error.localizedDescription
+                    print("❌ Close PO failed: \(msg)")
+                    onComplete(false, msg)
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    /// Bulk PATCH — reassign, set effective date, or bulk-close up to
+    /// 100 POs in one call. `data` keys are snake_case and must match
+    /// one of the server's allowed shapes; see `bulkUpdateSchema`
+    /// (validators/v2/purchase-order.js) for the supported subset.
+    func bulkUpdatePOs(ids: [String],
+                       data: [String: Any],
+                       onComplete: @escaping (Bool, String?) -> Void) {
+        let body: [String: Any] = ["po_ids": ids, "data": data]
+        POCodableTask.bulkUpdatePOs(body) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    print("✅ Bulk update (\(ids.count) POs)")
+                    self?.refreshCurrentTab()
+                    onComplete(true, nil)
+                case .failure(let error):
+                    let msg = error.localizedDescription
+                    print("❌ Bulk update failed: \(msg)")
+                    onComplete(false, msg)
+                }
             }
         }.urlDataTask?.resume()
     }
@@ -455,6 +701,12 @@ extension POViewModel {
         let auto = ApprovalHelpers.getAutoApprovals(cfg, userId: u.id ?? "", deptId: dept)
         let lineItemPayloads: [[String: Any]] = fd.lineItems.map {
             var item: [String: Any] = ["id":$0.id,"description":$0.description ?? "","quantity":$0.quantity ?? 0,"unit_price":$0.unitPrice ?? 0,"total":$0.total ?? 0,"account":$0.account ?? "","department":self.resolveDeptId($0.department ?? ""),"expenditure_type":$0.expenditureType ?? "","vat_treatment":$0.vatTreatment ?? ""]
+            // Per-line tax fields (Apr 2026). Only included when set —
+            // the server's validator rejects empty-string `tax_type`,
+            // and a null `tax_rate` is legal.
+            if let tt = $0.taxType, !tt.isEmpty { item["tax_type"] = tt }
+            if let tr = $0.taxRate               { item["tax_rate"] = tr }
+            if let tags = $0.tags                { item["tags"] = tags }
             // Include VAT in custom_fields so the API persists it
             var cfArr: [[String: String]] = [["name": "vat", "value": $0.vatTreatment ?? ""]]
             if let customVals = fd.lineItemCustomValues[$0.id] {
@@ -491,7 +743,16 @@ extension POViewModel {
                 self?.formSubmitting = false
                 switch result {
                 case .success:
-                    self?.loadPOs(); self?.loadDrafts(); self?.showCreatePO = false; self?.resumeDraft = nil; self?.editingPO = nil; self?.activeTab = .my; onComplete?()
+                    // Form always lands the user on "My POs" after
+                    // submit, so fetch that tab's data directly —
+                    // avoids a flash of the previous tab's list.
+                    self?.activeTab = .my
+                    self?.loadMyPOs()
+                    self?.loadDrafts()
+                    self?.showCreatePO = false
+                    self?.resumeDraft = nil
+                    self?.editingPO = nil
+                    onComplete?()
                 case .failure(let error):
                     print("❌ Submit PO failed: \(error)")
                 }
@@ -654,6 +915,50 @@ extension POViewModel {
                     self?.loadVendors()
                 case .failure(let error):
                     print("❌ Delete vendor failed: \(error)")
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    /// Updates an existing vendor via `PATCH /api/v2/vendors/{id}`. The
+    /// body must match the same shape used by `createVendor` (name,
+    /// contact_person, email, phone, address, vat_number,
+    /// department_id). On success the vendor list is refreshed so the
+    /// detail/list views pick up the new values. `onComplete` tells the
+    /// caller whether the call succeeded so it can dismiss or surface an
+    /// error.
+    func updateVendor(id: String, body: [String: Any], onComplete: @escaping (Bool) -> Void) {
+        POCodableTask.updateVendor(id, body) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    print("✅ Vendor updated: \(id)")
+                    self?.loadVendors()
+                    onComplete(true)
+                case .failure(let error):
+                    print("❌ Update vendor failed: \(error)")
+                    onComplete(false)
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    /// Fetches the audit trail for a vendor via
+    /// `GET /api/v2/vendors/{id}/history?perPage=200`. Stored by vendor
+    /// id so the detail page can subscribe without re-fetching on every
+    /// appear. Matches the `loadInvoiceHistory` / `loadPOHistory`
+    /// pattern.
+    func loadVendorHistory(_ vendorId: String) {
+        vendorHistoryLoading = true
+        POCodableTask.fetchVendorHistory(vendorId) { [weak self] result in
+            DispatchQueue.main.async {
+                self?.vendorHistoryLoading = false
+                switch result {
+                case .success(let response):
+                    self?.vendorHistory[vendorId] = response?.data ?? []
+                    print("✅ Loaded vendor history for \(vendorId): \(response?.data?.count ?? 0) entries")
+                case .failure(let error):
+                    print("❌ Fetch vendor history failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()

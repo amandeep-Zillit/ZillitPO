@@ -12,6 +12,7 @@ struct AssignPhysicalCardPage: View {
     @State private var rawDigits: String = ""
     @State private var isSubmitting = false
     @State private var showSuccess = false
+    @State private var errorMessage: String? = nil
 
     private static let teal = Color(red: 0, green: 0.6, blue: 0.5)
 
@@ -94,7 +95,13 @@ struct AssignPhysicalCardPage: View {
                         }
                         TextField("", text: Binding(
                             get: { formatted },
-                            set: { new in rawDigits = String(new.filter { $0.isNumber }.prefix(16)) }
+                            set: { new in
+                                rawDigits = String(new.filter { $0.isNumber }.prefix(16))
+                                // Clear any previous server error when
+                                // the user edits the input so the
+                                // banner only reflects the latest attempt.
+                                if errorMessage != nil { errorMessage = nil }
+                            }
                         ))
                         .keyboardType(.numberPad)
                         .font(.system(size: 16, weight: .medium, design: .monospaced))
@@ -102,6 +109,14 @@ struct AssignPhysicalCardPage: View {
                     }
                     .background(Color.bgSurface).cornerRadius(10)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderColor, lineWidth: 1))
+
+                    // "N digits remaining" helper — matches web UX.
+                    let entered = rawDigits.count
+                    if entered > 0 && entered < 16 {
+                        Text("\(16 - entered) digit\(16 - entered == 1 ? "" : "s") remaining")
+                            .font(.system(size: 10))
+                            .foregroundColor(Color(red: 0.85, green: 0.33, blue: 0.45))
+                    }
                 }
 
                 // ── Warning banner ──
@@ -123,6 +138,25 @@ struct AssignPhysicalCardPage: View {
                 .background(Color.orange.opacity(0.08))
                 .cornerRadius(10)
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.orange.opacity(0.35), lineWidth: 1))
+
+                // Error banner — shown when the API rejects the assign
+                // (duplicate card number, network issue, etc.). Matches
+                // the web reference's red error box under the input.
+                if let error = errorMessage, !error.isEmpty {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "xmark.octagon.fill")
+                            .font(.system(size: 13)).foregroundColor(.red)
+                        Text(error)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.red)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.red.opacity(0.08))
+                    .cornerRadius(10)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.red.opacity(0.3), lineWidth: 1))
+                }
 
                 Spacer(minLength: 24)
 
@@ -156,11 +190,19 @@ struct AssignPhysicalCardPage: View {
 
     private func assignCard() {
         guard canSubmit else { return }
+        errorMessage = nil
         isSubmitting = true
-        // Call activateCard — this assigns the physical card number AND flips status to active.
-        appState.activateCard(id: card.id, cardNumber: rawDigits) { success in
+        // Call activateCard — assigns the physical card number AND
+        // flips status to active. On failure the ViewModel rolls back
+        // its optimistic status/number patch and returns the server
+        // error, which we show in the red banner above the button.
+        appState.activateCard(id: card.id, cardNumber: rawDigits) { success, error in
             isSubmitting = false
-            if success { showSuccess = true }
+            if success {
+                showSuccess = true
+            } else {
+                errorMessage = error ?? "Failed to assign physical card. Please try again."
+            }
         }
     }
 }

@@ -174,97 +174,68 @@ struct CreateTemplateFormView: View {
                 }
 
                 // MARK: - Action Buttons
+                // Uses the same pattern as POFormView — plain HStack
+                // with `.contentShape + .onTapGesture`, NOT `Button +
+                // BorderlessButtonStyle`. iOS 26 renders
+                // `confirmationDialog` attached to a Button as a
+                // popover-with-tail; attaching to an `.onTapGesture`
+                // row gives the expected bottom sheet.
                 Section {
                     HStack(spacing: 10) {
-                        // Attach button
-                        Button(action: { showAttachSheet = true }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "paperclip").font(.system(size: 13, weight: .semibold))
-                                Text("Attach").font(.system(size: 13, weight: .semibold))
-                            }
-                            .foregroundColor(.secondary)
-                            .frame(maxWidth: .infinity).padding(.vertical, 12)
-                            .background(Color.bgSurface).cornerRadius(8)
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
-                        }.buttonStyle(BorderlessButtonStyle())
+                        // Attach button (outlined)
+                        HStack(spacing: 6) {
+                            Image(systemName: "paperclip").font(.system(size: 13))
+                            Text("Attach").font(.system(size: 13, weight: .semibold))
+                        }
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity).padding(.vertical, 12)
+                        .background(Color.bgSurface).cornerRadius(8)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                        .contentShape(Rectangle())
+                        .onTapGesture { showAttachSheet = true }
+                        .appActionSheet(title: "Attach", isPresented: $showAttachSheet, items: [
+                            .action("Quote") { /* TODO: attach quote */ },
+                            .action("Email") { /* TODO: attach email */ },
+                            .action("Attachment") { /* TODO: attach file */ }
+                        ])
 
-                        // Save Template button — opens name sheet if name is empty
-                        Button(action: {
+                        // Save Template button (gold)
+                        HStack(spacing: 6) {
+                            Image(systemName: "doc.badge.plus").font(.system(size: 13, weight: .bold))
+                            Text("Save Template").font(.system(size: 14, weight: .bold))
+                        }
+                        .foregroundColor(.black)
+                        .frame(maxWidth: .infinity).padding(.vertical, 12)
+                        .background(Color.gold).cornerRadius(8)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
                             if templateName.trimmingCharacters(in: .whitespaces).isEmpty {
                                 showTemplateNameSheet = true
                             } else {
                                 createTemplate()
                             }
-                        }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "doc.badge.plus").font(.system(size: 13, weight: .bold))
-                                Text("Save Template").font(.system(size: 14, weight: .bold))
-                            }
-                            .foregroundColor(.black)
-                            .frame(maxWidth: .infinity).padding(.vertical, 12)
-                            .background(Color.gold).cornerRadius(8)
-                        }.buttonStyle(BorderlessButtonStyle())
+                        }
                     }
                 }
             }
             .listStyle(GroupedListStyle())
             .dismissKeyboardOnTap()
             .onAppear { ctLoadDefaults() }
-            .appActionSheet(title: "Attach", isPresented: $showAttachSheet, items: [
-                .action("Quote") { /* TODO: attach quote */ },
-                .action("Email") { /* TODO: attach email */ },
-                .action("Attachment") { /* TODO: attach file */ }
-            ])
             .sheet(isPresented: $showCountryPicker) {
                 CountryNamePickerSheet(selectedName: $daCountry, isPresented: $showCountryPicker)
             }
-            .overlay(
-                Group {
-                    if showTemplateNameSheet {
-                        ZStack {
-                            Color.black.opacity(0.4).edgesIgnoringSafeArea(.all)
-                                .onTapGesture { showTemplateNameSheet = false }
-                            VStack(spacing: 16) {
-                                HStack {
-                                    Text("Template Name").font(.system(size: 16, weight: .bold))
-                                    Spacer()
-                                    Button(action: { showTemplateNameSheet = false }) {
-                                        Image(systemName: "xmark.circle.fill").font(.system(size: 20)).foregroundColor(.gray)
-                                    }
-                                }
-                                Text("Give your template a name so you can reuse it later.")
-                                    .font(.system(size: 12)).foregroundColor(.secondary)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                TextField("e.g. Weekly Catering Order", text: $templateName)
-                                    .font(.system(size: 14))
-                                    .padding(.horizontal, 12).padding(.vertical, 10)
-                                    .background(Color.bgSurface).cornerRadius(8)
-                                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
-                                Button(action: {
-                                    guard !templateName.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-                                    showTemplateNameSheet = false
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { createTemplate() }
-                                }) {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "checkmark").font(.system(size: 13, weight: .bold))
-                                        Text("Save Template").font(.system(size: 14, weight: .bold))
-                                    }
-                                    .foregroundColor(.black)
-                                    .frame(maxWidth: .infinity).padding(.vertical, 12)
-                                    .background(templateName.trimmingCharacters(in: .whitespaces).isEmpty ? Color.gold.opacity(0.4) : Color.gold)
-                                    .cornerRadius(8)
-                                }
-                                .disabled(templateName.trimmingCharacters(in: .whitespaces).isEmpty)
-                            }
-                            .padding(20)
-                            .background(Color.bgBase)
-                            .cornerRadius(14)
-                            .shadow(color: Color.black.opacity(0.15), radius: 20, x: 0, y: 8)
-                            .padding(.horizontal, 30)
-                        }
-                    }
-                }
-            )
+            // Template name sheet presented at the view-root level so
+            // it fills the screen. Previously this was a custom
+            // `.overlay(...)` attached to the bottom action-bar VStack
+            // — overlays inherit their underlying view's frame, so the
+            // modal rendered clipped inside the ~60pt footer height.
+            .sheet(isPresented: $showTemplateNameSheet) {
+                TemplateNameSheet(
+                    templateName: $templateName,
+                    isPresented: $showTemplateNameSheet,
+                    onSave: { createTemplate() }
+                )
+            }
 
             NavigationLink(
                 destination: LineItemsPage(
@@ -356,7 +327,11 @@ struct CreateTemplateFormView: View {
                     .foregroundColor(vendorId.isEmpty ? .gray : .primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 10).padding(.vertical, 9)
-                    .background(Color(red: 0.97, green: 0.97, blue: 0.98))
+                    // `Color.bgRaised` adapts to dark mode (slightly
+                    // lifted surface). The previous near-white literal
+                    // stayed bright under a dark theme and looked like
+                    // a mis-styled card.
+                    .background(Color.bgRaised)
                     .cornerRadius(6)
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
             }

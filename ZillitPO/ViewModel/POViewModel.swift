@@ -31,6 +31,10 @@ class POViewModel: ObservableObject {
     @Published var poHistoryLoading: Bool = false
     @Published var poQueries: [String: InvoiceQueryThread] = [:]
     @Published var poQueriesLoading: Bool = false
+    /// Audit trail for vendors (name change / address edit / creation /
+    /// verification / etc.), keyed by vendor id.
+    @Published var vendorHistory: [String: [InvoiceHistoryEntry]] = [:]
+    @Published var vendorHistoryLoading: Bool = false
     /// Query thread raised against each card receipt (surfaced as CardTransaction
     /// rows in My Transactions), keyed by receipt id.
     @Published var receiptQueries: [String: InvoiceQueryThread] = [:]

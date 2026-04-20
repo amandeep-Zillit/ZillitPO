@@ -140,6 +140,9 @@ struct Vendor: Identifiable, Codable, Equatable {
     var addedBy: String?
     var updatedBy: String?
     var departmentId: String?
+    var companyType: String?           // e.g. "Limited", "Sole Trader"
+    var terms: String?                 // payment terms key (net_30, etc.)
+    var bankDetails: VendorBankDetails?
     var createdAt: Int?
     var updatedAt: Int?
 
@@ -149,7 +152,7 @@ struct Vendor: Identifiable, Codable, Equatable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, address, email, phone, status
+        case id, name, address, email, phone, status, terms
         case projectId = "project_id"
         case userId = "user_id"
         case contactPerson = "contact_person"
@@ -159,6 +162,8 @@ struct Vendor: Identifiable, Codable, Equatable {
         case addedBy = "added_by"
         case updatedBy = "updated_by"
         case departmentId = "department_id"
+        case companyType = "company_type"
+        case bankDetails = "bank_details"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
@@ -169,12 +174,15 @@ struct Vendor: Identifiable, Codable, Equatable {
          vatNumber: String? = nil, status: String? = nil,
          verifiedAt: Int? = nil, verifiedBy: String? = nil,
          addedBy: String? = nil, updatedBy: String? = nil, departmentId: String? = nil,
+         companyType: String? = nil, terms: String? = nil,
+         bankDetails: VendorBankDetails? = nil,
          createdAt: Int? = nil, updatedAt: Int? = nil) {
         self.id = id; self.projectId = projectId; self.userId = userId
         self.name = name; self.address = address; self.email = email; self.phone = phone
         self.contactPerson = contactPerson; self.vatNumber = vatNumber; self.status = status
         self.verifiedAt = verifiedAt; self.verifiedBy = verifiedBy; self.addedBy = addedBy
         self.updatedBy = updatedBy; self.departmentId = departmentId
+        self.companyType = companyType; self.terms = terms; self.bankDetails = bankDetails
         self.createdAt = createdAt; self.updatedAt = updatedAt
     }
 
@@ -194,10 +202,87 @@ struct Vendor: Identifiable, Codable, Equatable {
         addedBy = try? c.decode(String.self, forKey: .addedBy)
         updatedBy = try? c.decode(String.self, forKey: .updatedBy)
         departmentId = try? c.decode(String.self, forKey: .departmentId)
+        companyType = try? c.decode(String.self, forKey: .companyType)
+        terms = try? c.decode(String.self, forKey: .terms)
+        bankDetails = try? c.decode(VendorBankDetails.self, forKey: .bankDetails)
         // Flexible Int fields
         verifiedAt = flexibleIntDecode(c, .verifiedAt)
         createdAt = flexibleIntDecode(c, .createdAt)
         updatedAt = flexibleIntDecode(c, .updatedAt)
+    }
+}
+
+// MARK: - Vendor bank details (web parity)
+
+/// Bank-account block attached to a vendor record. Mirrors the web
+/// `bank_details` object: six primary fields (bank name, account holder,
+/// account number, sort code, IBAN, SWIFT) and an open-ended list of
+/// key/value rows for additional identifiers (IFSC, routing #, etc.).
+struct VendorBankDetails: Codable, Equatable {
+    var bankName: String?
+    var accountHolderName: String?
+    var accountNumber: String?
+    var sortCode: String?
+    var ibanCode: String?
+    var swiftCode: String?
+    var additionalDetails: [VendorBankAdditionalDetail]?
+
+    enum CodingKeys: String, CodingKey {
+        case bankName = "bank_name"
+        case accountHolderName = "account_holder_name"
+        case accountNumber = "account_number"
+        case sortCode = "sort_code"
+        case ibanCode = "iban_code"
+        case swiftCode = "swift_code"
+        case additionalDetails = "additional_details"
+    }
+
+    init(bankName: String? = nil, accountHolderName: String? = nil,
+         accountNumber: String? = nil, sortCode: String? = nil,
+         ibanCode: String? = nil, swiftCode: String? = nil,
+         additionalDetails: [VendorBankAdditionalDetail]? = nil) {
+        self.bankName = bankName; self.accountHolderName = accountHolderName
+        self.accountNumber = accountNumber; self.sortCode = sortCode
+        self.ibanCode = ibanCode; self.swiftCode = swiftCode
+        self.additionalDetails = additionalDetails
+    }
+
+    /// `true` when every primary field and the additional-details list
+    /// are empty — lets callers skip the block when the user hasn't
+    /// provided any banking info.
+    var isEmpty: Bool {
+        let primaries = [bankName, accountHolderName, accountNumber, sortCode, ibanCode, swiftCode]
+            .compactMap { $0 }
+            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        return primaries.isEmpty && (additionalDetails ?? []).isEmpty
+    }
+}
+
+/// One extra key/value row ("IFSC Code" → "INDB0001234") attached to a
+/// vendor's bank details. Title/description naming matches the web
+/// form's labels so the two UIs round-trip cleanly.
+struct VendorBankAdditionalDetail: Codable, Equatable, Identifiable {
+    var id: String = UUID().uuidString
+    var title: String?
+    var description: String?
+
+    enum CodingKeys: String, CodingKey { case title, description }
+
+    init(id: String = UUID().uuidString, title: String? = nil, description: String? = nil) {
+        self.id = id; self.title = title; self.description = description
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = UUID().uuidString
+        title = try? c.decode(String.self, forKey: .title)
+        description = try? c.decode(String.self, forKey: .description)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        if let t = title { try c.encode(t, forKey: .title) }
+        if let d = description { try c.encode(d, forKey: .description) }
     }
 }
 
@@ -281,6 +366,10 @@ struct PurchaseOrder: Identifiable, Equatable {
     var approvals: [Approval]?
     var createdAt: Int64?
     var updatedAt: Int64?
+    /// User who last mutated the PO (create / update / approve / etc.).
+    /// Server-populated — mirrors the `updated_by` column added alongside
+    /// the new post/close flows in the web app (Apr 2026).
+    var updatedBy: String?
 
     // Display fields (resolved, not in DB)
     var vendor: String?
@@ -369,25 +458,38 @@ struct LineItem: Identifiable, Codable, Equatable {
     var rentalStart: Int64?; var rentalEnd: Int64?
     var splitParentId: String?
     var customFields: [CustomFieldValue]?
+    /// Tax-treatment enum (`pending`, `standard_20`, `exempt`,
+    /// `zero_rated`, `reverse_charged`, `outside_scope`, `other`).
+    /// Added Apr 2026 alongside the per-line gross-total flow. Older
+    /// records use the legacy `vatTreatment` / `custom_fields[vat]`
+    /// path and will round-trip cleanly — the server populates both.
+    var taxType: String?
+    /// Percentage (0-100). Drives per-line gross: `total * (1 + rate/100)`.
+    var taxRate: Double?
+    /// Free-form tag list. Used by the web app's tag-picker chip row.
+    var tags: [String]?
     var createdAt: Int64?; var updatedAt: Int64?
 
     enum CodingKeys: String, CodingKey {
-        case id, description, quantity, total, account, department
+        case id, description, quantity, total, account, department, tags
         case projectId = "project_id"; case userId = "user_id"; case poId = "po_id"
         case lineNumber = "line_number"; case unitPrice = "unit_price"
         case expenditureType = "expenditure_type"; case vatTreatment = "vat_treatment"
         case rentalStart = "rental_start"; case rentalEnd = "rental_end"
         case splitParentId = "split_parent_id"; case customFields = "custom_fields"
+        case taxType = "tax_type"; case taxRate = "tax_rate"
         case createdAt = "created_at"; case updatedAt = "updated_at"
     }
 
     init(id: String = UUID().uuidString, description: String? = nil, quantity: Double? = nil,
          unitPrice: Double? = nil, total: Double? = nil, account: String? = nil,
-         department: String? = nil, expenditureType: String? = nil, vatTreatment: String? = nil) {
+         department: String? = nil, expenditureType: String? = nil, vatTreatment: String? = nil,
+         taxType: String? = nil, taxRate: Double? = nil, tags: [String]? = nil) {
         self.id = id; self.description = description; self.quantity = quantity
         self.unitPrice = unitPrice; self.total = total; self.account = account
         self.department = department; self.expenditureType = expenditureType
         self.vatTreatment = vatTreatment
+        self.taxType = taxType; self.taxRate = taxRate; self.tags = tags
     }
 }
 

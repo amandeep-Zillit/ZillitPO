@@ -96,7 +96,7 @@ struct EditTemplateFormView: View {
             HStack(spacing: 2) {
                 Text(label)
                     .font(.system(size: 9, weight: .bold)).tracking(0.3)
-                    .foregroundColor(hasErr ? .red : Color(red: 0.45, green: 0.47, blue: 0.5))
+                    .foregroundColor(hasErr ? .red : Color.secondary)
                     .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                 if !required {
                     Text("(optional)").font(.system(size: 8)).foregroundColor(.gray).italic().lineLimit(1)
@@ -371,45 +371,63 @@ struct EditTemplateFormView: View {
                 }
 
                 // MARK: - Action Buttons
+                // Uses the same pattern as POFormView — plain HStack
+                // with `.contentShape + .onTapGesture`, NOT `Button +
+                // BorderlessButtonStyle`. iOS 26 renders
+                // `confirmationDialog` attached to a Button as a
+                // popover-with-tail; attaching to an `.onTapGesture`
+                // row gives the expected bottom sheet.
                 Section {
                     VStack(spacing: 10) {
                         // Row 1: Attach + Save
                         HStack(spacing: 10) {
-                            // Attach button
-                            Button(action: { showAttachSheet = true }) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "paperclip").font(.system(size: 13, weight: .semibold))
-                                    Text("Attach").font(.system(size: 13, weight: .semibold))
-                                }
-                                .foregroundColor(.secondary)
-                                .frame(maxWidth: .infinity).padding(.vertical, 12)
-                                .background(Color.bgSurface).cornerRadius(8)
-                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
-                            }.buttonStyle(BorderlessButtonStyle())
+                            // Attach button (outlined)
+                            HStack(spacing: 6) {
+                                Image(systemName: "paperclip").font(.system(size: 13))
+                                Text("Attach").font(.system(size: 13, weight: .semibold))
+                            }
+                            .foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity).padding(.vertical, 12)
+                            .background(Color.bgSurface).cornerRadius(8)
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                            .contentShape(Rectangle())
+                            .onTapGesture { showAttachSheet = true }
+                            .appActionSheet(title: "Attach", isPresented: $showAttachSheet, items: [
+                                .action("Quote") { /* TODO: attach quote */ },
+                                .action("Email") { /* TODO: attach email */ },
+                                .action("Attachment") { /* TODO: attach file */ }
+                            ])
 
-                            // Save button (dropdown)
-                            Button(action: { showSaveSheet = true }) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "square.and.arrow.down").font(.system(size: 13, weight: .semibold))
-                                    Text("Save").font(.system(size: 13, weight: .semibold))
-                                    Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold))
-                                }
-                                .foregroundColor(.black)
-                                .frame(maxWidth: .infinity).padding(.vertical, 12)
-                                .background(Color.gold).cornerRadius(8)
-                            }.buttonStyle(BorderlessButtonStyle())
+                            // Save button (gold, dropdown)
+                            HStack(spacing: 6) {
+                                Image(systemName: "square.and.arrow.down").font(.system(size: 13))
+                                Text("Save").font(.system(size: 13, weight: .semibold))
+                                Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+                            }
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity).padding(.vertical, 12)
+                            .background(Color.gold).cornerRadius(8)
+                            .contentShape(Rectangle())
+                            .onTapGesture { showSaveSheet = true }
+                            .appActionSheet(title: "Save Options", isPresented: $showSaveSheet, items: [
+                                .action("Save") { updateTemplate() },
+                                .action("Save As") { saveAsTemplateName = templateName; showSaveAsNameSheet = true },
+                                .action("Save as Draft") { saveAsDraft() }
+                            ])
                         }
 
-                        // Row 2: Create & Submit PO
-                        Button(action: { validateAndSubmitFromTemplate() }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "paperplane.fill").font(.system(size: 13, weight: .bold))
-                                Text("Create & Submit PO").font(.system(size: 14, weight: .bold))
-                            }
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity).padding(.vertical, 13)
-                            .background((!vendorId.isEmpty && hasValidLineItem) ? Color.goldDark : Color.goldDark.opacity(0.4)).cornerRadius(8)
-                        }.buttonStyle(BorderlessButtonStyle())
+                        // Row 2: Create & Submit PO — plain HStack +
+                        // onTapGesture to match the rest of the row.
+                        HStack(spacing: 6) {
+                            Image(systemName: "paperplane.fill").font(.system(size: 13, weight: .bold))
+                            Text("Create & Submit PO").font(.system(size: 14, weight: .bold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity).padding(.vertical, 13)
+                        .background((!vendorId.isEmpty && hasValidLineItem) ? Color.goldDark : Color.goldDark.opacity(0.4))
+                        .cornerRadius(8)
+                        .contentShape(Rectangle())
+                        .onTapGesture { validateAndSubmitFromTemplate() }
                         .alert(isPresented: $showValidationAlert) {
                             Alert(title: Text("Missing Required Fields"), message: Text(validationMessage), dismissButton: .default(Text("OK")))
                         }
@@ -422,11 +440,6 @@ struct EditTemplateFormView: View {
             .sheet(isPresented: $showCountryPicker) {
                 CountryNamePickerSheet(selectedName: $daCountry, isPresented: $showCountryPicker)
             }
-            .appActionSheet(title: "Attach", isPresented: $showAttachSheet, items: [
-                .action("Quote") { /* TODO: attach quote */ },
-                .action("Email") { /* TODO: attach email */ },
-                .action("Attachment") { /* TODO: attach file */ }
-            ])
             .sheet(isPresented: $showSaveAsNameSheet) {
                 TemplateNameSheet(templateName: $saveAsTemplateName, isPresented: $showSaveAsNameSheet) {
                     saveAsNewTemplate()
@@ -443,11 +456,6 @@ struct EditTemplateFormView: View {
                 isActive: $showLineItemsPage
             ) { EmptyView() }
             .hidden()
-            .appActionSheet(title: "Save Options", isPresented: $showSaveSheet, items: [
-                .action("Save") { updateTemplate() },
-                .action("Save As") { saveAsTemplateName = templateName; showSaveAsNameSheet = true },
-                .action("Save as Draft") { saveAsDraft() }
-            ])
         }
     }
 
@@ -525,7 +533,7 @@ struct EditTemplateFormView: View {
                 HStack(spacing: 2) {
                     Text((field.name ?? "").uppercased())
                         .font(.system(size: 9, weight: .bold)).tracking(0.3)
-                        .foregroundColor(hasErr ? .red : Color(red: 0.45, green: 0.47, blue: 0.5))
+                        .foregroundColor(hasErr ? .red : Color.secondary)
                         .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                 }
                 VendorSearchField(vendorId: $vendorId, vendors: appState.vendors, hasError: hasErr)
@@ -538,7 +546,9 @@ struct EditTemplateFormView: View {
                     .foregroundColor(vendorId.isEmpty ? .gray : .primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 10).padding(.vertical, 9)
-                    .background(Color(red: 0.97, green: 0.97, blue: 0.98))
+                    // `Color.bgRaised` adapts to dark mode; the
+                    // previous near-white literal stayed bright.
+                    .background(Color.bgRaised)
                     .cornerRadius(6)
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
             }
@@ -708,7 +718,7 @@ struct EditTemplateFormView: View {
                 HStack(spacing: 2) {
                     Text((field.name ?? "").uppercased())
                         .font(.system(size: 9, weight: .bold)).tracking(0.3)
-                        .foregroundColor(hasErr ? .red : Color(red: 0.45, green: 0.47, blue: 0.5))
+                        .foregroundColor(hasErr ? .red : Color.secondary)
                         .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                     if !field.isRequired {
                         Text("(optional)").font(.system(size: 8)).foregroundColor(.gray).italic()
@@ -832,7 +842,7 @@ struct EditTemplateFormView: View {
             FieldGroup(label: "VENDOR ADDRESS") {
                 Text(tplVendorAddressText).font(.system(size: 13)).foregroundColor(vendorId.isEmpty ? .gray : .primary)
                     .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 10).padding(.vertical, 9)
-                    .background(Color(red: 0.97, green: 0.97, blue: 0.98)).cornerRadius(6)
+                    .background(Color.bgRaised).cornerRadius(6)
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
             }
             FieldGroup(label: "DEPARTMENT") {

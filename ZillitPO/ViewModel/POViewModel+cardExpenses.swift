@@ -654,7 +654,7 @@ extension POViewModel {
 
     enum CardType: String { case digital, physical }
 
-    func activateCard(id: String, cardNumber: String = "", cardType: CardType = .physical, completion: @escaping (Bool) -> Void) {
+    func activateCard(id: String, cardNumber: String = "", cardType: CardType = .physical, completion: @escaping (Bool, String?) -> Void) {
         var body: [String: Any] = ["user_id": userId, "card_type": cardType.rawValue]
         if !cardNumber.isEmpty {
             switch cardType {
@@ -662,6 +662,13 @@ extension POViewModel {
             case .digital:  body["digital_card_number"]  = cardNumber
             }
         }
+
+        // Snapshot the pre-mutation state so we can roll back if the
+        // API call fails. Previously a failure left the local card
+        // marked "active" with the wrong card number — an optimistic
+        // update with no rollback.
+        let prevUserCard = userCards.first { $0.id == id }
+        let prevAllCard  = allCards.first  { $0.id == id }
 
         applyStatusChange(id: id, newStatus: "active")
         if !cardNumber.isEmpty {
@@ -685,13 +692,46 @@ extension POViewModel {
                 case .success:
                     print("✅ Card activated (\(cardType.rawValue)): \(id)")
                     self?.objectWillChange.send()
-                    completion(true)
+                    completion(true, nil)
                 case .failure(let e):
                     print("❌ Activate card failed: \(e)")
-                    completion(false)
+                    // Roll back the optimistic status + card-number
+                    // patch so the list doesn't falsely show the card
+                    // as activated. Surface the server error message
+                    // so the caller can display it.
+                    if let prev = prevUserCard, let idx = self?.userCards.firstIndex(where: { $0.id == id }) {
+                        self?.userCards[idx] = prev
+                    }
+                    if let prev = prevAllCard, let idx = self?.allCards.firstIndex(where: { $0.id == id }) {
+                        self?.allCards[idx] = prev
+                    }
+                    let message = Self.extractServerErrorMessage(e)
+                    completion(false, message)
                 }
             }
         }.urlDataTask?.resume()
+    }
+
+    /// Pulls a human-readable message out of a network error. Server
+    /// error bodies often arrive as HTML with the real message inside
+    /// a `<pre>` block (Express/Koa default error pages). Fall back to
+    /// `localizedDescription` when the body isn't shaped like that.
+    private static func extractServerErrorMessage(_ error: Error) -> String {
+        let raw = error.localizedDescription
+        if let preStart = raw.range(of: "<pre>"),
+           let preEnd = raw.range(of: "</pre>", range: preStart.upperBound..<raw.endIndex) {
+            var body = String(raw[preStart.upperBound..<preEnd.lowerBound])
+            body = body.replacingOccurrences(of: "<br>", with: "\n")
+            let entities: [(String, String)] = [
+                ("&quot;", "\""), ("&amp;", "&"), ("&lt;", "<"),
+                ("&gt;", ">"), ("&nbsp;", " "), ("&#39;", "'")
+            ]
+            for (k, v) in entities { body = body.replacingOccurrences(of: k, with: v) }
+            let firstLine = body.split(separator: "\n").first.map(String.init) ?? body
+            let cleaned = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !cleaned.isEmpty { return cleaned }
+        }
+        return raw
     }
 
     func reactivateCard(id: String, completion: @escaping (Bool) -> Void) {

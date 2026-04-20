@@ -9,7 +9,9 @@ enum POCodableTask {
     // MARK: - Vendors (typed responses)
     case fetchVendors((Result<APIResponse<[Vendor]>?, Error>) -> Void)
     case createVendor([String: Any], (Result<Data?, Error>) -> Void)
+    case updateVendor(String, [String: Any], (Result<Data?, Error>) -> Void)
     case deleteVendor(String, (Result<Data?, Error>) -> Void)
+    case fetchVendorHistory(String, (Result<APIResponse<[InvoiceHistoryEntry]>?, Error>) -> Void)
 
     // MARK: - Approval Tiers (typed response)
     case fetchApprovalTiers((Result<APIResponse<[ApprovalTierConfig]>?, Error>) -> Void)
@@ -25,6 +27,12 @@ enum POCodableTask {
     case generatePDF(String, [String: Any], (Result<Data?, Error>) -> Void)
     case fetchPOHistory(String, (Result<APIResponse<[InvoiceHistoryEntry]>?, Error>) -> Void)
     case fetchPOQueries(String, (Result<APIResponse<InvoiceQueryThread>?, Error>) -> Void)
+    // New (Apr 2026):
+    case fetchApprovalQueue((Result<APIResponse<[PurchaseOrderRaw]>?, Error>) -> Void)
+    case fetchMyPOs((Result<APIResponse<[PurchaseOrderRaw]>?, Error>) -> Void)
+    case bulkUpdatePOs([String: Any], (Result<Data?, Error>) -> Void)
+    case postPO(String, [String: Any], (Result<Data?, Error>) -> Void)
+    case closePO(String, [String: Any], (Result<Data?, Error>) -> Void)
 
     // MARK: - Templates (typed responses)
     case fetchTemplates((Result<APIResponse<[POTemplate]>?, Error>) -> Void)
@@ -74,9 +82,17 @@ extension POCodableTask: PODataTaskProtocol {
             guard let urlRequest = PORequest.createVendor(body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
 
+        case .updateVendor(let id, let body, let completion):
+            guard let urlRequest = PORequest.updateVendor(id, body).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
+
         case .deleteVendor(let id, let completion):
             guard let urlRequest = PORequest.deleteVendor(id).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
+
+        case .fetchVendorHistory(let id, let completion):
+            guard let urlRequest = PORequest.fetchVendorHistory(id).urlRequest else { return nil }
+            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
 
         // MARK: Approval Tiers
         case .fetchApprovalTiers(let completion):
@@ -123,6 +139,26 @@ extension POCodableTask: PODataTaskProtocol {
         case .fetchPOQueries(let id, let completion):
             guard let urlRequest = PORequest.fetchPOQueries(id).urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+
+        case .fetchApprovalQueue(let completion):
+            guard let urlRequest = PORequest.fetchApprovalQueue.urlRequest else { return nil }
+            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+
+        case .fetchMyPOs(let completion):
+            guard let urlRequest = PORequest.fetchMyPOs.urlRequest else { return nil }
+            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+
+        case .bulkUpdatePOs(let body, let completion):
+            guard let urlRequest = PORequest.bulkUpdatePOs(body).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
+
+        case .postPO(let id, let body, let completion):
+            guard let urlRequest = PORequest.postPO(id, body).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
+
+        case .closePO(let id, let body, let completion):
+            guard let urlRequest = PORequest.closePO(id, body).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
 
         // MARK: Templates
         case .fetchTemplates(let completion):

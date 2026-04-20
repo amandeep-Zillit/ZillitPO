@@ -1006,7 +1006,13 @@ struct POFormView: View {
             if nominalCode.isEmpty { nominalCode = NominalCodes.deptToNominal[departmentId] ?? "" }
             desc = po.description ?? ""
             currency = po.currency ?? "GBP"; notes = po.notes ?? ""
-            var items = (po.lineItems ?? []).isEmpty ? [LineItem(account: nominalCode, department: departmentId)] : po.lineItems ?? []
+            // Use the draft / PO's saved line items as-is. When it has
+            // none, leave `items` empty — the empty-state "Add Line
+            // Items" button in `lineItemsSummaryCard` then renders,
+            // matching the fresh Create PO flow. Previously a
+            // placeholder `[LineItem(...)]` was inserted here, which
+            // surfaced as an "Untitled Item" row in the summary card.
+            var items = po.lineItems ?? []
             // Resolve line item department IDs to identifiers and auto-set account codes
             for i in items.indices {
                 let rawDept = items[i].department ?? ""

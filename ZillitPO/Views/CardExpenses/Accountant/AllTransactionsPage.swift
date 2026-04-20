@@ -59,12 +59,6 @@ struct AllTransactionsPage: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            // Stats row
-            HStack(spacing: 8) {
-                statCard(label: "TOTAL", value: "\(filtered.count)")
-                statCard(label: "TOTAL VALUE", value: FormatUtils.formatGBP(totalGross))
-            }.frame(height: 64)
-
             // Filters / Search row — search icon expands into full search field, hiding chips
             if isSearching {
                 HStack(spacing: 8) {

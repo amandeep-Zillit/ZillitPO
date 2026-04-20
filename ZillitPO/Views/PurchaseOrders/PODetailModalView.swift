@@ -107,6 +107,14 @@ struct PODetailContentView: View {
     /// card. Default: collapsed — each row shows just description + amount
     /// until tapped.
     @State private var expandedLineItems: Set<String> = []
+    // Post / Close action state (accountant-only)
+    @State private var showPostConfirm = false
+    @State private var showCloseSheet  = false
+    @State private var closeReason     = ""
+    @State private var closeEffectiveDate = Date()
+    @State private var actionErrorMessage: String?
+    @State private var isPosting = false
+    @State private var isClosing = false
 
     /// Aggregate VAT across line items
     private var vatSummary: (totalVat: Double, grossTotal: Double, label: String) {
@@ -138,6 +146,13 @@ struct PODetailContentView: View {
     }
     private var isCreator: Bool { po.userId == appState.userId }
     private var canEdit: Bool { isCreator && ![.approved, .posted, .acctEntered].contains(po.poStatus) }
+
+    /// Accountant-only lifecycle permissions (Apr 2026 web parity).
+    /// `canPost`  — APPROVED / ACCT_ENTERED → POSTED (publishes the PO).
+    /// `canClose` — POSTED → CLOSED (archives once goods are received).
+    private var isAccountant: Bool { appState.currentUser?.isAccountant == true }
+    private var canPost: Bool  { isAccountant && [.approved, .acctEntered].contains(po.poStatus) }
+    private var canClose: Bool { isAccountant && po.poStatus == .posted }
 
     var body: some View {
         ZStack {
@@ -398,8 +413,22 @@ struct PODetailContentView: View {
                     }
 
                     // Actions
-                    if canEdit || vis.canApprove {
+                    if canEdit || vis.canApprove || canPost || canClose {
                         Divider()
+                        // Optional error banner — surfaces server errors
+                        // from /post and /close without an alert so the
+                        // user can try again with the context still on
+                        // screen.
+                        if let err = actionErrorMessage {
+                            HStack(spacing: 6) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.system(size: 11)).foregroundColor(.red)
+                                Text(err).font(.system(size: 11)).foregroundColor(.red)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Spacer()
+                            }
+                            .padding(8).background(Color.red.opacity(0.06)).cornerRadius(6)
+                        }
                         HStack(spacing: 12) {
                             if canEdit {
                                 Button(action: { navigateToEdit = true }) {
@@ -426,6 +455,39 @@ struct PODetailContentView: View {
                                         .contentShape(Rectangle())
                                 }.buttonStyle(BorderlessButtonStyle())
                             }
+                            // Post — APPROVED / ACCT_ENTERED → POSTED.
+                            if canPost {
+                                Button(action: { showPostConfirm = true }) {
+                                    HStack(spacing: 4) {
+                                        if isPosting { ActivityIndicatorView() }
+                                        Image(systemName: "tray.and.arrow.up")
+                                        Text(isPosting ? "Posting..." : "Post")
+                                    }
+                                    .font(.system(size: 13, weight: .bold)).foregroundColor(.white)
+                                    .padding(.horizontal, 16).padding(.vertical, 8)
+                                    .background(isPosting ? Color.blue.opacity(0.5) : Color.blue)
+                                    .cornerRadius(8).contentShape(Rectangle())
+                                }
+                                .disabled(isPosting)
+                                .buttonStyle(BorderlessButtonStyle())
+                            }
+                            // Close — POSTED → CLOSED.
+                            if canClose {
+                                Button(action: {
+                                    closeReason = ""
+                                    closeEffectiveDate = Date()
+                                    showCloseSheet = true
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "lock")
+                                        Text("Close")
+                                    }
+                                    .font(.system(size: 13, weight: .bold)).foregroundColor(.white)
+                                    .padding(.horizontal, 16).padding(.vertical, 8)
+                                    .background(Color.purple).cornerRadius(8)
+                                    .contentShape(Rectangle())
+                                }.buttonStyle(BorderlessButtonStyle())
+                            }
                         }
                     }
                 }.padding()
@@ -447,6 +509,101 @@ struct PODetailContentView: View {
                 isActive: $navigateToEdit
             ) { EmptyView() }
             .hidden()
+        }
+        // Post confirmation (native alert keeps it bottom-anchored on
+        // iPhone across all iOS versions — no iOS 26 popover issues).
+        .alert(isPresented: $showPostConfirm) {
+            Alert(
+                title: Text("Post this PO?"),
+                message: Text("This marks the PO as POSTED and notifies downstream systems. You won't be able to edit it afterwards."),
+                primaryButton: .default(Text("Post")) { runPost() },
+                secondaryButton: .cancel()
+            )
+        }
+        // Close form sheet — reason + effective date → POST /:id/close.
+        .sheet(isPresented: $showCloseSheet) {
+            closeSheetContent
+        }
+    }
+
+    // MARK: - Close PO sheet body
+    //
+    // Bottom sheet with an effective-closing-date picker and a
+    // reason field. Matches the web app's close modal: reason is
+    // required-ish (validator allows empty but the UI asks for one).
+
+    @ViewBuilder
+    private var closeSheetContent: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("Effective Closing Date")) {
+                    if #available(iOS 14.0, *) {
+                        DatePicker("", selection: $closeEffectiveDate, displayedComponents: .date)
+                            .datePickerStyle(GraphicalDatePickerStyle())
+                            .labelsHidden()
+                    } else {
+                        DatePicker("", selection: $closeEffectiveDate, displayedComponents: .date)
+                            .labelsHidden()
+                    }
+                }
+                Section(header: Text("Reason")) {
+                    if #available(iOS 14.0, *) {
+                        TextEditor(text: $closeReason)
+                            .frame(minHeight: 100)
+                    } else {
+                        TextField("Why is this PO being closed?", text: $closeReason)
+                    }
+                }
+                if let err = actionErrorMessage {
+                    Section {
+                        Text(err).font(.system(size: 12)).foregroundColor(.red)
+                    }
+                }
+            }
+            .navigationBarTitle("Close PO", displayMode: .inline)
+            .navigationBarItems(
+                leading: Button("Cancel") { showCloseSheet = false },
+                trailing: Button(action: { runClose() }) {
+                    HStack(spacing: 4) {
+                        if isClosing { ActivityIndicatorView() }
+                        Text(isClosing ? "Closing..." : "Close PO").fontWeight(.semibold)
+                    }
+                }
+                .disabled(isClosing || closeReason.trimmingCharacters(in: .whitespaces).isEmpty)
+            )
+        }
+    }
+
+    /// Fires the POST /:id/post call. On success dismisses the modal;
+    /// on failure leaves the detail page open with an error banner.
+    private func runPost() {
+        guard !isPosting else { return }
+        isPosting = true
+        actionErrorMessage = nil
+        appState.postPO(po) { ok, err in
+            isPosting = false
+            if ok { onClose() }
+            else  { actionErrorMessage = err ?? "Failed to post PO." }
+        }
+    }
+
+    /// Fires the POST /:id/close call. Mirrors the web app payload:
+    /// `reason` required (trimmed), `effective_date` in ms since epoch.
+    private func runClose() {
+        guard !isClosing else { return }
+        let trimmed = closeReason.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        isClosing = true
+        actionErrorMessage = nil
+        let ms = Int64(closeEffectiveDate.timeIntervalSince1970 * 1000)
+        appState.closePO(po, reason: trimmed, effectiveDate: ms) { ok, err in
+            isClosing = false
+            if ok {
+                showCloseSheet = false
+                onClose()
+            } else {
+                actionErrorMessage = err ?? "Failed to close PO."
+            }
         }
     }
 
