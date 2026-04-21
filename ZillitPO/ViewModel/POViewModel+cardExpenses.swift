@@ -469,8 +469,27 @@ extension POViewModel {
         }.urlDataTask?.resume()
     }
 
+    /// Fetches card-expense approval tier configs and stores them in
+    /// `cardTierConfigRows`. Called automatically by `loadUserCards()` the
+    /// first time cards are loaded so the tier count is always available
+    /// when `CardRegisterPage` / `CardDetailPage` render.
+    func loadCardTierConfigs() {
+        CardExpenseCodableTask.fetchCardApprovalTiers { [weak self] result in
+            DispatchQueue.main.async {
+                if case .success(let r) = result, let rows = r?.data, !rows.isEmpty {
+                    self?.cardTierConfigRows = rows
+                    print("✅ Loaded card tier configs: \(rows.count)")
+                } else if case .failure(let e) = result {
+                    print("❌ Card tier config failed: \(e)")
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
     func loadUserCards() {
         isLoadingCards = true
+        // Always refresh tier configs so approval counts / chains are current.
+        loadCardTierConfigs()
         let params = currentUser?.isAccountant == true ? "" : "my=true"
         CardExpenseCodableTask.fetchCards(params) { [weak self] result in
             DispatchQueue.main.async {
@@ -514,47 +533,102 @@ extension POViewModel {
         return allCards
     }
 
-    func approveCard(_ card: ExpenseCard) {
+    /// Approve a pending card at the current tier. `completion` fires
+    /// on the main queue with `(success, errorMessage)` so callers
+    /// can drive a per-button loader and only dismiss / close sheets
+    /// on success. When the card isn't in an approvable state for
+    /// this user the callback reports failure so the UI doesn't
+    /// silently sit on a spinner.
+    func approveCard(_ card: ExpenseCard,
+                     completion: ((Bool, String?) -> Void)? = nil) {
         let cfg = ApprovalHelpers.resolveConfig(cardTierConfigRows, deptId: card.departmentId, amount: card.monthlyLimit)
             ?? ApprovalHelpers.resolveConfig(cardTierConfigRows, deptId: card.departmentId)
-        guard let cfg = cfg else { return }
+        guard let cfg = cfg else { completion?(false, "No approval tier configured."); return }
         var fakePO = PurchaseOrder()
         fakePO.id = card.id; fakePO.userId = card.holderId; fakePO.status = "PENDING"
         fakePO.departmentId = card.departmentId; fakePO.approvals = card.approvals ?? []; fakePO.netAmount = card.monthlyLimit
         let vis = ApprovalHelpers.getVisibility(po: fakePO, config: cfg, userId: userId)
-        guard vis.canApprove, let next = vis.nextTier else { return }
+        guard vis.canApprove, let next = vis.nextTier else {
+            completion?(false, "You can't approve this card at this tier.")
+            return
+        }
         let body: [String: Any] = ["tier_number": next, "total_tiers": ApprovalHelpers.getTotalTiers(cfg), "user_id": userId]
         CardExpenseCodableTask.approveCard(card.id, body) { [weak self] result in
             DispatchQueue.main.async {
-                if case .success = result { print("✅ Card approved"); self?.loadAllRequestedCards(); self?.loadUserCards() }
-                else if case .failure(let e) = result { print("❌ Approve card failed: \(e)") }
+                switch result {
+                case .success:
+                    print("✅ Card approved")
+                    self?.loadAllRequestedCards()
+                    self?.loadUserCards()
+                    completion?(true, nil)
+                case .failure(let e):
+                    print("❌ Approve card failed: \(e)")
+                    completion?(false, e.localizedDescription)
+                }
             }
         }.urlDataTask?.resume()
     }
 
-    func rejectCard(_ card: ExpenseCard, reason: String) {
+    /// Reject a pending card with the caller-supplied reason.
+    /// `completion` fires on the main queue — callers gate their
+    /// loader + sheet dismissal on the success flag.
+    func rejectCard(_ card: ExpenseCard,
+                    reason: String,
+                    completion: ((Bool, String?) -> Void)? = nil) {
         let body: [String: Any] = ["rejection_reason": reason, "user_id": userId]
         CardExpenseCodableTask.rejectCard(card.id, body) { [weak self] result in
             DispatchQueue.main.async {
-                if case .success = result { print("✅ Card rejected"); self?.loadAllRequestedCards(); self?.loadUserCards() }
-                else if case .failure(let e) = result { print("❌ Reject card failed: \(e)") }
+                switch result {
+                case .success:
+                    print("✅ Card rejected")
+                    self?.loadAllRequestedCards()
+                    self?.loadUserCards()
+                    completion?(true, nil)
+                case .failure(let e):
+                    print("❌ Reject card failed: \(e)")
+                    completion?(false, e.localizedDescription)
+                }
             }
         }.urlDataTask?.resume()
     }
 
-    func overrideCard(_ card: ExpenseCard) {
-        let body: [String: Any] = ["user_id": userId]
+    /// Force-approves a pending card via `/cards/{id}/override`.
+    /// Accepts an optional reason and a completion callback so callers
+    /// can drive their own loader UI and only dismiss the originating
+    /// sheet/page on success. The callback receives `(success, errorMessage)`
+    /// and always fires on the main queue.
+    func overrideCard(_ card: ExpenseCard,
+                      reason: String = "",
+                      completion: ((Bool, String?) -> Void)? = nil) {
+        let trimmed = reason.trimmingCharacters(in: .whitespaces)
+        let body: [String: Any] = [
+            "user_id": userId,
+            "reason":  trimmed.isEmpty ? "Overridden by accountant" : trimmed
+        ]
         CardExpenseCodableTask.overrideCard(card.id, body) { [weak self] result in
             DispatchQueue.main.async {
-                if case .success = result { print("✅ Card overridden"); self?.loadAllRequestedCards(); self?.loadUserCards() }
-                else if case .failure(let e) = result { print("❌ Override card failed: \(e)") }
+                switch result {
+                case .success:
+                    print("✅ Card overridden")
+                    self?.loadAllRequestedCards()
+                    self?.loadUserCards()
+                    completion?(true, nil)
+                case .failure(let e):
+                    print("❌ Override card failed: \(e)")
+                    completion?(false, e.localizedDescription)
+                }
             }
         }.urlDataTask?.resume()
     }
 
+    /// Submit a new card request. `completion` fires on the main
+    /// queue with `(success, errorMessage)` so the caller can drive
+    /// a "Submitting…" spinner on the button and keep the form open
+    /// on failure (so the user can fix the input and retry).
     func requestNewCard(userId: String, holderName: String, departmentName: String,
                         bankAccountId: String, proposedLimit: Double,
-                        bsControlCode: String, justification: String) {
+                        bsControlCode: String, justification: String,
+                        completion: ((Bool, String?) -> Void)? = nil) {
         var body: [String: Any] = [
             "holder_id":       userId,
             "card_holder_name": holderName,
@@ -567,8 +641,15 @@ extension POViewModel {
 
         CardExpenseCodableTask.createCard(body) { [weak self] result in
             DispatchQueue.main.async {
-                if case .success = result { self?.loadUserCards() }
-                else if case .failure(let e) = result { print("❌ Request card failed: \(e)") }
+                switch result {
+                case .success:
+                    print("✅ Card request created")
+                    self?.loadUserCards()
+                    completion?(true, nil)
+                case .failure(let e):
+                    print("❌ Request card failed: \(e)")
+                    completion?(false, e.localizedDescription)
+                }
             }
         }.urlDataTask?.resume()
     }
@@ -654,14 +735,26 @@ extension POViewModel {
 
     enum CardType: String { case digital, physical }
 
-    func activateCard(id: String, cardNumber: String = "", cardType: CardType = .physical, completion: @escaping (Bool, String?) -> Void) {
-        var body: [String: Any] = ["user_id": userId, "card_type": cardType.rawValue]
-        if !cardNumber.isEmpty {
+    /// - `bankAccountId`: when the card has no issuer/bank yet (override path),
+    ///   pass the selected bank account ID here — it is sent as `card_issuer`
+    ///   so the server stores the issuer before marking the card active.
+    func activateCard(id: String, cardNumber: String = "", cardType: CardType = .physical, bankAccountId: String = "", completion: @escaping (Bool, String?) -> Void) {
+        let digits = cardNumber.filter { $0.isNumber }
+        var body: [String: Any] = [
+            "user_id":          userId,
+            "card_type":        cardType.rawValue
+        ]
+        if !digits.isEmpty {
+            // Match the React payload: last_four + full_card_number + typed field.
+            body["last_four"]         = String(digits.suffix(4))
+            body["full_card_number"]  = digits
             switch cardType {
-            case .physical: body["physical_card_number"] = cardNumber
-            case .digital:  body["digital_card_number"]  = cardNumber
+            case .physical: body["physical_card_number"] = digits
+            case .digital:  body["digital_card_number"]  = digits
             }
         }
+        // If the card had no issuer set (override scenario), send the selected bank.
+        if !bankAccountId.isEmpty { body["card_issuer"] = bankAccountId }
 
         // Snapshot the pre-mutation state so we can roll back if the
         // API call fails. Previously a failure left the local card
@@ -671,15 +764,15 @@ extension POViewModel {
         let prevAllCard  = allCards.first  { $0.id == id }
 
         applyStatusChange(id: id, newStatus: "active")
-        if !cardNumber.isEmpty {
+        if !digits.isEmpty {
             // Optimistically set the card number on the matching field so detail/list shows it.
             func patch(_ c: ExpenseCard) -> ExpenseCard {
                 var m = c
                 switch cardType {
-                case .physical: m.physicalCardNumber = cardNumber
-                case .digital:  m.digitalCardNumber  = cardNumber
+                case .physical: m.physicalCardNumber = digits
+                case .digital:  m.digitalCardNumber  = digits
                 }
-                if cardNumber.count >= 4 { m.lastFour = String(cardNumber.suffix(4)) }
+                if digits.count >= 4 { m.lastFour = String(digits.suffix(4)) }
                 return m
             }
             if let idx = userCards.firstIndex(where: { $0.id == id }) { userCards[idx] = patch(userCards[idx]) }
@@ -789,15 +882,23 @@ extension POViewModel {
         }.urlDataTask?.resume()
     }
 
-    func updateCardRequest(id: String, proposedLimit: Double, bsControlCode: String, justification: String, bankAccountId: String, completion: @escaping (Bool) -> Void) {
+    func updateCardRequest(id: String, holderId: String, proposedLimit: Double, bsControlCode: String, justification: String, bankAccountId: String, completion: @escaping (Bool) -> Void) {
         // Re-submit uses PATCH /cards/{id}. The backend keys on `card_limit`
         // for the actual limit field (not `monthly_limit` / `proposed_limit`,
         // which map to other fields). Include all three for safety.
+        // `status: "pending"` (Pending Approval) tells the server the card has
+        // been reviewed by the accountant and is now entering the approval chain.
+        // "requested" is the raw user-submission state; "pending" is what the
+        // approval-chain UI keys on (isPendingApproval checks for "pending").
+        // `user_id` must be the CARD HOLDER's ID, not the accountant's — the
+        // server uses this field to determine card ownership. Sending the
+        // accountant's userId here was causing the holder name to flip.
         var body: [String: Any] = [
             "card_limit":     proposedLimit,
             "monthly_limit":  proposedLimit,
             "proposed_limit": proposedLimit,
-            "user_id":        userId
+            "user_id":        holderId,
+            "status":         "pending"
         ]
         body["bs_control_code"] = bsControlCode
         body["justification"]   = justification
@@ -814,7 +915,7 @@ extension POViewModel {
             m.proposedLimit  = proposedLimit
             m.bsControlCode  = bsControlCode
             m.justification  = justification
-            m.status         = "requested"
+            m.status         = "pending"
             m.approvals      = []
             m.approvedBy     = nil
             m.approvedAt     = nil

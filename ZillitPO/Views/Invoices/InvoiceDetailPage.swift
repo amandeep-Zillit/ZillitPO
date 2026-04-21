@@ -114,13 +114,23 @@ struct InvoiceDetailContentView: View {
     @State private var approvalChainExpanded = false
 
     private var vis: ApprovalVisibility { appState.invoiceApprovalVisibility(for: invoice) }
+
+    /// Matches the web (`DepartmentInvoiceModule.jsx`):
+    ///   creator && (approval_status || "pending") === "pending"
+    ///     && status !== "approved" && status !== "rejected"
+    /// Only the creator can delete, and only while the invoice is still
+    /// in a pending state on both fields. Previously iOS allowed
+    /// `assignedTo` / `updatedBy` to delete too, which drifted from
+    /// the web's stricter creator-only rule.
     private var canDelete: Bool {
         let uid = appState.userId
-        let isOwner = invoice.userId == uid || invoice.assignedTo == uid || invoice.updatedBy == uid
-        let hasNoApprovals = (invoice.approvals ?? []).isEmpty
-        let terminalStates: [InvoiceStatus] = [.approved, .paid, .rejected, .voided, .override_]
-        let isTerminal = terminalStates.contains(invoice.invoiceStatus)
-        return isOwner && hasNoApprovals && !isTerminal
+        let isCreator = invoice.userId == uid
+        let approvalStatus = (invoice.approvalStatus ?? "pending").lowercased()
+        let rawStatus = (invoice.status ?? "").lowercased()
+        return isCreator
+            && approvalStatus == "pending"
+            && rawStatus != "approved"
+            && rawStatus != "rejected"
     }
 
     private var resolvedTierConfig: LegacyTierConfig? {
@@ -134,6 +144,15 @@ struct InvoiceDetailContentView: View {
         ZStack(alignment: .bottom) {
             Color.bgSurface.edgesIgnoringSafeArea(.all)
 
+            // Loader while the per-invoice refresh fetches the single
+            // invoice (to populate attachments + the freshest status).
+            // Replaces the scroll content — users see the spinner the
+            // moment they tap a row, then the populated detail view
+            // as soon as the fetch completes.
+            if appState.isRefreshingInvoice {
+                VStack { Spacer(); LoaderView(); Spacer() }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
 
@@ -198,14 +217,21 @@ struct InvoiceDetailContentView: View {
                         .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 14)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.bottom, (vis.canApprove || canDelete || (invoice.status == "inbox" && appState.currentUser?.isAccountant == true)) ? 80 : 24)
+                .padding(.bottom, (vis.canApprove || canDelete) ? 80 : 24)
             }
+            }   // end else (content vs loader)
 
             // ── Pinned action bar ──────────────────────────────────────────
             VStack(spacing: 0) {
-                if invoice.status == "inbox" && appState.currentUser?.isAccountant == true {
-                    processInvoiceBar
-                } else if vis.canApprove && canDelete {
+                // Accountant workflow actions (Hold / Release / Post to
+                // Ledger) + the inbox "Accept and Match to PO" button
+                // were intentionally removed — those flows live on
+                // Zillit web where the accountant has the full set of
+                // matching / coding / hold controls. iOS shows a
+                // banner on the All Invoices tab pointing users
+                // there (`accountantWebFeaturesBanner` in
+                // InvoicesModuleView).
+                if vis.canApprove && canDelete {
                     // Show approve/reject + delete together
                     HStack(spacing: 10) {
                         Button(action: { showDeleteConfirm = true }) {
@@ -272,6 +298,17 @@ struct InvoiceDetailContentView: View {
             // and "Linked POs" rows can resolve by id.
             if appState.vendors.isEmpty { appState.loadVendors() }
             if appState.purchaseOrders.isEmpty { appState.loadPOs() }
+            // Always refresh the invoice on detail open. This serves
+            // two purposes:
+            //   1. Picks up the latest status + approvals since the
+            //      list may be stale.
+            //   2. Populates `attachments` (the list response
+            //      occasionally omits them) so the View button can
+            //      resolve the real `stored_filename`.
+            // The refresh also drives the loader via
+            // `isRefreshingInvoice`, so users see a spinner the
+            // moment they tap a row.
+            appState.refreshInvoice(invoice.id)
         }
     }
 
@@ -345,44 +382,59 @@ struct InvoiceDetailContentView: View {
     }
 
     /// Construct URL for viewing the uploaded invoice document.
-    /// Format: <base>/uploads/<filename> — e.g.
-    /// https://accounthub-dev.zillit.com/uploads/1776107650863-975643146.png
     ///
-    /// Falls back to `upload_id` when no filename is present — some servers
-    /// expose the file via `/uploads/<upload_id>` too. As a last resort we
-    /// attempt `/api/v2/invoices/<id>/file`.
+    /// The canonical path is `<base>/uploads/<stored_filename>` — the
+    /// filename (not upload_id) that the server wrote to its uploads
+    /// directory. The `InvoiceRaw` decoder resolves `stored_filename`
+    /// (or `filename`) out of the `attachments` array into
+    /// `invoice.file`; the list endpoint sometimes skips the
+    /// attachments array entirely. When that happens the detail page
+    /// triggers `appState.refreshInvoice(id:)` on appear — the
+    /// single-invoice endpoint always returns the attachments, so by
+    /// the time the user taps View, `invoice.file` is populated.
+    ///
+    /// There is no server-side `/api/v2/invoices/<id>/file` route —
+    /// earlier versions fell through to it and got 404s (that's why
+    /// the View button opened a blank viewer). We now return `nil`
+    /// when no filename is known, so the sheet's empty-state kicks
+    /// in instead of a doomed network request.
     private var invoiceDocumentURL: URL? {
-        let base = APIClient.shared.baseURL
-
-        // 1) Explicit file field (preferred)
-        if let fileName = invoice.file, !fileName.isEmpty {
-            if fileName.hasPrefix("http://") || fileName.hasPrefix("https://") {
-                return URL(string: fileName)
-            }
-            let trimmed = fileName.hasPrefix("/") ? String(fileName.dropFirst()) : fileName
-            // Server may return "uploads/xyz.png" already-prefixed
-            if trimmed.hasPrefix("uploads/") {
-                return URL(string: "\(base)/\(trimmed)")
-            }
-            return URL(string: "\(base)/uploads/\(trimmed)")
+        guard let fileName = invoice.file, !fileName.isEmpty else { return nil }
+        // `/uploads/<file>` is served by the invoices microservice
+        // (same host that handles every other `/api/v2/invoices/*`
+        // route) — use its dedicated base URL so local dev works
+        // out of the box.
+        let base = PORequest.baseURL
+        if fileName.hasPrefix("http://") || fileName.hasPrefix("https://") {
+            return URL(string: fileName)
         }
-
-        // 2) Fall back to upload_id — many servers let you fetch the file by id
-        if let uid = invoice.uploadId, !uid.isEmpty {
-            return URL(string: "\(base)/uploads/\(uid)")
+        let trimmed = fileName.hasPrefix("/") ? String(fileName.dropFirst()) : fileName
+        // Server sometimes returns "uploads/xyz.png" already-prefixed
+        // — respect it instead of double-prefixing.
+        if trimmed.hasPrefix("uploads/") {
+            return URL(string: "\(base)/\(trimmed)")
         }
-
-        // 3) Final fallback — invoice-scoped file endpoint
-        return URL(string: "\(base)/api/v2/invoices/\(invoice.id)/file")
+        return URL(string: "\(base)/uploads/\(trimmed)")
     }
 
-    /// Whether there's any uploaded document we can try to show. The View
-    /// button uses this so it still appears when the server didn't populate
-    /// `file` directly but we have an `upload_id`.
+    /// Whether there's any uploaded document we can try to show.
+    ///
+    /// The list response occasionally omits the `attachments` array,
+    /// but `InvoiceDetailPage.onAppear` calls
+    /// `appState.refreshInvoice(id)` which hits the single-invoice
+    /// endpoint — that always returns the full `attachments`, so
+    /// `invoice.file` reliably resolves to a `stored_filename` here.
+    ///
+    /// When the invoice has no uploaded document (e.g. a manual
+    /// cheque request), `invoice.file` stays empty and the button
+    /// stays hidden — preserving the signal that nothing is
     private var hasInvoiceDocument: Bool {
-        if let f = invoice.file, !f.isEmpty { return true }
-        if let u = invoice.uploadId, !u.isEmpty { return true }
-        return false
+        // We only show the button once the resolver can produce a
+        // real URL (i.e. `invoice.file` is populated). Before the
+        // refresh lands `file` may be empty; the button appears as
+        // soon as `onAppear`'s single-invoice fetch returns and
+        // replaces the cached row.
+        invoiceDocumentURL != nil
     }
 
     // MARK: - Header
@@ -432,22 +484,72 @@ struct InvoiceDetailContentView: View {
         }
     }
 
+    /// Role-aware header badge. Same priority ladder as
+    /// `InvoiceRow.invoiceStatusBadge` — see that file for the full
+    /// explanation of why this branches on `isAccountant`.
+    @ViewBuilder
     private var invoiceStatusBadge: some View {
-        let (label, fg, bg): (String, Color, Color) = {
-            if invoice.invoiceStatus == .approval && totalTiers > 0 {
-                return ("Pending (\((invoice.approvals ?? []).count)/\(totalTiers))", Color.goldDark, Color.gold.opacity(0.15))
-            }
+        let approvalStatus = (invoice.approvalStatus ?? "").lowercased()
+        let rawStatus      = (invoice.status ?? "").lowercased()
+        let payMethod      = (invoice.payMethod ?? "").lowercased()
+        let isAccountant   = appState.currentUser?.isAccountant == true
+        let approvedCount  = (invoice.approvals ?? []).count
+
+        if rawStatus == "override" && (payMethod == "wire" || payMethod == "cheque" || payMethod == "faster") {
+            StatusBadge(urgentPaymentLabel(payMethod), color: .pink)
+        }
+        else if isAccountant && rawStatus == "override" {
+            StatusBadge("Override", color: .pink)
+        }
+        else if approvalStatus == "approved" || rawStatus == "approved" || rawStatus == "override" {
+            StatusBadge("Approved", color: .green)
+        }
+        else if approvalStatus == "rejected" || rawStatus == "rejected" {
+            StatusBadge("Rejected", color: .red)
+        }
+        // Pending with tier progress — amber "Pending (X/Y)" counter
+        // when we know the tier config for this invoice.
+        else if rawStatus == "approval" && totalTiers > 0 {
+            StatusBadge("Pending (\(approvedCount)/\(totalTiers))", color: .amber)
+        }
+        // Approval without tier context — fall back to the neutral
+        // grey "Pending" pill since we can't compute progress.
+        else if rawStatus == "approval" {
+            StatusBadge("Pending", color: .gray)
+        }
+        else if isAccountant && rawStatus == "under_review" {
+            StatusBadge("Under Review", color: .blue)
+        }
+        else if isAccountant && rawStatus == "ready_to_pay" {
+            StatusBadge("Ready to Pay", color: .teal)
+        }
+        // Canonical labels from the web's INVOICE_STATUS_MAP
+        // (`client/src/components/invoices/lib/constants.jsx`).
+        // Default fallback is a neutral grey "Pending" chip so we
+        // never claim more progress than we can verify from the
+        // cached row alone.
+        else {
             switch invoice.invoiceStatus {
-            case .approved, .paid: return (invoice.invoiceStatus.displayName, .green, Color.green.opacity(0.1))
-            case .rejected: return (invoice.invoiceStatus.displayName, .red, Color.red.opacity(0.1))
-            case .draft: return ("Pending", .goldDark, Color.gold.opacity(0.15))
-            case .onHold: return (invoice.invoiceStatus.displayName, .purple, Color.purple.opacity(0.1))
-            default: return (invoice.invoiceStatus.displayName, .goldDark, Color.gold.opacity(0.15))
+            case .paid:           StatusBadge("Paid", color: .green)
+            case .partiallyPaid:  StatusBadge("Partially Paid", color: .blue)
+            case .onHold:         StatusBadge("On Hold", color: .amber)
+            case .voided:         StatusBadge("Cancelled", color: .gray)
+            case .inbox:          StatusBadge("Inbox", color: .purple)
+            case .underReview:    StatusBadge("Under Review", color: .blue)
+            case .readyToPay:     StatusBadge("Ready to Pay", color: .teal)
+            default:              StatusBadge("Pending", color: .gray)
             }
-        }()
-        return Text(label)
-            .font(.system(size: 10, weight: .semibold)).foregroundColor(fg)
-            .padding(.horizontal, 8).padding(.vertical, 3).background(bg).cornerRadius(4)
+        }
+    }
+
+    /// Human-readable label for the three urgent payment methods.
+    private func urgentPaymentLabel(_ pm: String) -> String {
+        switch pm {
+        case "wire":   return "Urgent Wire Request"
+        case "cheque": return "Cheque Request"
+        case "faster": return "Faster Payment"
+        default:       return pm
+        }
     }
 
     // MARK: - Supplier
@@ -791,26 +893,6 @@ struct InvoiceDetailContentView: View {
 
             Button(action: { appState.approveInvoice(invoice); onClose() }) {
                 Text("Approve").font(.system(size: 13, weight: .bold)).foregroundColor(.black)
-                    .padding(.horizontal, 20).padding(.vertical, 10)
-                    .background(Color.gold).cornerRadius(8)
-            }.buttonStyle(BorderlessButtonStyle())
-        }
-        .padding(.horizontal, 16).padding(.vertical, 12)
-        .background(Color(UIColor.systemGroupedBackground))
-        .overlay(Rectangle().fill(Color.borderColor).frame(height: 1), alignment: .top)
-    }
-
-    // MARK: - Process Invoice Bar (Accounts team: inbox → approval)
-
-    private var processInvoiceBar: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("INBOX").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(1)
-                Text("Send to approval chain").font(.system(size: 12)).foregroundColor(.secondary)
-            }
-            Spacer()
-            Button(action: { appState.processInvoice(invoice); onClose() }) {
-                Text("Send to Approval").font(.system(size: 13, weight: .bold)).foregroundColor(.black)
                     .padding(.horizontal, 20).padding(.vertical, 10)
                     .background(Color.gold).cornerRadius(8)
             }.buttonStyle(BorderlessButtonStyle())

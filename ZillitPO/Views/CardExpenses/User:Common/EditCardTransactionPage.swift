@@ -123,10 +123,18 @@ struct EditCardTransactionPage: View {
         .alert(isPresented: $showError) {
             Alert(title: Text("Error"), message: Text(saveError ?? "Unknown error"), dismissButton: .default(Text("OK")))
         }
-        .appActionSheet(title: "Cost Code", isPresented: $showCodeSheet, items:
-            [.action("None") { costCode = "" }]
-            + costCodeOptions.map { c in .action(c.1) { costCode = c.0 } }
-        )
+        // Cost Code now opens as a bottom sheet (searchable list) rather
+        // than an action sheet — matches the picker pattern used on the
+        // PO side and gives room for the full code catalogue plus a
+        // search box.
+        .sheet(isPresented: $showCodeSheet) {
+            PickerSheetView(
+                selection: $costCode,
+                options: [DropdownOption("", "None")]
+                    + costCodeOptions.map { DropdownOption($0.0, $0.1) },
+                isPresented: $showCodeSheet
+            )
+        }
         .onAppear {
             merchant = transaction.merchant ?? ""
             amount = (transaction.amount ?? 0) > 0 ? String(transaction.amount ?? 0) : ""

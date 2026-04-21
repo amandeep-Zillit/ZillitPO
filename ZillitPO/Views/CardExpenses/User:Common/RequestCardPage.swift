@@ -22,6 +22,9 @@ struct RequestCardPage: View {
     @State private var bsControlCode: String = ""
     @State private var justification: String = ""
     @State private var submitting = false
+    /// Server error surfaced in an alert if the request fails.
+    /// Keeps the form open + the loader cleared so the user can retry.
+    @State private var submitError: String?
 
     private var effectiveUser: AppUser? {
         if isAccountant { return UsersData.byId[selectedUserId] }
@@ -444,13 +447,28 @@ struct RequestCardPage: View {
             }
         )
         .onAppear { appState.loadBankAccounts() }
+        .alert(isPresented: .init(
+            get: { submitError != nil },
+            set: { if !$0 { submitError = nil } }
+        )) {
+            Alert(
+                title: Text("Request Failed"),
+                message: Text(submitError ?? ""),
+                dismissButton: .default(Text("OK"))
+            )
+        }
     }
 
     private func submit() {
         guard isValid, !submitting else { return }
         submitting = true
+        submitError = nil
         let uid = isAccountant ? selectedUserId : (appState.currentUser?.id ?? "")
         let user = UsersData.byId[uid] ?? appState.currentUser
+        // The VM method now fires a completion on the main queue.
+        // Only dismiss the page on success; on failure clear the
+        // loader, surface the server error in an alert, and let the
+        // user retry without losing their form data.
         appState.requestNewCard(
             userId: uid,
             holderName: user?.fullName ?? "",
@@ -459,8 +477,14 @@ struct RequestCardPage: View {
             proposedLimit: Double(proposedLimit) ?? 0,
             bsControlCode: bsControlCode,
             justification: justification
-        )
-        presentationMode.wrappedValue.dismiss()
+        ) { success, error in
+            submitting = false
+            if success {
+                presentationMode.wrappedValue.dismiss()
+            } else {
+                submitError = error ?? "Failed to submit card request."
+            }
+        }
     }
 
     @ViewBuilder

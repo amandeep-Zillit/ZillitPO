@@ -219,7 +219,13 @@ struct DepartmentPOModule: View {
 
     @ViewBuilder
     private var scrollableContent: some View {
-        if appState.isLoading && appState.purchaseOrders.isEmpty { LoaderView() }
+        // Show the loader on *every* fetch (tab switch, pull-to-refresh,
+        // post-action reload) — not just the initial load. Earlier this
+        // only fired when the list was empty, so tapping between tabs
+        // left the previous tab's rows on screen until the new data
+        // arrived. Hiding them behind the loader makes it obvious that
+        // a fresh fetch is in-flight.
+        if appState.isLoading { LoaderView() }
         // Stat cards removed from the All POs view — the table now takes
         // the full scroll area. The POStatsCards component is still used
         // elsewhere (drafts, etc.) so only the call site is dropped here.

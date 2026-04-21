@@ -470,6 +470,12 @@ struct InvoiceRaw: Decodable {
     var invoice_date: Int?; var due_date: Int?; var effective_date: Int?
     var created_at: Int?; var updated_at: Int?; var updated_by: String?
     var upload_id: String?; var file: String?
+    /// Apr 2026 additions — list/detail endpoints now include these
+    /// fields; iOS used to silently drop them.
+    var ocr_confidence: Double?
+    var nominal_code: String?
+    var active_run_id: String?
+    var previous_status: String?
     /// Directly-resolved vendor name the backend returns on new invoice rows.
     /// Preferred over `supplier_name` when the client-side vendor lookup misses
     /// (e.g. vendors haven't loaded yet).
@@ -508,6 +514,9 @@ struct InvoiceRaw: Decodable {
         case history
         // Rich per-link PO summary array
         case linked_pos
+        // Apr 2026 additions — OCR metadata, coding defaults,
+        // payment-run linkage, Hold/Release snapshot.
+        case ocr_confidence, nominal_code, active_run_id, previous_status
     }
 
     init(from decoder: Decoder) throws {
@@ -543,8 +552,13 @@ struct InvoiceRaw: Decodable {
         tags = try? c.decode([String].self, forKey: .tags)
         approvals = try? c.decode(FlexibleApprovals.self, forKey: .approvals)
         line_items = try? c.decode(FlexibleLineItems.self, forKey: .line_items)
+        // Apr 2026 additions.
+        nominal_code    = try? c.decode(String.self, forKey: .nominal_code)
+        active_run_id   = try? c.decode(String.self, forKey: .active_run_id)
+        previous_status = try? c.decode(String.self, forKey: .previous_status)
         // Flexible fields (API returns timestamps as strings or ints)
-        gross_amount = flexibleDoubleDecode(c, .gross_amount)
+        gross_amount    = flexibleDoubleDecode(c, .gross_amount)
+        ocr_confidence  = flexibleDoubleDecode(c, .ocr_confidence)
         invoice_date = flexibleIntDecode(c, .invoice_date)
         due_date = flexibleIntDecode(c, .due_date)
         effective_date = flexibleIntDecode(c, .effective_date)
@@ -555,8 +569,23 @@ struct InvoiceRaw: Decodable {
         // First, try to decode the attachments array — this is what the
         // current backend actually returns. Each entry has `filename`,
         // `stored_filename`, `upload_id`, `path`, `mime_type`, `size`.
+        //
+        // The server is inconsistent about the shape:
+        //   • Sometimes it ships a real JSON array        — `attachments: [{...}]`
+        //   • Sometimes it ships a JSON-ENCODED STRING    — `attachments: "[{...}]"`
+        //     (this happens when Postgres `jsonb` columns are serialised
+        //     through certain serve-side stringify paths)
+        // The web handles both via `typeof === "string" ? JSON.parse()`.
+        // iOS previously only decoded the array case, which silently
+        // dropped the attachment data on string responses — the View
+        // button opened a sheet that couldn't resolve the file URL.
         let firstAttachment: InvoiceAttachmentRaw? = {
             if let arr = try? c.decode([InvoiceAttachmentRaw].self, forKey: .attachments),
+               let first = arr.first { return first }
+            // Fallback — parse the JSON string shape.
+            if let s = try? c.decode(String.self, forKey: .attachments),
+               let data = s.data(using: .utf8),
+               let arr = try? JSONDecoder().decode([InvoiceAttachmentRaw].self, from: data),
                let first = arr.first { return first }
             return nil
         }()
@@ -716,6 +745,10 @@ extension InvoiceRaw {
         inv.effectiveDate = effective_date.map { Int64($0) }
         inv.createdAt = Int64(created_at ?? 0); inv.updatedAt = Int64(updated_at ?? 0); inv.updatedBy = updated_by
         inv.uploadId = upload_id; inv.file = file
+        inv.ocrConfidence  = ocr_confidence
+        inv.nominalCode    = nominal_code
+        inv.activeRunId    = active_run_id
+        inv.previousStatus = previous_status
         inv.department = d?.displayName ?? ""; inv.lineItems = items
         return inv
     }

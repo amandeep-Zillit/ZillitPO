@@ -139,16 +139,14 @@ struct RecordCashReturnPage: View {
                         }
                         VStack(alignment: .leading, spacing: 6) {
                             fieldLabel("DATE RECEIVED", required: true)
-                            // Padding + radius match the AMOUNT RETURNED
-                            // TextField next to it (padding(10), radius 8)
-                            // so the two fields sit side-by-side at the
-                            // exact same height.
+                            // DateField styling now matches InputField
+                            // siblings directly (padding 10h × 9v,
+                            // corner radius 6) — sits side-by-side at
+                            // the same height without per-call-site
+                            // tuning.
                             DateField(date: $receivedDate,
                                       placeholder: "Select date",
-                                      navigationTitle: "Date Received",
-                                      horizontalPadding: 10,
-                                      verticalPadding: 10,
-                                      cornerRadius: 8)
+                                      navigationTitle: "Date Received")
                         }
                     }
 
@@ -165,14 +163,15 @@ struct RecordCashReturnPage: View {
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
                     }
                     .buttonStyle(BorderlessButtonStyle())
-                    .selectionActionSheet(
-                        title: "Return Reason",
-                        isPresented: $showReasonPicker,
-                        options: reasonOptions.map { $0.key },
-                        isSelected: { $0 == returnReason },
-                        label: { key in reasonOptions.first { $0.key == key }?.label ?? key },
-                        onSelect: { returnReason = $0 }
-                    )
+                    // Return Reason → bottom sheet picker (matches the
+                    // rest of the cash-expense form field pickers).
+                    .sheet(isPresented: $showReasonPicker) {
+                        PickerSheetView(
+                            selection: $returnReason,
+                            options: reasonOptions.map { DropdownOption($0.key, $0.label) },
+                            isPresented: $showReasonPicker
+                        )
+                    }
 
                     // "Other" sub-option — close vs continue radio
                     if returnReason == "other" {

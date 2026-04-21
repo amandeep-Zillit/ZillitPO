@@ -22,6 +22,14 @@ struct CardDetailPage: View {
 
     enum StatusOperation { case suspending, reactivating }
     @State private var pendingOperation: StatusOperation? = nil
+    /// Loader state for the Override action — flips on tap and
+    /// clears in the VM completion so the button shows a spinner +
+    /// "Overriding…" label for the duration of the network call.
+    @State private var isOverriding = false
+    /// Loader state for Approve (inline button on this page).
+    @State private var isApproving = false
+    /// Loader state for the reject sheet's nav-bar Reject button.
+    @State private var isRejecting = false
 
     enum ActiveAlert: Identifiable {
         case deleteConfirm, suspendConfirm, reactivateConfirm
@@ -50,8 +58,13 @@ struct CardDetailPage: View {
             ?? ApprovalHelpers.resolveConfig(appState.cardTierConfigRows, deptId: nil)
         let fromConfig = ApprovalHelpers.getTotalTiers(cfg)
         if fromConfig > 0 { return fromConfig }
+        // No config resolved — only show progress circles when the card
+        // already has recorded approvals (so a partially-approved card stays
+        // accurate). For a fresh pending card with zero approvals, return 0
+        // so the chain is hidden entirely rather than fabricating
+        // "Level 1 Awaiting, Level 2 Awaiting" from nothing.
         let maxApproved = (displayCard.approvals ?? []).map { $0.tierNumber ?? 0 }.max() ?? 0
-        return max(maxApproved + 1, 2)
+        return maxApproved > 0 ? maxApproved + 1 : 0
     }
 
     /// True only when the current user can approve at this card's
@@ -73,8 +86,13 @@ struct CardDetailPage: View {
         return ApprovalHelpers.getVisibility(po: po, config: cfg, userId: appState.userId).canApprove
     }
 
-    /// True when the user has card-override privilege.
-    private var canOverrideCard: Bool { appState.cashMeta?.canOverride == true }
+    /// True when the user has card-override privilege. Reads from
+    /// the card-expenses-server's metadata (`cardExpenseMeta`) — that
+    /// endpoint is the one that populates `card_override` alongside
+    /// `can_override`. The cash-expenses metadata only carries
+    /// `can_override`, so relying on `cashMeta` left the Override
+    /// button hidden for everyone.
+    private var canOverrideCard: Bool { appState.cardExpenseMeta.canOverrideCards }
 
     private var approverName: String {
         guard let id = displayCard.approvedBy, !id.isEmpty else { return "" }
@@ -267,20 +285,31 @@ struct CardDetailPage: View {
                     // ── Card number + holder subtitle ──
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(alignment: .center, spacing: 10) {
-                            // Render BOTH states as a single monospaced Text with
-                            // identical structure — 4 groups separated by single
-                            // spaces. Previously the hidden state used an HStack
-                            // with spacing: 4 (plus two child Texts) which is not
-                            // pixel-equal to the shown state's single Text, so
-                            // the eye button shifted horizontally on toggle.
+                            // Prefer digital card number, fall back to physical.
                             let fullNumber = displayCard.digitalCardNumber ?? displayCard.physicalCardNumber
-                            let display: String = {
-                                if showCardNumber, let num = fullNumber, !num.isEmpty {
-                                    return formatCardNum(num)          // "1234 5678 9012 3456"
+                            let hasFullNumber = !(fullNumber ?? "").isEmpty
+
+                            // Effective last-4: use the stored lastFour field when
+                            // available, otherwise derive it from whichever card
+                            // number is stored. This prevents "——" showing in the
+                            // header when the list correctly showed digits (the list
+                            // API and detail API may return fields at different times).
+                            let effectiveLast4: String = {
+                                if let lf = displayCard.lastFour, !lf.isEmpty { return lf }
+                                if hasFullNumber, let num = fullNumber {
+                                    let digits = num.filter { $0.isNumber }
+                                    if digits.count >= 4 { return String(digits.suffix(4)) }
                                 }
-                                let last = (displayCard.lastFour ?? "").isEmpty ? "——" : (displayCard.lastFour ?? "")
-                                return "•••• •••• •••• \(last)"        // same length, same spacing
+                                return "——"
                             }()
+
+                            let display: String = {
+                                if showCardNumber, hasFullNumber, let num = fullNumber {
+                                    return formatCardNum(num)           // "1234 5678 9012 3456"
+                                }
+                                return "•••• •••• •••• \(effectiveLast4)"
+                            }()
+
                             Text(display)
                                 .font(.system(size: 20, weight: .bold, design: .monospaced))
                                 .foregroundColor(.goldDark)
@@ -291,16 +320,22 @@ struct CardDetailPage: View {
                                 // (iPhone SE / Mini) — card number + eye +
                                 // badge otherwise exceeds the content width.
                                 .minimumScaleFactor(0.75)
-                            Button(action: { showCardNumber.toggle() }) {
-                                Image(systemName: showCardNumber ? "eye.slash.fill" : "eye.fill")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(showCardNumber ? .secondary : .goldDark)
-                                    // Fixed-size tap target so the button itself
-                                    // never resizes between eye.fill / eye.slash.fill
-                                    // (the .slash glyph renders slightly wider).
-                                    .frame(width: 22, height: 22)
+
+                            // Only show the eye toggle when the full card number is
+                            // actually stored — if it's nil the button does nothing
+                            // visible and is misleading.
+                            if hasFullNumber {
+                                Button(action: { showCardNumber.toggle() }) {
+                                    Image(systemName: showCardNumber ? "eye.slash.fill" : "eye.fill")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(showCardNumber ? .secondary : .goldDark)
+                                        // Fixed-size tap target so the button itself
+                                        // never resizes between eye.fill / eye.slash.fill
+                                        // (the .slash glyph renders slightly wider).
+                                        .frame(width: 22, height: 22)
+                                }
+                                .buttonStyle(PlainButtonStyle())
                             }
-                            .buttonStyle(PlainButtonStyle())
                             Spacer()
                             cardStatusBadge
                         }
@@ -374,8 +409,21 @@ struct CardDetailPage: View {
                         .padding(.horizontal, 20).padding(.vertical, 16)
                     }
 
-                    // ── Pending approval chain + action buttons (accountant only) ──
-                    if isPendingApproval && isAccountant {
+                    // ── Pending approval chain + action buttons ──
+                    //
+                    // Gate: pending card AND the current user has at
+                    // least one action available (can approve at the
+                    // current tier OR has card-override privilege).
+                    // Previously this was gated on `isAccountant`,
+                    // which hid the Approve/Reject buttons from
+                    // non-accountant approvers AND the Override
+                    // button from everyone who didn't have the
+                    // accountant role flag — including users with
+                    // `can_override` privilege. The web uses the
+                    // per-action handlers to decide visibility, so
+                    // iOS now mirrors that with
+                    // `(canApproveCard || canOverrideCard)`.
+                    if isPendingApproval && (canApproveCard || canOverrideCard) {
                         Divider()
                         VStack(alignment: .leading, spacing: 14) {
                             Text("Pending Approval")
@@ -421,36 +469,89 @@ struct CardDetailPage: View {
                                 .padding(.vertical, 4)
                             }
 
-                            // Action buttons — gated by per-card permissions:
-                            //   • Override: only for users with card-override privilege.
-                            //   • Approve / Reject: only when it's the current user's
-                            //     turn at the active approval tier.
-                            // A non-approver accountant who has override privilege
-                            // sees only the Override button (matches the web).
-                            if canApproveCard || canOverrideCard {
+                            // Action buttons — mutually exclusive, matches
+                            // the web (CardItem.jsx):
+                            //   • Override: only when user has override
+                            //     privilege AND is NOT an approver at
+                            //     the current tier (`!canApprove`).
+                            //   • Approve / Reject: only when
+                            //     `canApprove`.
+                            // Accountants who happen to be in the tier
+                            // chain see Approve/Reject; everyone else
+                            // with override privilege sees Override.
+                            let showOverrideHere = canOverrideCard && !canApproveCard
+                            if canApproveCard || showOverrideHere {
                                 HStack(spacing: 10) {
                                     Spacer()
-                                    if canOverrideCard {
-                                        Button(action: { appState.overrideCard(displayCard); presentationMode.wrappedValue.dismiss() }) {
+                                    if showOverrideHere {
+                                        Button(action: {
+                                            guard !isOverriding else { return }
+                                            isOverriding = true
+                                            appState.overrideCard(displayCard) { success, _ in
+                                                isOverriding = false
+                                                // Only dismiss on success so
+                                                // users who hit a server
+                                                // error stay on the card
+                                                // detail and can try again.
+                                                if success {
+                                                    presentationMode.wrappedValue.dismiss()
+                                                }
+                                            }
+                                        }) {
                                             HStack(spacing: 4) {
-                                                Image(systemName: "bolt.fill").font(.system(size: 10, weight: .bold))
-                                                Text("Override").font(.system(size: 13, weight: .bold))
+                                                if isOverriding {
+                                                    ActivityIndicator(isAnimating: true).frame(width: 12, height: 12)
+                                                } else {
+                                                    Image(systemName: "bolt.fill").font(.system(size: 10, weight: .bold))
+                                                }
+                                                Text(isOverriding ? "Overriding…" : "Override")
+                                                    .font(.system(size: 13, weight: .bold))
                                             }
                                             .foregroundColor(.white).padding(.horizontal, 16).padding(.vertical, 10)
-                                            .background(Color.orange).cornerRadius(8)
-                                        }.buttonStyle(BorderlessButtonStyle())
+                                            .background(isOverriding ? Color.orange.opacity(0.55) : Color.orange)
+                                            .cornerRadius(8)
+                                        }
+                                        .buttonStyle(BorderlessButtonStyle())
+                                        .disabled(isOverriding)
                                     }
                                     if canApproveCard {
+                                        // Reject opens the sheet — the
+                                        // actual network call fires
+                                        // from there (with its own loader).
                                         Button(action: { showRejectSheet = true }) {
                                             Text("Reject").font(.system(size: 13, weight: .bold))
                                                 .foregroundColor(.white).padding(.horizontal, 16).padding(.vertical, 10)
                                                 .background(Color.red).cornerRadius(8)
-                                        }.buttonStyle(BorderlessButtonStyle())
-                                        Button(action: { appState.approveCard(displayCard); presentationMode.wrappedValue.dismiss() }) {
-                                            Text("Approve").font(.system(size: 13, weight: .bold))
-                                                .foregroundColor(.white).padding(.horizontal, 16).padding(.vertical, 10)
-                                                .background(Color.green).cornerRadius(8)
-                                        }.buttonStyle(BorderlessButtonStyle())
+                                        }
+                                        .buttonStyle(BorderlessButtonStyle())
+                                        .disabled(isApproving)
+                                        // Approve fires immediately from
+                                        // this button — show a spinner
+                                        // + "Approving…" while the call
+                                        // is in flight, and only dismiss
+                                        // the page on success.
+                                        Button(action: {
+                                            guard !isApproving else { return }
+                                            isApproving = true
+                                            appState.approveCard(displayCard) { success, _ in
+                                                isApproving = false
+                                                if success { presentationMode.wrappedValue.dismiss() }
+                                            }
+                                        }) {
+                                            HStack(spacing: 4) {
+                                                if isApproving {
+                                                    ActivityIndicator(isAnimating: true).frame(width: 12, height: 12)
+                                                }
+                                                Text(isApproving ? "Approving…" : "Approve")
+                                                    .font(.system(size: 13, weight: .bold))
+                                            }
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 16).padding(.vertical, 10)
+                                            .background(isApproving ? Color.green.opacity(0.55) : Color.green)
+                                            .cornerRadius(8)
+                                        }
+                                        .buttonStyle(BorderlessButtonStyle())
+                                        .disabled(isApproving)
                                     }
                                 }
                             }
@@ -687,13 +788,33 @@ struct CardDetailPage: View {
                 }
                 .navigationBarTitle(Text("Reject Card"), displayMode: .inline)
                 .navigationBarItems(
-                    leading: Button("Cancel") { showRejectSheet = false; rejectReason = "" }.foregroundColor(.goldDark),
-                    trailing: Button("Reject") {
-                        guard !rejectReason.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-                        appState.rejectCard(displayCard, reason: rejectReason.trimmingCharacters(in: .whitespaces))
-                        showRejectSheet = false; rejectReason = ""
-                        presentationMode.wrappedValue.dismiss()
-                    }.foregroundColor(.red).font(.system(size: 16, weight: .bold))
+                    leading: Button("Cancel") {
+                        showRejectSheet = false
+                        rejectReason = ""
+                    }
+                    .foregroundColor(.goldDark)
+                    .disabled(isRejecting),
+                    trailing: Button(action: {
+                        guard !isRejecting,
+                              !rejectReason.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+                        isRejecting = true
+                        appState.rejectCard(displayCard, reason: rejectReason.trimmingCharacters(in: .whitespaces)) { success, _ in
+                            isRejecting = false
+                            if success {
+                                showRejectSheet = false
+                                rejectReason = ""
+                                presentationMode.wrappedValue.dismiss()
+                            }
+                        }
+                    }) {
+                        HStack(spacing: 6) {
+                            if isRejecting { ActivityIndicator(isAnimating: true).frame(width: 14, height: 14) }
+                            Text(isRejecting ? "Rejecting…" : "Reject")
+                                .font(.system(size: 16, weight: .bold))
+                        }
+                    }
+                    .foregroundColor(isRejecting ? .red.opacity(0.55) : .red)
+                    .disabled(isRejecting)
                 )
             }
         }

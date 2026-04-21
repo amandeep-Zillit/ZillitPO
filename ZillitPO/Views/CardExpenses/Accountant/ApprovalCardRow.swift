@@ -16,6 +16,13 @@ struct ApprovalCardRow: View {
     /// Optional override handler — only invoked when `canOverride` is
     /// true and the caller wires it up.
     var onOverride: (() -> Void)? = nil
+    /// Parent-driven flag: `true` while a network action (approve /
+    /// reject / override) initiated from this row is in flight. The
+    /// row swaps the Approve/Reject/Override button content for a
+    /// spinner + "…" label and disables all action taps for the
+    /// duration. The parent typically keeps a `processingCardId`
+    /// and passes `isProcessing: processingCardId == card.id`.
+    var isProcessing: Bool = false
 
     private var totalTiers: Int {
         let cfg = ApprovalHelpers.resolveConfig(tierConfigs, deptId: card.departmentId, amount: card.monthlyLimit ?? 0)
@@ -114,37 +121,69 @@ struct ApprovalCardRow: View {
                 .padding(.vertical, 4)
             }
 
-            // Action buttons — gated by the user's actual permissions.
-            //   • Override: shown when `canOverride` AND a handler exists
-            //   • Approve / Reject: shown only when `canApprove` is true
-            // If the user can't approve but can override, only the
-            // Override button appears (matches the web).
-            let showOverride = canOverride && onOverride != nil
+            // Action buttons — mutually-exclusive with the web's
+            // CardItem.jsx logic:
+            //   • Override: shown when the user CAN'T approve but HAS
+            //     the override privilege (`canOverride && !canApprove`).
+            //     Override is explicitly the escape-hatch for users
+            //     who aren't in the approval chain but have admin
+            //     rights to force a card through.
+            //   • Approve / Reject: shown only when `canApprove`.
+            // Never both — if you can approve, there's nothing to
+            // override. This matches the web:
+            //   `{onOverride && !vis.canApprove && <Override />}`
+            //   `{onReject && vis.canApprove && <Reject />}`
+            //   `{onApprove && vis.canApprove && <Approve />}`
+            let showOverride = canOverride && !canApprove && onOverride != nil
             if canApprove || showOverride {
                 HStack(spacing: 10) {
                     Spacer()
                     if showOverride, let ov = onOverride {
-                        Button(action: ov) {
+                        Button(action: { if !isProcessing { ov() } }) {
                             HStack(spacing: 4) {
-                                Image(systemName: "bolt.fill").font(.system(size: 10, weight: .bold))
-                                Text("Override").font(.system(size: 12, weight: .bold))
+                                if isProcessing {
+                                    ActivityIndicator(isAnimating: true).frame(width: 10, height: 10)
+                                } else {
+                                    Image(systemName: "bolt.fill").font(.system(size: 10, weight: .bold))
+                                }
+                                Text(isProcessing ? "Overriding…" : "Override")
+                                    .font(.system(size: 12, weight: .bold))
                             }
                             .foregroundColor(.white)
                             .padding(.horizontal, 16).padding(.vertical, 8)
-                            .background(Color.orange).cornerRadius(8)
-                        }.buttonStyle(BorderlessButtonStyle())
+                            .background(isProcessing ? Color.orange.opacity(0.55) : Color.orange)
+                            .cornerRadius(8)
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
+                        .disabled(isProcessing)
                     }
                     if canApprove {
-                        Button(action: onReject) {
-                            Text("Reject").font(.system(size: 12, weight: .bold)).foregroundColor(.white)
-                                .padding(.horizontal, 16).padding(.vertical, 8)
-                                .background(Color.red).cornerRadius(8)
-                        }.buttonStyle(BorderlessButtonStyle())
-                        Button(action: onApprove) {
-                            Text("Approve").font(.system(size: 12, weight: .bold)).foregroundColor(.white)
-                                .padding(.horizontal, 16).padding(.vertical, 8)
-                                .background(Color.green).cornerRadius(8)
-                        }.buttonStyle(BorderlessButtonStyle())
+                        Button(action: { if !isProcessing { onReject() } }) {
+                            HStack(spacing: 4) {
+                                if isProcessing { ActivityIndicator(isAnimating: true).frame(width: 10, height: 10) }
+                                Text(isProcessing ? "Rejecting…" : "Reject")
+                                    .font(.system(size: 12, weight: .bold))
+                            }
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16).padding(.vertical, 8)
+                            .background(isProcessing ? Color.red.opacity(0.55) : Color.red)
+                            .cornerRadius(8)
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
+                        .disabled(isProcessing)
+                        Button(action: { if !isProcessing { onApprove() } }) {
+                            HStack(spacing: 4) {
+                                if isProcessing { ActivityIndicator(isAnimating: true).frame(width: 10, height: 10) }
+                                Text(isProcessing ? "Approving…" : "Approve")
+                                    .font(.system(size: 12, weight: .bold))
+                            }
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16).padding(.vertical, 8)
+                            .background(isProcessing ? Color.green.opacity(0.55) : Color.green)
+                            .cornerRadius(8)
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
+                        .disabled(isProcessing)
                     }
                 }
             }

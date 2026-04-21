@@ -724,6 +724,20 @@ struct Invoice: Identifiable, Equatable {
     var updatedBy: String?
     var uploadId: String?
     var file: String?
+    /// New fields populated by the invoices-server list/detail
+    /// endpoints (Apr 2026 web parity):
+    ///   • `ocrConfidence` — 0.0-1.0 confidence the OCR pass returned
+    ///     for auto-extracted fields; displayed as a subtle signal on
+    ///     the Inbox review flow.
+    ///   • `nominalCode` — default coding applied via assignment rules.
+    ///   • `activeRunId` — id of the currently-scheduled payment run
+    ///     this invoice belongs to (empty when not on any run).
+    ///   • `previousStatus` — snapshot taken before Hold so the
+    ///     server can restore the correct state on Release.
+    var ocrConfidence: Double?
+    var nominalCode: String?
+    var activeRunId: String?
+    var previousStatus: String?
 
     // Display fields (resolved, not in DB)
     var department: String?
@@ -744,19 +758,31 @@ enum InvoiceStatus: String, CaseIterable {
     case rejected = "rejected", paid = "paid", onHold = "on_hold"
     case partiallyPaid = "partially_paid", voided = "voided"
     case override_ = "override"
+    // Accountant-only workflow stages (web parity — EntryPage.jsx):
+    //   • under_review — accountant is reviewing an approved invoice
+    //     before marking it ready to pay
+    //   • ready_to_pay — cleared for payment run scheduling
+    case underReview = "under_review"
+    case readyToPay  = "ready_to_pay"
 
+    /// Display names mirror the web's `INVOICE_STATUS_MAP` so every
+    /// surface in the app (list badges, detail header, quick filter
+    /// text, delete/confirm prompts) shows the same wording the
+    /// accountant sees on the browser.
     var displayName: String {
         switch self {
         case .inbox: return "Inbox"
         case .draft: return "Draft"
-        case .approval: return "Pending"
+        case .approval: return "Approval"
         case .approved: return "Approved"
         case .rejected: return "Rejected"
         case .paid: return "Paid"
         case .onHold: return "On Hold"
         case .partiallyPaid: return "Partially Paid"
-        case .voided: return "Voided"
+        case .voided: return "Cancelled"
         case .override_: return "Override"
+        case .underReview: return "Under Review"
+        case .readyToPay: return "Ready to Pay"
         }
     }
     static func fromAPI(_ raw: String) -> InvoiceStatus {

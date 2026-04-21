@@ -16,6 +16,15 @@ struct CoordinatorApprovalQueueView: View {
     @State private var overrideTarget: ExpenseCard?
     @State private var overrideReason = ""
     @State private var showOverrideSheet = false
+    /// Loader flag for the Override nav-bar button while the network
+    /// request is in flight — matches the pattern used on
+    /// `CardsForApprovalTabView`.
+    @State private var isOverriding = false
+    /// `true` while a reject request is in flight.
+    @State private var isRejecting = false
+    /// Card id currently processing an inline Approve tap — drives
+    /// the row's per-button spinner via `ApprovalCardRow.isProcessing`.
+    @State private var processingCardId: String?
 
     /// Shim a card into a PurchaseOrder so we can reuse the existing
     /// `ApprovalHelpers.getVisibility` (which is keyed on POs).
@@ -65,15 +74,28 @@ struct CoordinatorApprovalQueueView: View {
                                                    amount: card.monthlyLimit ?? 0)
                                     .map { ApprovalHelpers.getVisibility(po: cardAsPO(card), config: $0, userId: appState.userId) }
                                 let canApproveCard = cardVis?.canApprove ?? false
-                                let canOverrideCard = (appState.cashMeta?.canOverride == true)
+                                // Matches the web — both the user-level
+                                // (`can_override`) and module-level
+                                // (`card_override`) flags must be true.
+                                // Sourced from card-expenses metadata
+                                // because cash metadata doesn't carry
+                                // `card_override`.
+                                let canOverrideCard = appState.cardExpenseMeta.canOverrideCards
                                 ApprovalCardRow(
                                     card: card,
                                     tierConfigs: appState.cardTierConfigRows,
                                     canApprove: canApproveCard,
                                     canOverride: canOverrideCard,
-                                    onApprove: { appState.approveCard(card) },
+                                    onApprove: {
+                                        guard processingCardId == nil else { return }
+                                        processingCardId = card.id
+                                        appState.approveCard(card) { _, _ in
+                                            processingCardId = nil
+                                        }
+                                    },
                                     onReject: { rejectTarget = card; showRejectSheet = true },
-                                    onOverride: canOverrideCard ? { overrideTarget = card; showOverrideSheet = true } : nil
+                                    onOverride: canOverrideCard ? { overrideTarget = card; showOverrideSheet = true } : nil,
+                                    isProcessing: processingCardId == card.id
                                 )
                             }
                         }
@@ -127,12 +149,34 @@ struct CoordinatorApprovalQueueView: View {
                 }
                 .navigationBarTitle(Text("Reject Card"), displayMode: .inline)
                 .navigationBarItems(
-                    leading: Button("Cancel") { showRejectSheet = false; rejectReason = "" }.foregroundColor(.goldDark),
-                    trailing: Button("Reject") {
-                        guard let c = rejectTarget, !rejectReason.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-                        appState.rejectCard(c, reason: rejectReason.trimmingCharacters(in: .whitespaces))
-                        showRejectSheet = false; rejectReason = ""; rejectTarget = nil
-                    }.foregroundColor(.red).font(.system(size: 16, weight: .bold))
+                    leading: Button("Cancel") {
+                        showRejectSheet = false
+                        rejectReason = ""
+                    }
+                    .foregroundColor(.goldDark)
+                    .disabled(isRejecting),
+                    trailing: Button(action: {
+                        guard !isRejecting,
+                              let c = rejectTarget,
+                              !rejectReason.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+                        isRejecting = true
+                        appState.rejectCard(c, reason: rejectReason.trimmingCharacters(in: .whitespaces)) { success, _ in
+                            isRejecting = false
+                            if success {
+                                showRejectSheet = false
+                                rejectReason = ""
+                                rejectTarget = nil
+                            }
+                        }
+                    }) {
+                        HStack(spacing: 6) {
+                            if isRejecting { ActivityIndicator(isAnimating: true).frame(width: 14, height: 14) }
+                            Text(isRejecting ? "Rejecting…" : "Reject")
+                                .font(.system(size: 16, weight: .bold))
+                        }
+                    }
+                    .foregroundColor(isRejecting ? .red.opacity(0.55) : .red)
+                    .disabled(isRejecting)
                 )
             }
         }
@@ -164,12 +208,35 @@ struct CoordinatorApprovalQueueView: View {
                 }
                 .navigationBarTitle(Text("Override Card Approval"), displayMode: .inline)
                 .navigationBarItems(
-                    leading: Button("Cancel") { showOverrideSheet = false; overrideReason = ""; overrideTarget = nil }.foregroundColor(.goldDark),
-                    trailing: Button("Override") {
-                        guard let c = overrideTarget else { return }
-                        appState.overrideCard(c)
-                        showOverrideSheet = false; overrideReason = ""; overrideTarget = nil
-                    }.foregroundColor(.orange).font(.system(size: 16, weight: .bold))
+                    leading: Button("Cancel") {
+                        showOverrideSheet = false
+                        overrideReason = ""
+                        overrideTarget = nil
+                    }
+                    .foregroundColor(.goldDark)
+                    .disabled(isOverriding),
+                    trailing: Button(action: {
+                        guard !isOverriding, let c = overrideTarget else { return }
+                        isOverriding = true
+                        appState.overrideCard(c, reason: overrideReason) { success, _ in
+                            isOverriding = false
+                            if success {
+                                showOverrideSheet = false
+                                overrideReason = ""
+                                overrideTarget = nil
+                            }
+                        }
+                    }) {
+                        HStack(spacing: 6) {
+                            if isOverriding {
+                                ActivityIndicator(isAnimating: true).frame(width: 14, height: 14)
+                            }
+                            Text(isOverriding ? "Overriding…" : "Override")
+                                .font(.system(size: 16, weight: .bold))
+                        }
+                    }
+                    .foregroundColor(isOverriding ? .orange.opacity(0.55) : .orange)
+                    .disabled(isOverriding)
                 )
             }
         }

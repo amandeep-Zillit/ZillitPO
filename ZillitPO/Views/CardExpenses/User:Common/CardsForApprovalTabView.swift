@@ -14,6 +14,15 @@ struct CardsForApprovalTabView: View {
     @State private var overrideTarget: ExpenseCard?
     @State private var overrideReason = ""
     @State private var showOverrideSheet = false
+    /// `true` while the override network call is in flight — drives
+    /// the sheet's "Override" nav-bar button into a loader state.
+    @State private var isOverriding = false
+    /// `true` while the reject sheet's network call is in flight.
+    @State private var isRejecting = false
+    /// Card ID currently being approved / overridden from an inline
+    /// row button. When non-nil, ApprovalCardRow for this card shows
+    /// its buttons in a "…" spinner state.
+    @State private var processingCardId: String?
 
     private var cards: [ExpenseCard] { appState.cardsForApproval() }
 
@@ -37,7 +46,9 @@ struct CardsForApprovalTabView: View {
     }
 
     /// Whether the current user has card-override privilege.
-    private var canOverride: Bool { appState.cashMeta?.canOverride == true }
+    /// Sourced from the card-expenses-server metadata (which is the
+    /// endpoint that populates `card_override`; cash metadata doesn't).
+    private var canOverride: Bool { appState.cardExpenseMeta.canOverrideCards }
 
     var body: some View {
         ZStack {
@@ -61,11 +72,19 @@ struct CardsForApprovalTabView: View {
                                 tierConfigs: appState.cardTierConfigRows,
                                 canApprove: canApprove(card),
                                 canOverride: canOverride,
-                                onApprove: { appState.approveCard(card) },
+                                onApprove: {
+                                    // Prevent double-tap while in flight.
+                                    guard processingCardId == nil else { return }
+                                    processingCardId = card.id
+                                    appState.approveCard(card) { _, _ in
+                                        processingCardId = nil
+                                    }
+                                },
                                 onReject: { rejectTarget = card; showRejectSheet = true },
                                 onOverride: canOverride ? {
                                     overrideTarget = card; showOverrideSheet = true
-                                } : nil
+                                } : nil,
+                                isProcessing: processingCardId == card.id
                             )
                         }
                     }
@@ -93,12 +112,34 @@ struct CardsForApprovalTabView: View {
                 }
                 .navigationBarTitle(Text("Reject Card"), displayMode: .inline)
                 .navigationBarItems(
-                    leading: Button("Cancel") { showRejectSheet = false; rejectReason = "" }.foregroundColor(.goldDark),
-                    trailing: Button("Reject") {
-                        guard let c = rejectTarget, !rejectReason.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-                        appState.rejectCard(c, reason: rejectReason.trimmingCharacters(in: .whitespaces))
-                        showRejectSheet = false; rejectReason = ""; rejectTarget = nil
-                    }.foregroundColor(.red).font(.system(size: 16, weight: .bold))
+                    leading: Button("Cancel") {
+                        showRejectSheet = false
+                        rejectReason = ""
+                    }
+                    .foregroundColor(.goldDark)
+                    .disabled(isRejecting),
+                    trailing: Button(action: {
+                        guard !isRejecting,
+                              let c = rejectTarget,
+                              !rejectReason.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+                        isRejecting = true
+                        appState.rejectCard(c, reason: rejectReason.trimmingCharacters(in: .whitespaces)) { success, _ in
+                            isRejecting = false
+                            if success {
+                                showRejectSheet = false
+                                rejectReason = ""
+                                rejectTarget = nil
+                            }
+                        }
+                    }) {
+                        HStack(spacing: 6) {
+                            if isRejecting { ActivityIndicator(isAnimating: true).frame(width: 14, height: 14) }
+                            Text(isRejecting ? "Rejecting…" : "Reject")
+                                .font(.system(size: 16, weight: .bold))
+                        }
+                    }
+                    .foregroundColor(isRejecting ? .red.opacity(0.55) : .red)
+                    .disabled(isRejecting)
                 )
             }
         }
@@ -130,12 +171,35 @@ struct CardsForApprovalTabView: View {
                 }
                 .navigationBarTitle(Text("Override Card Approval"), displayMode: .inline)
                 .navigationBarItems(
-                    leading: Button("Cancel") { showOverrideSheet = false; overrideReason = ""; overrideTarget = nil }.foregroundColor(.goldDark),
-                    trailing: Button("Override") {
-                        guard let c = overrideTarget else { return }
-                        appState.overrideCard(c)
-                        showOverrideSheet = false; overrideReason = ""; overrideTarget = nil
-                    }.foregroundColor(.orange).font(.system(size: 16, weight: .bold))
+                    leading: Button("Cancel") {
+                        showOverrideSheet = false
+                        overrideReason = ""
+                        overrideTarget = nil
+                    }
+                    .foregroundColor(.goldDark)
+                    .disabled(isOverriding),
+                    trailing: Button(action: {
+                        guard !isOverriding, let c = overrideTarget else { return }
+                        isOverriding = true
+                        appState.overrideCard(c, reason: overrideReason) { success, _ in
+                            isOverriding = false
+                            if success {
+                                showOverrideSheet = false
+                                overrideReason = ""
+                                overrideTarget = nil
+                            }
+                        }
+                    }) {
+                        HStack(spacing: 6) {
+                            if isOverriding {
+                                ActivityIndicator(isAnimating: true).frame(width: 14, height: 14)
+                            }
+                            Text(isOverriding ? "Overriding…" : "Override")
+                                .font(.system(size: 16, weight: .bold))
+                        }
+                    }
+                    .foregroundColor(isOverriding ? .orange.opacity(0.55) : .orange)
+                    .disabled(isOverriding)
                 )
             }
         }

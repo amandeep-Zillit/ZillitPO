@@ -54,7 +54,21 @@ class POViewModel: ObservableObject {
     /// initial `loadAllData` sweep). Tile-scoped loaders check these so
     /// that tapping an individual module triggers a visible spinner.
     @Published var isLoadingInvoices = false
+    /// Flips `true` while `refreshInvoice(id:)` is in flight so the
+    /// invoice detail page can show a loader — the list response
+    /// sometimes omits the attachments, so we refresh per-detail to
+    /// resolve the document URL.
+    @Published var isRefreshingInvoice = false
+    /// Per-tab loaders for the Drafts / Templates screen — drive the
+    /// spinner that shows on first fetch and every tab switch there.
+    @Published var isLoadingDrafts = false
+    @Published var isLoadingTemplates = false
     @Published var activeTab: DeptTab = .all
+    /// Currently-selected tab on the Invoices page. Published on the
+    /// VM so post-mutation refresh helpers (`refreshCurrentInvoiceTab`)
+    /// can dispatch to the right endpoint without the view plumbing
+    /// the tab value every time.
+    @Published var activeInvoiceTab: InvoiceTab = .all
     @Published var showCreatePO = false
     @Published var editingPO: PurchaseOrder?
     @Published var selectedPO: PurchaseOrder?

@@ -15,6 +15,8 @@ struct VendorDetailPage: View {
     @State private var navigateToCreatePO = false
     @State private var navigateToEdit = false
     @State private var navigateToHistory = false
+    @State private var isVerifying = false
+    @State private var showVerifyError = false
 
     /// Delete is restricted to the accountant or the vendor's creator
     /// (creator = `addedBy` with a fallback to `userId`, matching the
@@ -141,6 +143,34 @@ struct VendorDetailPage: View {
                         }
                     }
 
+                    // Mark Verified — accountant-only, only when not yet verified
+                    if appState.currentUser?.isAccountant == true && !liveVendor.verified {
+                        Button(action: {
+                            isVerifying = true
+                            appState.verifyVendor(liveVendor.id) { success in
+                                isVerifying = false
+                                if !success { showVerifyError = true }
+                            }
+                        }) {
+                            HStack(spacing: 6) {
+                                if isVerifying {
+                                    ActivityIndicator(isAnimating: true).frame(width: 14, height: 14)
+                                } else {
+                                    Image(systemName: "checkmark.seal.fill").font(.system(size: 13))
+                                }
+                                Text(isVerifying ? "Verifying…" : "Mark Verified")
+                                    .font(.system(size: 14, weight: .bold))
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity).padding(.vertical, 14)
+                            .background(isVerifying
+                                ? Color(red: 0.05, green: 0.15, blue: 0.42).opacity(0.5)
+                                : Color(red: 0.05, green: 0.15, blue: 0.42))
+                            .cornerRadius(10)
+                        }
+                        .disabled(isVerifying)
+                    }
+
                     // Create PO button
                     Button(action: {
                         appState.editingPO = nil
@@ -221,6 +251,11 @@ struct VendorDetailPage: View {
                       presentationMode.wrappedValue.dismiss()
                   },
                   secondaryButton: .cancel())
+        }
+        .alert(isPresented: $showVerifyError) {
+            Alert(title: Text("Verification Failed"),
+                  message: Text("Could not mark this vendor as verified. Please try again."),
+                  dismissButton: .default(Text("OK")))
         }
     }
 

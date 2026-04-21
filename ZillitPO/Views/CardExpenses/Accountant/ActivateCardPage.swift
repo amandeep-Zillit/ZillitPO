@@ -15,9 +15,29 @@ struct ActivateCardPage: View {
     @State private var showSuccess = false
     @State private var errorMessage: String? = nil
 
+    // Bank account picker — shown when the card has no issuer set yet
+    // (mirrors React: `activateTarget && !activateTarget.card_issuer`).
+    @State private var selectedBankId: String = ""
+    @State private var showBankSheet = false
+
+    /// True when the card has no bank account / card issuer set yet.
+    /// In this case the accountant must choose one before activating.
+    private var needsBank: Bool {
+        let hasBankId  = !(card.bankAccount?.id ?? "").isEmpty
+        let hasIssuer  = !(card.cardIssuer ?? "").isEmpty
+        return !hasBankId && !hasIssuer
+    }
+
+    private var selectedBankName: String {
+        appState.bankAccounts.first { $0.id == selectedBankId }?.name ?? ""
+    }
+
     private var rawDigits: String { cardNumber.filter { $0.isNumber } }
     private var isValid: Bool { rawDigits.count == 16 }
-    private var canSubmit: Bool { selectedType != nil && isValid && !submitting }
+    private var canSubmit: Bool {
+        guard selectedType != nil, isValid, !submitting else { return false }
+        return !needsBank || !selectedBankId.isEmpty
+    }
 
     private var submitLabel: String {
         switch selectedType {
@@ -46,6 +66,63 @@ struct ActivateCardPage: View {
                         .font(.system(size: 14, weight: .bold)).foregroundColor(.primary)
                      + Text(".").font(.system(size: 14)).foregroundColor(.primary))
                         .fixedSize(horizontal: false, vertical: true)
+
+                    // ── Bank account picker (only when card has no issuer set) ──
+                    // Mirrors the React activate modal: when !activateTarget.card_issuer
+                    // the user must pick a bank before the activate button is enabled.
+                    if needsBank {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 4) {
+                                Text("CARD ISSUER (BANK ACCOUNT)")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundColor(.secondary)
+                                    .tracking(0.5)
+                                Text("*")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundColor(.goldDark)
+                            }
+                            Button(action: { showBankSheet = true }) {
+                                HStack {
+                                    Text(selectedBankName.isEmpty ? "Select bank account…" : selectedBankName)
+                                        .font(.system(size: 13))
+                                        .foregroundColor(selectedBankName.isEmpty ? .gray : .primary)
+                                    Spacer()
+                                    if !selectedBankId.isEmpty {
+                                        Button(action: { selectedBankId = "" }) {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .font(.system(size: 13))
+                                                .foregroundColor(.gray.opacity(0.6))
+                                        }.buttonStyle(BorderlessButtonStyle())
+                                    } else {
+                                        Image(systemName: "chevron.down")
+                                            .font(.system(size: 10)).foregroundColor(.gray)
+                                    }
+                                }
+                                .padding(10)
+                                .background(Color.bgSurface).cornerRadius(8)
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+                            // Bottom sheet picker — same pattern as
+                            // AssignPhysicalCardPage and the cost-code
+                            // pickers elsewhere in the app.
+                            .sheet(isPresented: $showBankSheet) {
+                                PickerSheetView(
+                                    selection: $selectedBankId,
+                                    options: appState.bankAccounts.map {
+                                        DropdownOption($0.id, $0.name ?? $0.id)
+                                    },
+                                    isPresented: $showBankSheet
+                                )
+                            }
+                            // Warn if bank was not yet selected while trying to submit
+                            if needsBank && selectedBankId.isEmpty, let err = errorMessage, err.contains("bank") {
+                                Text(err)
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundColor(.red)
+                            }
+                        }
+                    }
 
                     // Card type picker
                     VStack(alignment: .leading, spacing: 8) {
@@ -78,6 +155,16 @@ struct ActivateCardPage: View {
                                 .font(.system(size: 10)).foregroundColor(.secondary)
                         }
                     }
+
+                    // Error message (non-bank errors)
+                    if let err = errorMessage, !err.contains("bank") {
+                        Text(err)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.red)
+                            .padding(10)
+                            .background(Color.red.opacity(0.07))
+                            .cornerRadius(8)
+                    }
                 }
                 .padding(20).padding(.bottom, 100)
             }
@@ -108,6 +195,9 @@ struct ActivateCardPage: View {
                 dismissButton: .default(Text("Done")) { presentationMode.wrappedValue.dismiss() }
             )
         }
+        .onAppear {
+            if appState.bankAccounts.isEmpty { appState.loadBankAccounts() }
+        }
     }
 
     @ViewBuilder
@@ -132,7 +222,6 @@ struct ActivateCardPage: View {
     }
 
     private func formatCardNumber(_ digits: String) -> String {
-        // Group in 4s: "1234  5678  ..."
         guard !digits.isEmpty else { return "" }
         let groups = stride(from: 0, to: digits.count, by: 4).map { i -> String in
             let start = digits.index(digits.startIndex, offsetBy: i)
@@ -144,9 +233,13 @@ struct ActivateCardPage: View {
 
     private func submit() {
         guard let type = selectedType, isValid else { return }
+        if needsBank && selectedBankId.isEmpty {
+            errorMessage = "Please select a bank account"
+            return
+        }
         errorMessage = nil
         submitting = true
-        appState.activateCard(id: card.id, cardNumber: rawDigits, cardType: type) { success, error in
+        appState.activateCard(id: card.id, cardNumber: rawDigits, cardType: type, bankAccountId: selectedBankId) { success, error in
             submitting = false
             if success {
                 showSuccess = true

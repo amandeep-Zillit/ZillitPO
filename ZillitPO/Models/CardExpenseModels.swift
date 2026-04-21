@@ -397,6 +397,22 @@ struct CardExpenseMeta: Decodable {
     var smartAlerts: Int?
     var isCoordinator: Bool?
     var coordinatorDeptIds: [String]?
+    // Role / override flags returned by the card-expenses-server
+    // metadata endpoint (see `card-expenses-server/src/routes/v2/
+    // metadata.js`). `can_override` is the user-level privilege;
+    // `card_override` is the module toggle on the project's approval
+    // settings — the web gates the Override button on BOTH flags.
+    var isApprover: Bool?
+    var canOverride: Bool?
+    var cardOverride: Bool?
+
+    /// Convenience — mirrors the web's derivation:
+    ///   `canOverrideCard = !!metadata.can_override && !!metadata.card_override`
+    /// Use this everywhere the Override button visibility is decided
+    /// so iOS and web converge on the same rule.
+    var canOverrideCards: Bool {
+        (canOverride ?? false) && (cardOverride ?? false)
+    }
 
     struct AnyKey: CodingKey {
         var stringValue: String
@@ -437,6 +453,11 @@ struct CardExpenseMeta: Decodable {
         history         = intFor("history", "historyCount", "history_count", "posted", "posted_count")
         smartAlerts     = intFor("smart_alerts", "smartAlerts", "alerts", "alert_count", "active_alerts")
         isCoordinator   = boolFor("is_coordinator", "isCoordinator", "coordinator")
+        // Role / override flags — tolerate snake_case + camelCase so
+        // either server shape decodes cleanly.
+        isApprover     = boolFor("is_approver", "isApprover", "approver")
+        canOverride    = boolFor("can_override", "canOverride")
+        cardOverride   = boolFor("card_override", "cardOverride")
         if let key = AnyKey(stringValue: "coordinator_department_ids") {
             coordinatorDeptIds = (try? c.decode([String].self, forKey: key))
         }
@@ -1305,6 +1326,7 @@ struct CardRaw: Decodable {
         case userId = "user_id"
         case departmentId = "department_id"
         case lastFour = "last_four"
+        case cardLastFour = "card_last_four"           // alternative field name from some endpoints
         case cardIssuer = "card_issuer"
         case monthlyLimit = "monthly_limit"
         case currentBalance = "current_balance"
@@ -1320,6 +1342,7 @@ struct CardRaw: Decodable {
         case rejectionReason = "rejection_reason"
         case digitalCardNumber = "digital_card_number"
         case physicalCardNumber = "physical_card_number"
+        case cardNumber = "card_number"                // generic fallback used by some endpoints
         case bankAccount = "bank_account"
         case updatedBy = "updated_by"
         case updatedAt = "updated_at"
@@ -1332,7 +1355,9 @@ struct CardRaw: Decodable {
         userId = try? c.decode(String.self, forKey: .userId)
         departmentId = try? c.decode(String.self, forKey: .departmentId)
         status = try? c.decode(String.self, forKey: .status)
-        lastFour = try? c.decode(String.self, forKey: .lastFour)
+        // Try last_four first, then card_last_four — different endpoints use different names.
+        lastFour = (try? c.decode(String.self, forKey: .lastFour))
+               ?? (try? c.decode(String.self, forKey: .cardLastFour))
         cardIssuer = try? c.decode(String.self, forKey: .cardIssuer)
         // bsControlCode arrives as either a JSON string or a JSON number
         if let s = try? c.decode(String.self, forKey: .bsControlCode), !s.isEmpty {
@@ -1351,7 +1376,9 @@ struct CardRaw: Decodable {
         rejectedAt = try? c.decode(String.self, forKey: .rejectedAt)
         rejectionReason = try? c.decode(String.self, forKey: .rejectionReason)
         digitalCardNumber = try? c.decode(String.self, forKey: .digitalCardNumber)
-        physicalCardNumber = try? c.decode(String.self, forKey: .physicalCardNumber)
+        // Fall back to generic `card_number` field if physical_card_number is absent.
+        physicalCardNumber = (try? c.decode(String.self, forKey: .physicalCardNumber))
+                          ?? (digitalCardNumber == nil ? (try? c.decode(String.self, forKey: .cardNumber)) : nil)
         updatedBy = try? c.decode(String.self, forKey: .updatedBy)
         updatedAt = try? c.decode(String.self, forKey: .updatedAt)
         bankAccount = try? c.decode(BankAccount.self, forKey: .bankAccount)
@@ -1370,7 +1397,16 @@ struct CardRaw: Decodable {
         card.department = dept?.displayName
         card.departmentId = departmentId
         card.status = status ?? "requested"
-        card.lastFour = lastFour
+        // Use lastFour directly; if absent, derive it from whichever card number
+        // is stored so the detail header always shows meaningful digits.
+        let derivedLast4: String? = {
+            if let lf = lastFour, !lf.isEmpty { return lf }
+            let num = digitalCardNumber ?? physicalCardNumber
+            guard let n = num else { return nil }
+            let digits = n.filter { $0.isNumber }
+            return digits.count >= 4 ? String(digits.suffix(4)) : nil
+        }()
+        card.lastFour = derivedLast4
         card.cardIssuer = cardIssuer
         card.monthlyLimit = monthlyLimit
         card.currentBalance = currentBalance

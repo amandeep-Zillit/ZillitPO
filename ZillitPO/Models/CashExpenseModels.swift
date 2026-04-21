@@ -47,9 +47,23 @@ struct CashExpenseMetadata: Codable {
     var isTeamMember: Bool?
     var isSenior: Bool?
     var canOverride: Bool?
+    /// Module-level override toggle (Card Expenses). Set server-side —
+    /// the web reference gates the Override button on BOTH this and
+    /// `canOverride`:
+    ///   `canOverrideCard = metadata.can_override && metadata.card_override`
+    /// Missing this flag previously meant iOS showed the Override
+    /// button in scenarios where the web would hide it.
+    var cardOverride: Bool?
     var requireSeniorSignOff: Bool?
     var viewDepartmentFloats: Bool?
     var codingRequired: Bool?
+
+    /// Convenience — matches the web's `canOverrideCard` derivation.
+    /// Callers should prefer this over checking `canOverride` alone so
+    /// iOS honours the server-side module gate.
+    var canOverrideCards: Bool {
+        (canOverride ?? false) && (cardOverride ?? false)
+    }
 
     enum CodingKeys: String, CodingKey {
         case isApprover = "is_approver"
@@ -59,6 +73,7 @@ struct CashExpenseMetadata: Codable {
         case isTeamMember = "is_team_member"
         case isSenior = "is_senior"
         case canOverride = "can_override"
+        case cardOverride = "card_override"
         case requireSeniorSignOff = "require_senior_sign_off"
         case viewDepartmentFloats = "view_department_floats"
         case codingRequired = "coding_required"
@@ -73,6 +88,7 @@ struct CashExpenseMetadata: Codable {
         isTeamMember = try? c.decode(Bool.self, forKey: .isTeamMember)
         isSenior = try? c.decode(Bool.self, forKey: .isSenior)
         canOverride = try? c.decode(Bool.self, forKey: .canOverride)
+        cardOverride = try? c.decode(Bool.self, forKey: .cardOverride)
         requireSeniorSignOff = try? c.decode(Bool.self, forKey: .requireSeniorSignOff)
         viewDepartmentFloats = try? c.decode(Bool.self, forKey: .viewDepartmentFloats)
         codingRequired = try? c.decode(Bool.self, forKey: .codingRequired)

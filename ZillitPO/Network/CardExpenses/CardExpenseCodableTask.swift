@@ -63,6 +63,9 @@ enum CardExpenseCodableTask {
 
     // Bank Accounts
     case fetchBankAccounts((Result<APIResponse<[ProductionBankAccountRaw]>?, Error>) -> Void)
+
+    // Approval Tiers (card expenses)
+    case fetchCardApprovalTiers((Result<APIResponse<[ApprovalTierConfig]>?, Error>) -> Void)
 }
 
 extension CardExpenseCodableTask: PODataTaskProtocol {
@@ -240,6 +243,10 @@ case .fetchMyReceipts(let userId, let completion):
 
         case .fetchBankAccounts(let completion):
             guard let req = CardExpenseRequest.fetchBankAccounts.urlRequest else { return nil }
+            return APIClient.shared.codableResultTask(with: req, completion: completion)
+
+        case .fetchCardApprovalTiers(let completion):
+            guard let req = CardExpenseRequest.fetchCardApprovalTiers.urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: req, completion: completion)
         }
     }

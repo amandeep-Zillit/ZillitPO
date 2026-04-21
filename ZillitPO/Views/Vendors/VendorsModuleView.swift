@@ -32,9 +32,28 @@ struct VendorsModuleView: View {
                     .padding(.horizontal, 16).padding(.top, 10)
                     .background(Color.bgBase)
 
-                ScrollView {
-                    VendorsScrollableList()
-                        .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 80)
+                // The ScrollView must stay in the hierarchy through
+                // refreshes — it holds the hidden NavigationLink that
+                // pushes the vendor detail page. Replacing it with a
+                // loader (the previous approach) unwound the whole
+                // nav stack when `loadVendors` fires from the edit
+                // form's `.onDisappear`, so Back skipped the detail
+                // page and dropped the user on the list.
+                //
+                // Instead: always render the ScrollView, and overlay
+                // a full-area LoaderView only on the initial fetch
+                // (when `vendors` is empty). Subsequent refreshes run
+                // silently in the background with no loader.
+                ZStack {
+                    ScrollView {
+                        VendorsScrollableList()
+                            .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 80)
+                    }
+                    if appState.isLoadingVendors && appState.vendors.isEmpty {
+                        VStack { Spacer(); LoaderView(); Spacer() }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(Color.bgBase)
+                    }
                 }
             }
 

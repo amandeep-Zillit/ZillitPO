@@ -279,19 +279,31 @@ struct SubmitClaimFormView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(BorderlessButtonStyle())
-                .selectionActionSheet(
-                    title: "Select Category",
-                    isPresented: Binding(
-                        get: { categorySheetForId == itemId },
-                        set: { if !$0 { categorySheetForId = nil } }
-                    ),
-                    options: claimCategories.map { $0.0 },
-                    isSelected: { $0 == item.category },
-                    label: { val in claimCategories.first { $0.0 == val }?.1 ?? val },
-                    onSelect: { val in
-                        if let idx = receipts.firstIndex(where: { $0.id == itemId }) { receipts[idx].category = val }
-                    }
-                )
+                // Category picker (per-receipt) → searchable bottom
+                // sheet. Matches the cost-code + category pickers
+                // throughout Card/Cash Expenses.
+                .sheet(isPresented: Binding(
+                    get: { categorySheetForId == itemId },
+                    set: { if !$0 { categorySheetForId = nil } }
+                )) {
+                    PickerSheetView(
+                        selection: Binding<String>(
+                            get: {
+                                receipts.first { $0.id == itemId }?.category ?? ""
+                            },
+                            set: { newValue in
+                                if let idx = receipts.firstIndex(where: { $0.id == itemId }) {
+                                    receipts[idx].category = newValue
+                                }
+                            }
+                        ),
+                        options: claimCategories.map { DropdownOption($0.0, $0.1) },
+                        isPresented: Binding(
+                            get: { categorySheetForId == itemId },
+                            set: { if !$0 { categorySheetForId = nil } }
+                        )
+                    )
+                }
             }
 
             // Budget Coding (collapsible)
@@ -892,14 +904,18 @@ struct CostCodePickerButton: View {
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
         }
         .buttonStyle(BorderlessButtonStyle())
-        .selectionActionSheet(
-            title: "Cost Code",
-            isPresented: $showSheet,
-            options: costCodeOptions.map { $0.0 },
-            isSelected: { $0 == selectedCode },
-            label: { key in costCodeOptions.first { $0.0 == key }?.1 ?? key },
-            onSelect: { selectedCode = $0 }
-        )
+        // Bottom sheet (searchable list) instead of the previous action
+        // sheet — the cost-code catalogue is long enough that the
+        // action-sheet layout clipped on smaller phones. The sheet
+        // reuses `PickerSheetView`, which is the same component the
+        // PO-side pickers use, so all cost-code selection UIs converge.
+        .sheet(isPresented: $showSheet) {
+            PickerSheetView(
+                selection: $selectedCode,
+                options: costCodeOptions.map { DropdownOption($0.0, $0.1) },
+                isPresented: $showSheet
+            )
+        }
     }
 }
 

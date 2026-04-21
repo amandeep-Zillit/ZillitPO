@@ -7,7 +7,6 @@ import SwiftUI
 struct AllTransactionsPage: View {
     @EnvironmentObject var appState: POViewModel
     @State private var searchText = ""
-    @State private var isSearching = false
     @State private var activeFilter: String = "All"
     @State private var activeCard: String = "All Cards"
     @State private var activeDept: String = "All Dept"
@@ -58,73 +57,61 @@ struct AllTransactionsPage: View {
     private var totalGross: Double { filtered.reduce(0) { $0 + ($1.amount ?? 0) } }
 
     var body: some View {
-        VStack(spacing: 12) {
-            // Filters / Search row — search icon expands into full search field, hiding chips
-            if isSearching {
+        VStack(spacing: 8) {
+            // ── Row 1: Filter chips ──
+            ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 13)).foregroundColor(.gray)
-                    TextField("Search merchant, holder, code…", text: $searchText)
-                        .font(.system(size: 13))
-                        .autocapitalization(.none)
-                        .disableAutocorrection(true)
-                    if !searchText.isEmpty {
-                        Button(action: { searchText = "" }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 15)).foregroundColor(Color(.systemGray3))
-                        }.buttonStyle(BorderlessButtonStyle())
-                    }
-                    Button(action: { withAnimation(.easeInOut(duration: 0.22)) { isSearching = false; searchText = "" } }) {
-                        Text("Cancel")
-                            .font(.system(size: 13, weight: .semibold)).foregroundColor(.goldDark)
-                    }.buttonStyle(BorderlessButtonStyle())
+                    dropdown(label: activeFilter, icon: "line.3.horizontal.decrease", action: { showFilterSheet = true })
+                        .selectionActionSheet(
+                            title: "Status",
+                            isPresented: $showFilterSheet,
+                            options: filters,
+                            isSelected: { $0 == activeFilter },
+                            label: { $0 },
+                            onSelect: { activeFilter = $0 }
+                        )
+                    dropdown(label: activeCard, icon: "creditcard", action: { showCardSheet = true })
+                        .selectionActionSheet(
+                            title: "Card",
+                            isPresented: $showCardSheet,
+                            options: cardOptions,
+                            isSelected: { $0 == activeCard },
+                            label: { $0 },
+                            onSelect: { activeCard = $0 }
+                        )
+                    dropdown(label: activeDept, icon: "building.2", action: { showDeptSheet = true })
+                        .selectionActionSheet(
+                            title: "Department",
+                            isPresented: $showDeptSheet,
+                            options: deptOptions,
+                            isSelected: { $0 == activeDept },
+                            label: { $0 },
+                            onSelect: { activeDept = $0 }
+                        )
                 }
-                .padding(.horizontal, 12).padding(.vertical, 9)
-                .background(Color.bgSurface).cornerRadius(8)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.goldDark, lineWidth: 1.5))
-            } else {
-                HStack(spacing: 8) {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            dropdown(label: activeFilter, icon: "line.3.horizontal.decrease", action: { showFilterSheet = true })
-                                .selectionActionSheet(
-                                    title: "Status",
-                                    isPresented: $showFilterSheet,
-                                    options: filters,
-                                    isSelected: { $0 == activeFilter },
-                                    label: { $0 },
-                                    onSelect: { activeFilter = $0 }
-                                )
-                            dropdown(label: activeCard, icon: "creditcard", action: { showCardSheet = true })
-                                .selectionActionSheet(
-                                    title: "Card",
-                                    isPresented: $showCardSheet,
-                                    options: cardOptions,
-                                    isSelected: { $0 == activeCard },
-                                    label: { $0 },
-                                    onSelect: { activeCard = $0 }
-                                )
-                            dropdown(label: activeDept, icon: "building.2", action: { showDeptSheet = true })
-                                .selectionActionSheet(
-                                    title: "Department",
-                                    isPresented: $showDeptSheet,
-                                    options: deptOptions,
-                                    isSelected: { $0 == activeDept },
-                                    label: { $0 },
-                                    onSelect: { activeDept = $0 }
-                                )
-                        }
-                    }
-                    // Search icon — always pinned at trailing edge
-                    Button(action: { withAnimation(.easeInOut(duration: 0.22)) { isSearching = true } }) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 13, weight: .medium)).foregroundColor(.goldDark)
-                            .padding(.horizontal, 10).padding(.vertical, 8)
-                            .background(Color.bgSurface).cornerRadius(6)
-                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
+            }
+
+            // ── Row 2: Search bar (always visible below filters) ──
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 13)).foregroundColor(.gray)
+                TextField("Search merchant, holder, code…", text: $searchText)
+                    .font(.system(size: 13))
+                    .autocapitalization(.none)
+                    .disableAutocorrection(true)
+                if !searchText.isEmpty {
+                    Button(action: { searchText = "" }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 15)).foregroundColor(Color(.systemGray3))
                     }.buttonStyle(BorderlessButtonStyle())
                 }
             }
+            .padding(.horizontal, 12).padding(.vertical, 9)
+            .background(Color.bgSurface).cornerRadius(8)
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(
+                searchText.isEmpty ? Color.borderColor : Color.goldDark,
+                lineWidth: searchText.isEmpty ? 1 : 1.5
+            ))
 
             // Scrollable rows section
             ScrollView {
@@ -153,7 +140,6 @@ struct AllTransactionsPage: View {
         .onAppear {
             // Reset search on re-appear (e.g. after returning from a tapped row)
             searchText = ""
-            isSearching = false
             appState.loadCardTransactions()
         }
     }

@@ -181,6 +181,7 @@ struct EditCardRequestPage: View {
         submitting = true
         appState.updateCardRequest(
             id: card.id,
+            holderId: card.holderId ?? "",
             proposedLimit: amt,
             bsControlCode: isAccountant ? bsControlCode : (card.bsControlCode ?? ""),
             justification: isAccountant ? justification : (card.justification ?? ""),

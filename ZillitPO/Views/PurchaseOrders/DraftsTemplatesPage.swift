@@ -19,10 +19,18 @@ struct DraftsTemplatesPage: View {
             Color.bgBase.edgesIgnoringSafeArea(.all)
 
             VStack(spacing: 0) {
-                // Tab bar
+                // Tab bar — tapping a tab re-fetches the matching list so
+                // the loader shows immediately (and stale data can't
+                // linger from a previous session).
                 HStack(spacing: 0) {
                     ForEach(DraftsTemplatesTab.allCases, id: \.self) { tab in
-                        Button(action: { activeTab = tab }) {
+                        Button(action: {
+                            activeTab = tab
+                            switch tab {
+                            case .drafts:    appState.loadDrafts()
+                            case .templates: appState.loadTemplates()
+                            }
+                        }) {
                             VStack(spacing: 6) {
                                 Text(tab.rawValue)
                                     .font(.system(size: 14, weight: activeTab == tab ? .semibold : .regular))
@@ -43,15 +51,24 @@ struct DraftsTemplatesPage: View {
                 .background(Color.bgBase)
                 .overlay(Rectangle().fill(Color.borderColor).frame(height: 1), alignment: .bottom)
 
-                // Content
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 14) {
-                        if activeTab == .drafts {
-                            PODraftsListView()
-                        } else {
-                            POTemplatesListView()
-                        }
-                    }.padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 80)
+                // Content — per-tab loader fires on every fetch (tab
+                // switch, pull-to-refresh, or the initial onAppear).
+                if activeTab == .drafts && appState.isLoadingDrafts {
+                    VStack { Spacer(); LoaderView(); Spacer() }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if activeTab == .templates && appState.isLoadingTemplates {
+                    VStack { Spacer(); LoaderView(); Spacer() }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 14) {
+                            if activeTab == .drafts {
+                                PODraftsListView()
+                            } else {
+                                POTemplatesListView()
+                            }
+                        }.padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 80)
+                    }
                 }
             }
 

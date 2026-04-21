@@ -14,8 +14,13 @@ struct CardRegisterPage: View {
     @State private var rejectTargetCard: ExpenseCard? = nil
     @State private var rejectCardReason: String = ""
     @State private var showInlineRejectSheet = false
+    /// `true` while the inline reject sheet's network call is in flight.
+    @State private var isRejectingInline = false
     @State private var cardToActivate: ExpenseCard? = nil
     @State private var navigateToActivate = false
+    @State private var overrideTargetCard: ExpenseCard? = nil
+    @State private var overrideReason: String = ""
+    @State private var showOverrideSheet = false
     /// Search + status filter state — mirrors the web's CardRegisterPage.
     @State private var searchText: String = ""
     @State private var statusFilter: String = "all"
@@ -61,7 +66,20 @@ struct CardRegisterPage: View {
         }
     }
 
-    private var tierCount: Int { appState.cardTierConfigRows.count }
+    /// True when the current accountant has the card-override privilege
+    /// (matches React: `canOverrideCard = !!metadata.can_override && !!metadata.card_override`).
+    private var canOverride: Bool { appState.cashMeta?.canOverride == true }
+
+    /// Resolves the number of approval tiers for a specific card by looking
+    /// up the tier config for its department + amount. Returns 0 when no
+    /// config matches so `CardRow` omits the fraction entirely rather than
+    /// showing a fabricated "(0/1)".
+    private func tierCount(for card: ExpenseCard) -> Int {
+        let cfg = ApprovalHelpers.resolveConfig(appState.cardTierConfigRows, deptId: card.departmentId, amount: card.monthlyLimit ?? 0)
+            ?? ApprovalHelpers.resolveConfig(appState.cardTierConfigRows, deptId: card.departmentId)
+        guard let cfg = cfg else { return 0 }
+        return ApprovalHelpers.getTotalTiers(cfg)
+    }
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -163,7 +181,7 @@ struct CardRegisterPage: View {
                                     CardRow(
                                         card: card,
                                         isAccountant: true,
-                                        tierCount: tierCount,
+                                        tierCount: tierCount(for: card),
                                         resolvedBankName: {
                                             if let bankId = card.bankAccount?.id, !bankId.isEmpty {
                                                 return appState.bankAccounts.first { $0.id == bankId }?.name
@@ -173,7 +191,13 @@ struct CardRegisterPage: View {
                                         onAssignPhysical: nil,
                                         onApprove: nil,
                                         onReject: nil,
-                                        onOverride: nil,
+                                        // Override: shown for all cards when accountant has override permission.
+                                        // CardRow gates the button to pending/approved/override status internally.
+                                        onOverride: canOverride ? {
+                                            overrideTargetCard = card
+                                            overrideReason = ""
+                                            showOverrideSheet = true
+                                        } : nil,
                                         onActivate: {
                                             cardToActivate = card
                                             navigateToActivate = true
@@ -202,6 +226,64 @@ struct CardRegisterPage: View {
         }
         .background(Color.bgBase)
         .navigationBarTitle(Text("Card Register"), displayMode: .inline)
+        // ── Override confirmation sheet ──────────────────────────────
+        .sheet(isPresented: $showOverrideSheet, onDismiss: { overrideReason = "" }) {
+            NavigationView {
+                ZStack {
+                    Color.bgBase.edgesIgnoringSafeArea(.all)
+                    VStack(alignment: .leading, spacing: 16) {
+                        // Warning banner (mirrors React's amber override banner)
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: "bolt.fill")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(.orange)
+                            VStack(alignment: .leading, spacing: 3) {
+                                if let c = overrideTargetCard {
+                                    (Text("This will ")
+                                     + Text("approve").bold()
+                                     + Text(" the card for ")
+                                     + Text(c.holderFullName).bold()
+                                     + Text(", bypassing the normal approval chain. The card will still need to be activated with a card number."))
+                                        .font(.system(size: 12)).foregroundColor(.primary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+                        .padding(12)
+                        .background(Color.orange.opacity(0.08))
+                        .cornerRadius(10)
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.orange.opacity(0.2), lineWidth: 1))
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Override reason (optional)")
+                                .font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
+                            TextField("e.g. Approved by director…", text: $overrideReason)
+                                .font(.system(size: 14)).padding(10)
+                                .background(Color.bgSurface).cornerRadius(8)
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.borderColor, lineWidth: 1))
+                        }
+                        Spacer()
+                    }.padding()
+                }
+                .navigationBarTitle(Text("Override Card Approval"), displayMode: .inline)
+                .navigationBarItems(
+                    leading: Button("Cancel") { showOverrideSheet = false }
+                        .foregroundColor(.goldDark),
+                    trailing: Button(action: {
+                        guard let c = overrideTargetCard else { return }
+                        appState.overrideCard(c, reason: overrideReason)
+                        showOverrideSheet = false
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "bolt.fill").font(.system(size: 12, weight: .bold))
+                            Text("Override")
+                        }
+                    }
+                    .foregroundColor(.orange)
+                    .font(.system(size: 14, weight: .bold))
+                )
+            }
+        }
         .sheet(isPresented: $showInlineRejectSheet, onDismiss: { rejectCardReason = "" }) {
             NavigationView {
                 ZStack {
@@ -223,13 +305,26 @@ struct CardRegisterPage: View {
                 }
                 .navigationBarTitle(Text("Reject Card"), displayMode: .inline)
                 .navigationBarItems(
-                    leading: Button("Cancel") { showInlineRejectSheet = false }.foregroundColor(.goldDark),
-                    trailing: Button("Reject") {
+                    leading: Button("Cancel") { showInlineRejectSheet = false }
+                        .foregroundColor(.goldDark)
+                        .disabled(isRejectingInline),
+                    trailing: Button(action: {
                         let reason = rejectCardReason.trimmingCharacters(in: .whitespaces)
-                        guard !reason.isEmpty, let c = rejectTargetCard else { return }
-                        appState.rejectCard(c, reason: reason)
-                        showInlineRejectSheet = false
-                    }.foregroundColor(.red).font(.system(size: 16, weight: .bold))
+                        guard !isRejectingInline, !reason.isEmpty, let c = rejectTargetCard else { return }
+                        isRejectingInline = true
+                        appState.rejectCard(c, reason: reason) { success, _ in
+                            isRejectingInline = false
+                            if success { showInlineRejectSheet = false }
+                        }
+                    }) {
+                        HStack(spacing: 6) {
+                            if isRejectingInline { ActivityIndicator(isAnimating: true).frame(width: 14, height: 14) }
+                            Text(isRejectingInline ? "Rejecting…" : "Reject")
+                                .font(.system(size: 16, weight: .bold))
+                        }
+                    }
+                    .foregroundColor(isRejectingInline ? .red.opacity(0.55) : .red)
+                    .disabled(isRejectingInline)
                 )
             }
         }

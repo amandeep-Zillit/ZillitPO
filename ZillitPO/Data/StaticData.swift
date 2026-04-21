@@ -2,7 +2,7 @@ import Foundation
 
 struct ProjectData { static let projectId = "68877f89a6569e29caee0a65" }
 
-// MARK: - Static Payment Runs (fallback while /api/v2/payment-runs has a server-side bug)
+// MARK: - Static Payment Runs 
 
 struct PaymentRunsData {
     static let all: [PaymentRun] = {

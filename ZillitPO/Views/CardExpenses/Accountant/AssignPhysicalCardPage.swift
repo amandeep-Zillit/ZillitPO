@@ -14,6 +14,26 @@ struct AssignPhysicalCardPage: View {
     @State private var showSuccess = false
     @State private var errorMessage: String? = nil
 
+    // Bank account picker state — surfaced when the card has no
+    // `card_issuer` / `bank_account` set yet (typical override path —
+    // the card was force-approved without a bank). Matches the web's
+    // Activate modal: `needsBank = !activateTarget.card_issuer`.
+    @State private var selectedBankId: String = ""
+    @State private var showBankSheet = false
+
+    /// `true` when the card record doesn't carry a bank/issuer yet.
+    /// The accountant has to pick one here before the physical card
+    /// can be assigned — without it the server rejects activation.
+    private var needsBank: Bool {
+        let hasBankId = !(card.bankAccount?.id ?? "").isEmpty
+        let hasIssuer = !(card.cardIssuer ?? "").isEmpty
+        return !hasBankId && !hasIssuer
+    }
+
+    private var selectedBankName: String {
+        appState.bankAccounts.first { $0.id == selectedBankId }?.name ?? ""
+    }
+
     private static let teal = Color(red: 0, green: 0.6, blue: 0.5)
 
     // Format raw digits into grouped "XXXX XXXX XXXX XXXX"
@@ -25,7 +45,13 @@ struct AssignPhysicalCardPage: View {
         }.joined(separator: " ")
     }
 
-    private var canSubmit: Bool { rawDigits.count == 16 && !isSubmitting }
+    private var canSubmit: Bool {
+        guard rawDigits.count == 16, !isSubmitting else { return false }
+        // When the card has no issuer, a bank must be chosen first —
+        // mirrors the web's activate-modal guard exactly:
+        //   `disabled = !cardType || digits!=16 || (needsBank && !bankId)`
+        return !needsBank || !selectedBankId.isEmpty
+    }
 
     private var maskedDigital: String {
         guard let num = card.digitalCardNumber, !num.isEmpty else { return "No digital card" }
@@ -80,6 +106,60 @@ struct AssignPhysicalCardPage: View {
                 .cornerRadius(12)
                 .overlay(RoundedRectangle(cornerRadius: 12)
                     .stroke(AssignPhysicalCardPage.teal, lineWidth: 1.5))
+
+                // ── Card Issuer (Bank Account) ──
+                // Only shown when the card has no bank yet — typically
+                // after an Override where the card was force-approved
+                // without going through the tier flow. Without a bank
+                // the server rejects activation, so this gate is
+                // mandatory in that path.
+                if needsBank {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 4) {
+                            Text("CARD ISSUER (BANK ACCOUNT)")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(.secondary).tracking(0.3)
+                            Text("*")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.goldDark)
+                        }
+                        Button(action: { showBankSheet = true }) {
+                            HStack {
+                                Text(selectedBankName.isEmpty ? "Select bank account…" : selectedBankName)
+                                    .font(.system(size: 13))
+                                    .foregroundColor(selectedBankName.isEmpty ? .gray : .primary)
+                                Spacer()
+                                if !selectedBankId.isEmpty {
+                                    Button(action: { selectedBankId = "" }) {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.system(size: 13))
+                                            .foregroundColor(.gray.opacity(0.6))
+                                    }.buttonStyle(BorderlessButtonStyle())
+                                } else {
+                                    Image(systemName: "chevron.down")
+                                        .font(.system(size: 10)).foregroundColor(.gray)
+                                }
+                            }
+                            .padding(12)
+                            .background(Color.bgSurface).cornerRadius(10)
+                            .overlay(RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.borderColor, lineWidth: 1))
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
+                        // Bottom sheet picker — matches the rest of the
+                        // app's sheet-based pickers (cost code, category,
+                        // etc.).
+                        .sheet(isPresented: $showBankSheet) {
+                            PickerSheetView(
+                                selection: $selectedBankId,
+                                options: appState.bankAccounts.map {
+                                    DropdownOption($0.id, $0.name ?? $0.id)
+                                },
+                                isPresented: $showBankSheet
+                            )
+                        }
+                    }
+                }
 
                 // ── Physical Card Number input ──
                 VStack(alignment: .leading, spacing: 8) {
@@ -186,6 +266,14 @@ struct AssignPhysicalCardPage: View {
                 dismissButton: .default(Text("Done")) { presentationMode.wrappedValue.dismiss() }
             )
         }
+        .onAppear {
+            // Prefetch bank accounts so the Card Issuer picker has
+            // options ready the moment the view shows (only matters
+            // for the override path — but it's cheap when not needed).
+            if needsBank && appState.bankAccounts.isEmpty {
+                appState.loadBankAccounts()
+            }
+        }
     }
 
     private func assignCard() {
@@ -193,10 +281,17 @@ struct AssignPhysicalCardPage: View {
         errorMessage = nil
         isSubmitting = true
         // Call activateCard — assigns the physical card number AND
-        // flips status to active. On failure the ViewModel rolls back
-        // its optimistic status/number patch and returns the server
-        // error, which we show in the red banner above the button.
-        appState.activateCard(id: card.id, cardNumber: rawDigits) { success, error in
+        // flips status to active. When the card had no issuer
+        // (override path), the selected bank is sent as `card_issuer`
+        // alongside the card number. On failure the ViewModel rolls
+        // back its optimistic status/number patch and returns the
+        // server error, which we show in the red banner above.
+        appState.activateCard(
+            id: card.id,
+            cardNumber: rawDigits,
+            cardType: .physical,
+            bankAccountId: selectedBankId
+        ) { success, error in
             isSubmitting = false
             if success {
                 showSuccess = true

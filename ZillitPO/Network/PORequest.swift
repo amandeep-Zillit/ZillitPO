@@ -6,13 +6,20 @@
 import Foundation
 
 enum PORequest {
+    /// Base URL for the purchase-order microservice (default port 3001).
     static let baseURL = "http://192.168.29.92:3001"
+    /// Base URL for the invoices microservice (default port 3004 —
+    /// see `invoices-server/.env.example`). Keeps the invoice flow
+    /// hitting the local dev backend while vendors / card / cash /
+    /// account-hub endpoints continue to use the shared gateway.
+    
     
     // MARK: - Vendors
     case fetchVendors
     case createVendor([String: Any])
     case updateVendor(String, [String: Any])     // id, body → PATCH /vendors/{id}
     case deleteVendor(String)
+    case verifyVendor(String)                    // id → POST /vendors/{id}/verify
     case fetchVendorHistory(String)              // id → GET /vendors/{id}/history
 
     // MARK: - Approval Tiers
@@ -48,11 +55,18 @@ enum PORequest {
 
     // MARK: - Invoices
     case fetchInvoices(String)
+    case fetchInvoice(String)                        // id → GET /invoices/{id}
+    case fetchApprovalQueueInvoices                  // GET /invoices/approval
+    case fetchMyInvoices                             // GET /invoices/my
     case createInvoice([String: Any])
     case updateInvoice(String, [String: Any])       // id, body (for status changes etc)
     case deleteInvoice(String)
     case approveInvoice(String, [String: Any])      // id, body
     case rejectInvoice(String, [String: Any])       // id, body
+    case holdInvoice(String, [String: Any])         // id, { hold_reason, hold_note? }
+    case releaseInvoiceHold(String)                 // id → POST /invoices/{id}/release
+    case sendInvoiceToApproval(String)              // id → POST /invoices/{id}/send-to-approval
+    case postInvoiceToLedger(String)                // id → POST /invoices/{id}/post
     case fetchInvoiceHistory(String)                // id
     case fetchInvoiceQueries(String)                // id — /queries/entity/invoice/{id}
 
@@ -91,6 +105,9 @@ extension PORequest: POURLRequestProtocol {
         case .deleteVendor(let id):
             let endPoint = "/api/v2/vendors/\(id)"
             return APIClient.shared.buildRequest(.delete, endPoint)
+
+        case .verifyVendor(let id):
+            return APIClient.shared.buildRequest(.post, "/api/v2/vendors/\(id)/verify", body: [:])
 
         case .fetchVendorHistory(let id):
             // perPage=200 so the audit trail arrives in one call —
@@ -199,8 +216,38 @@ extension PORequest: POURLRequestProtocol {
             return APIClient.shared.buildRequest(.get, endPoint)
 
         // MARK: Invoices
+        //
+        // Invoice endpoints + payment-run endpoints (all under
+        // /api/v2/invoices/*) route to the dedicated `invoices-server`
+        // microservice on `PORequest.invoicesBaseURL` (localhost:3004
+        // in dev). Account-hub routes (`approval-tiers`, generic
+        // `queries`) stay on the shared gateway because they're
+        // served by a different service.
         case .fetchInvoices(let path):
-            return APIClient.shared.buildRequest(.get, path)
+            // Caller passes a path like "/api/v2/invoices"
+            // already — prepend the invoices baseURL unless they
+            // handed us an absolute URL.
+            let url = path.hasPrefix("http") ? path : "\(path)"
+            return APIClient.shared.buildRequest(.get, url)
+
+        case .fetchInvoice(let id):
+            // Single-invoice endpoint — server returns the full row
+            // including the `attachments` array, which the list
+            // response sometimes omits. Used to resolve the document
+            // URL on the detail page when the list didn't carry it.
+            return APIClient.shared.buildRequest(.get, "/api/v2/invoices/\(id)")
+
+        case .fetchApprovalQueueInvoices:
+            // Non-accountant "Approval Queue" tab — server-filtered
+            // list of invoices where the current user sits in an
+            // approval tier. Mirrors the PO-side `/approval` route.
+            return APIClient.shared.buildRequest(.get, "/api/v2/invoices/approval")
+
+        case .fetchMyInvoices:
+            // "My Invoices" tab — server-filtered list of invoices
+            // raised / uploaded by the current user. Mirrors the
+            // PO-side `/my` route.
+            return APIClient.shared.buildRequest(.get, "/api/v2/invoices/my")
 
         case .createInvoice(let body):
             return APIClient.shared.buildRequest(.post, "/api/v2/invoices", body: body)
@@ -212,12 +259,31 @@ extension PORequest: POURLRequestProtocol {
             return APIClient.shared.buildRequest(.delete, "/api/v2/invoices/\(id)")
 
         case .approveInvoice(let id, let body):
-            let endPoint = "/api/v2/invoices/\(id)/approve"
-            return APIClient.shared.buildRequest(.post, endPoint, body: body)
+            return APIClient.shared.buildRequest(.post, "/api/v2/invoices/\(id)/approve", body: body)
 
         case .rejectInvoice(let id, let body):
-            let endPoint = "/api/v2/invoices/\(id)/reject"
-            return APIClient.shared.buildRequest(.post, endPoint, body: body)
+            return APIClient.shared.buildRequest(.post, "/api/v2/invoices/\(id)/reject", body: body)
+
+        case .holdInvoice(let id, let body):
+            // Body: { hold_reason, hold_note? } — server snapshots the
+            // current `status` into `previous_status` so Release can
+            // restore it.
+            return APIClient.shared.buildRequest(.post, "/api/v2/invoices/\(id)/hold", body: body)
+
+        case .releaseInvoiceHold(let id):
+            // No body — server reads `previous_status` and flips the
+            // invoice back.
+            return APIClient.shared.buildRequest(.post, "/api/v2/invoices/\(id)/release", body: [:])
+
+        case .sendInvoiceToApproval(let id):
+            // Moves inbox/matching → approval and resets any existing
+            // approvals so the tier chain starts clean. Replaces the
+            // older PATCH {status:"approval"} path.
+            return APIClient.shared.buildRequest(.post, "/api/v2/invoices/\(id)/send-to-approval", body: [:])
+
+        case .postInvoiceToLedger(let id):
+            // Accountant-only transition: approved/override → ready_to_pay.
+            return APIClient.shared.buildRequest(.post, "/api/v2/invoices/\(id)/post", body: [:])
 
         case .fetchInvoiceHistory(let id):
             // Include `perPage=200` so the backend returns the full history
@@ -227,37 +293,34 @@ extension PORequest: POURLRequestProtocol {
             return APIClient.shared.buildRequest(.get, "/api/v2/invoices/\(id)/history?perPage=200")
 
         case .fetchInvoiceQueries(let id):
-            // Queries raised against an invoice (notes / questions / audit
-            // flags). Endpoint returns all queries for the entity.
+            // Queries live on the account-hub service (generic entity
+            // queries endpoint) — stays on the shared gateway.
             return APIClient.shared.buildRequest(.get, "/api/v2/account-hub/queries/entity/invoice/\(id)")
 
         // MARK: Invoice Approval Tiers
         case .fetchInvoiceApprovalTiers:
-            let endPoint = "/api/v2/account-hub/approval-tiers?module=invoices"
-            return APIClient.shared.buildRequest(.get, endPoint)
+            // Account-hub — stays on the shared gateway.
+            return APIClient.shared.buildRequest(.get, "/api/v2/account-hub/approval-tiers?module=invoices")
 
-        // MARK: Invoice Settings
+        // MARK: Invoice Settings (served by the invoices microservice)
         case .getInvoiceSettings:
             return APIClient.shared.buildRequest(.get, "/api/v2/invoices/settings")
 
         case .updateInvoiceSettings(let body):
             return APIClient.shared.buildRequest(.patch, "/api/v2/invoices/settings", body: body)
 
-        // MARK: Payment Runs (Active Runs)
+        // MARK: Payment Runs (Active Runs) — same microservice as invoices.
         case .fetchPaymentRuns:
-            let endPoint = "/api/v2/invoices/active-runs"
-            return APIClient.shared.buildRequest(.get, endPoint)
+            return APIClient.shared.buildRequest(.get, "/api/v2/invoices/active-runs")
 
         case .getPaymentRun(let id):
             return APIClient.shared.buildRequest(.get, "/api/v2/invoices/active-runs/\(id)")
 
         case .approvePaymentRun(let id, let body):
-            let endPoint = "/api/v2/invoices/active-runs/\(id)/approve"
-            return APIClient.shared.buildRequest(.post, endPoint, body: body)
+            return APIClient.shared.buildRequest(.post, "/api/v2/invoices/active-runs/\(id)/approve", body: body)
 
         case .rejectPaymentRun(let id, let body):
-            let endPoint = "/api/v2/invoices/active-runs/\(id)/reject"
-            return APIClient.shared.buildRequest(.post, endPoint, body: body)
+            return APIClient.shared.buildRequest(.post, "/api/v2/invoices/active-runs/\(id)/reject", body: body)
         }
     }
 }

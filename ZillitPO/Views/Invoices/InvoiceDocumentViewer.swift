@@ -152,6 +152,22 @@ struct InvoiceImageView: UIViewRepresentable {
     }
 }
 
+/// PDF / generic document viewer.
+///
+/// We deliberately **don't** call `webView.load(request:)` directly
+/// any more. That path has two problems on iOS:
+///   1. WKWebView strips custom headers (`x-project-id` etc.) from
+///      the first-party request in many iOS 16+ builds, so auth
+///      fails silently and the user sees a blank screen.
+///   2. Any 30x redirect (e.g. `/api/v2/invoices/{id}/file` → real
+///      uploads URL) starts a fresh navigation that WKWebView
+///      handles WITHOUT the headers, producing a 403 with no signal.
+///
+/// Instead we download the bytes ourselves via URLSession (same
+/// headers the rest of the app uses), write to a tmp file, and load
+/// the local URL via `webView.loadFileURL(...)`. PDF rendering works,
+/// status/headers are visible to us, and we can surface a proper
+/// error message inside the web view when something goes wrong.
 struct InvoiceWebView: UIViewRepresentable {
     let url: URL
 
@@ -161,15 +177,89 @@ struct InvoiceWebView: UIViewRepresentable {
         webView.backgroundColor = .systemGroupedBackground
         webView.isOpaque = false
 
-        // Build request with same headers APIClient uses
-        var request = URLRequest(url: url)
         let client = APIClient.shared
+        var request = URLRequest(url: url)
         request.setValue(client.projectId, forHTTPHeaderField: "x-project-id")
         request.setValue(client.userId, forHTTPHeaderField: "x-user-id")
         request.setValue(String(client.isAccountant), forHTTPHeaderField: "x-is-accountant")
-        webView.load(request)
+
+        print("🧾 InvoiceDocumentViewer → \(url.absoluteString)")
+
+        URLSession.shared.dataTask(with: request) { [weak webView] data, response, error in
+            guard let webView = webView else { return }
+            DispatchQueue.main.async {
+                // 1) Network-level failure (no response).
+                if let err = error {
+                    renderError(in: webView, title: "Couldn't load document", body: err.localizedDescription)
+                    return
+                }
+                let http = response as? HTTPURLResponse
+                let status = http?.statusCode ?? 0
+
+                // 2) Non-2xx HTTP status → show explanatory placeholder.
+                guard (200...299).contains(status), let data = data, !data.isEmpty else {
+                    let body: String = {
+                        if status == 404 { return "This invoice doesn't have an uploaded document." }
+                        if status == 401 || status == 403 { return "You don't have access to this document." }
+                        if status == 0 { return "The server returned no response." }
+                        return "The server responded with HTTP \(status)."
+                    }()
+                    renderError(in: webView, title: "Unable to show document", body: body)
+                    return
+                }
+
+                // 3) Good bytes — infer extension from the response's
+                //    Content-Type so WKWebView picks the right renderer
+                //    (PDF viewer vs. plain text vs. image).
+                let ext: String = {
+                    let ct = (http?.value(forHTTPHeaderField: "Content-Type")
+                              ?? http?.value(forHTTPHeaderField: "content-type") ?? "").lowercased()
+                    if ct.contains("pdf") { return "pdf" }
+                    if ct.contains("png") { return "png" }
+                    if ct.contains("jpeg") || ct.contains("jpg") { return "jpg" }
+                    if ct.contains("html") { return "html" }
+                    // Fall back to the URL's own extension
+                    return URL(string: url.absoluteString)?.pathExtension.lowercased() ?? "bin"
+                }()
+
+                // 4) Write to tmp, load via file URL so WKWebView reads
+                //    the bytes directly — no header dance, no redirects.
+                let tmp = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("invoice-\(UUID().uuidString).\(ext)")
+                do {
+                    try data.write(to: tmp)
+                    webView.loadFileURL(tmp, allowingReadAccessTo: tmp.deletingLastPathComponent())
+                } catch {
+                    renderError(in: webView, title: "Couldn't save document", body: error.localizedDescription)
+                }
+            }
+        }.resume()
+
         return webView
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {}
+
+    /// Render a lightweight branded error screen inside the WKWebView
+    /// so the viewer never sits on an empty/blank surface.
+    private func renderError(in webView: WKWebView, title: String, body: String) {
+        let html = """
+        <html><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>
+        body { font-family: -apple-system, system-ui; padding: 32px; text-align: center; color: #6b6f76;
+               background: #f5f6f8; }
+        .title { font-size: 16px; font-weight: 600; color: #1a1a1a; margin-bottom: 8px; }
+        .body  { font-size: 13px; line-height: 1.45; }
+        .icon  { font-size: 40px; margin-bottom: 14px; opacity: 0.4; }
+        </style></head>
+        <body><div class="icon">📄</div><div class="title">\(escape(title))</div><div class="body">\(escape(body))</div></body>
+        </html>
+        """
+        webView.loadHTMLString(html, baseURL: nil)
+    }
+
+    private func escape(_ s: String) -> String {
+        s.replacingOccurrences(of: "&", with: "&amp;")
+         .replacingOccurrences(of: "<", with: "&lt;")
+         .replacingOccurrences(of: ">", with: "&gt;")
+    }
 }

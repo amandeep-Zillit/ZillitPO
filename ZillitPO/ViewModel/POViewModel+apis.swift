@@ -162,12 +162,6 @@ extension POViewModel {
                     let tpl = response?.data
                     self?.floatFormTemplate = tpl
                     print("📋 Float form template: \(tpl?.template?.count ?? 0) sections")
-                    if let sections = tpl?.template {
-                        for s in sections {
-                            let fieldLabels = (s.fields ?? []).map { "\($0.name)[\($0.label ?? "nil")]sd=\($0.systemDefault ?? false)" }
-                            print("  📌 Section key=\(s.key) label=\(s.label) order=\(s.order) fields=\(fieldLabels)")
-                        }
-                    }
                 case .failure(let error):
                     print("❌ Fetch float form template failed: \(error)")
                 }
@@ -183,12 +177,6 @@ extension POViewModel {
                     let tpl = response?.data
                     self?.formTemplate = tpl
                     print("📋 Form template: \(tpl?.template?.count ?? 0) sections")
-                    if let sections = tpl?.template {
-                        for s in sections {
-                            let fieldLabels = (s.fields ?? []).map { "\($0.name)[\($0.label ?? "nil")]sd=\($0.systemDefault ?? false)" }
-                            print("  📌 Section key=\(s.key) label=\(s.label) order=\(s.order) sysDefault=\(s.isSystemDefault) fields=\(fieldLabels)")
-                        }
-                    }
                 case .failure(let error):
                     print("❌ Fetch form template failed: \(error)")
                 }
@@ -353,8 +341,10 @@ extension POViewModel {
     }
 
     func loadDrafts() {
+        isLoadingDrafts = true
         POCodableTask.fetchDrafts { [weak self] result in
             DispatchQueue.main.async {
+                self?.isLoadingDrafts = false
                 switch result {
                 case .success(let response):
                     let raw = response?.data ?? []
@@ -370,8 +360,10 @@ extension POViewModel {
     }
 
     func loadTemplates() {
+        isLoadingTemplates = true
         POCodableTask.fetchTemplates { [weak self] result in
             DispatchQueue.main.async {
+                self?.isLoadingTemplates = false
                 switch result {
                 case .success(let response):
                     let t = response?.data ?? []
@@ -414,6 +406,141 @@ extension POViewModel {
                 case .failure(let error):
                     print("❌ Fetch invoices failed: \(error)")
                 }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    /// "Approval Queue" tab (non-accountant) — server-filtered list of
+    /// invoices where the current user sits in an approval tier.
+    /// Mirrors `loadApprovalQueue()` on the PO side.
+    func loadApprovalQueueInvoices(onComplete: (() -> Void)? = nil) {
+        isLoadingInvoices = true
+        POCodableTask.fetchApprovalQueueInvoices { [weak self] result in
+            DispatchQueue.main.async {
+                self?.isLoadingInvoices = false
+                switch result {
+                case .success(let response):
+                    let raw = response?.data ?? []
+                    let v = self?.vendors ?? []; let d = DepartmentsData.all
+                    let invoices = raw.map { $0.toInvoice(vendors: v, departments: d) }
+                    self?.invoices = invoices
+                    self?.updateInvoiceApproverStatus()
+                    print("✅ Loaded \(invoices.count) approval-queue invoices")
+                case .failure(let error):
+                    print("❌ Fetch approval-queue invoices failed: \(error)")
+                }
+                onComplete?()
+            }
+        }.urlDataTask?.resume()
+    }
+
+    /// "My Invoices" tab — invoices raised / uploaded by the current
+    /// user. Server does the filter so the client stores the result
+    /// directly in `self.invoices`.
+    func loadMyInvoices(onComplete: (() -> Void)? = nil) {
+        isLoadingInvoices = true
+        POCodableTask.fetchMyInvoices { [weak self] result in
+            DispatchQueue.main.async {
+                self?.isLoadingInvoices = false
+                switch result {
+                case .success(let response):
+                    let raw = response?.data ?? []
+                    let v = self?.vendors ?? []; let d = DepartmentsData.all
+                    let invoices = raw.map { $0.toInvoice(vendors: v, departments: d) }
+                    self?.invoices = invoices
+                    self?.updateInvoiceApproverStatus()
+                    print("✅ Loaded \(invoices.count) my-invoices")
+                case .failure(let error):
+                    print("❌ Fetch my invoices failed: \(error)")
+                }
+                onComplete?()
+            }
+        }.urlDataTask?.resume()
+    }
+
+    /// "My Department" tab — invoices scoped by `?department_id=…`.
+    /// Falls back to the current user's department when no id is
+    /// passed. Clears the list early when no department resolves so
+    /// the UI doesn't show stale data from the previous tab.
+    func loadDepartmentInvoices(departmentId: String? = nil, onComplete: (() -> Void)? = nil) {
+        let deptId = (departmentId?.isEmpty == false)
+            ? (departmentId ?? "")
+            : (currentUser?.departmentId ?? "")
+        guard !deptId.isEmpty else {
+            invoices = []
+            isLoadingInvoices = false
+            onComplete?()
+            return
+        }
+        isLoadingInvoices = true
+        let path = "/api/v2/invoices?perPage=200&department_id=\(deptId)"
+        POCodableTask.fetchInvoices(path) { [weak self] result in
+            DispatchQueue.main.async {
+                self?.isLoadingInvoices = false
+                switch result {
+                case .success(let response):
+                    let raw = response?.data ?? []
+                    let v = self?.vendors ?? []; let d = DepartmentsData.all
+                    let invoices = raw.map { $0.toInvoice(vendors: v, departments: d) }
+                    self?.invoices = invoices
+                    self?.updateInvoiceApproverStatus()
+                    print("✅ Loaded \(invoices.count) department invoices (\(deptId))")
+                case .failure(let error):
+                    print("❌ Fetch department invoices failed: \(error)")
+                }
+                onComplete?()
+            }
+        }.urlDataTask?.resume()
+    }
+
+    /// Dispatches to the correct per-tab loader for the currently
+    /// active invoice tab + user role. Mirrors `refreshCurrentTab()`
+    /// on the PO side and drives every post-mutation refresh
+    /// (approve / reject / delete / upload) so the UI honours
+    /// whichever endpoint populated the visible data.
+    func refreshCurrentInvoiceTab() {
+        let acct = currentUser?.isAccountant == true
+        switch activeInvoiceTab {
+        case .all:
+            if acct { loadInvoices() } else { loadApprovalQueueInvoices() }
+        case .my:
+            loadMyInvoices()
+        case .department:
+            loadDepartmentInvoices()
+        }
+    }
+
+    /// Fetches a single invoice by id (`GET /api/v2/invoices/{id}`) and
+    /// replaces the cached copy in `self.invoices`. The list endpoint
+    /// occasionally omits the `attachments` array — this call always
+    /// returns the full row, so the detail page can resolve the real
+    /// `stored_filename` and render the uploaded document.
+    ///
+    /// `isRefreshingInvoice` flips while the call is in flight so the
+    /// detail page can show a loader — matches the pattern used by
+    /// other tab-level refreshes across the app.
+    func refreshInvoice(_ id: String, onComplete: (() -> Void)? = nil) {
+        isRefreshingInvoice = true
+        POCodableTask.fetchInvoice(id) { [weak self] result in
+            DispatchQueue.main.async {
+                self?.isRefreshingInvoice = false
+                switch result {
+                case .success(let response):
+                    if let raw = response?.data {
+                        let v = self?.vendors ?? []
+                        let d = DepartmentsData.all
+                        let fresh = raw.toInvoice(vendors: v, departments: d)
+                        if let idx = self?.invoices.firstIndex(where: { $0.id == fresh.id }) {
+                            self?.invoices[idx] = fresh
+                        } else {
+                            self?.invoices.append(fresh)
+                        }
+                        print("✅ Refreshed invoice \(id) — file: \(fresh.file ?? "—")")
+                    }
+                case .failure(let error):
+                    print("❌ Fetch invoice \(id) failed: \(error)")
+                }
+                onComplete?()
             }
         }.urlDataTask?.resume()
     }
@@ -905,6 +1032,33 @@ extension POViewModel {
         }.urlDataTask?.resume()
     }
 
+    /// Marks a vendor as verified via `POST /api/v2/vendors/{id}/verify`.
+    /// On success the vendor's `verified` flag is flipped in the local
+    /// list immediately so the detail page reflects the change without
+    /// a full reload. `onComplete` delivers `true` on success, `false`
+    /// on any network or server error.
+    func verifyVendor(_ id: String, onComplete: @escaping (Bool) -> Void) {
+        POCodableTask.verifyVendor(id) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    print("✅ Vendor verified: \(id)")
+                    // Set verifiedAt to now so the computed `verified`
+                    // property flips to true immediately while the reload
+                    // fetches the authoritative server value.
+                    if let idx = self?.vendors.firstIndex(where: { $0.id == id }) {
+                        self?.vendors[idx].verifiedAt = Int(Date().timeIntervalSince1970 * 1000)
+                    }
+                    self?.loadVendors()
+                    onComplete(true)
+                case .failure(let error):
+                    print("❌ Verify vendor failed: \(error)")
+                    onComplete(false)
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
     func deleteVendor(_ id: String) {
         POCodableTask.deleteVendor(id) { [weak self] result in
             DispatchQueue.main.async {
@@ -983,7 +1137,7 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    self?.loadInvoices(); self?.selectedInvoice = nil
+                    self?.refreshCurrentInvoiceTab(); self?.selectedInvoice = nil
                 case .failure(let error):
                     print("❌ Approve invoice failed: \(error)")
                 }
@@ -993,12 +1147,15 @@ extension POViewModel {
 
     func rejectInvoice() {
         guard let t = rejectInvoiceTarget, !rejectInvoiceReason.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-        let body: [String: Any] = ["rejection_reason": rejectInvoiceReason.trimmingCharacters(in: .whitespaces)]
+        // Server now expects `{ reason }` on `/invoices/{id}/reject`
+        // (see invoices-server validator Apr 2026). The older
+        // `rejection_reason` key was silently ignored.
+        let body: [String: Any] = ["reason": rejectInvoiceReason.trimmingCharacters(in: .whitespaces)]
         POCodableTask.rejectInvoice(t.id, body) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    self?.loadInvoices(); self?.rejectInvoiceTarget = nil
+                    self?.refreshCurrentInvoiceTab(); self?.rejectInvoiceTarget = nil
                     self?.rejectInvoiceReason = ""; self?.showRejectInvoiceSheet = false
                     self?.selectedInvoice = nil
                 case .failure(let error):
@@ -1020,7 +1177,7 @@ extension POViewModel {
                 case .success:
                     print("✅ Invoice deleted")
                     self?.deleteInvoiceTarget = nil
-                    self?.loadInvoices()
+                    self?.refreshCurrentInvoiceTab()
                 case .failure(let error):
                     print("❌ Delete invoice failed: \(error)")
                 }
@@ -1034,7 +1191,7 @@ extension POViewModel {
                 switch result {
                 case .success:
                     print("✅ Invoice submitted")
-                    self?.loadInvoices()
+                    self?.refreshCurrentInvoiceTab()
                     completion(true, nil)
                 case .failure(let error):
                     print("❌ Submit invoice failed: \(error)")
@@ -1044,18 +1201,103 @@ extension POViewModel {
         }.urlDataTask?.resume()
     }
 
-    /// Accounts team: move invoice from inbox → approval (sends to approval chain)
-    func processInvoice(_ inv: Invoice) {
-        guard currentUser?.isAccountant == true else { return }
-        let body: [String: Any] = ["status": "approval"]
-        POCodableTask.updateInvoice(inv.id, body) { [weak self] result in
+    /// Accounts team: move invoice from inbox → approval (sends to
+    /// approval chain). Now routes through the server's dedicated
+    /// `POST /invoices/{id}/send-to-approval` endpoint (Apr 2026).
+    /// The old `PATCH { status: "approval" }` path left any prior
+    /// approvals in place; the new route resets them so the tier
+    /// chain starts clean.
+    func processInvoice(_ inv: Invoice,
+                        onComplete: ((Bool, String?) -> Void)? = nil) {
+        guard currentUser?.isAccountant == true else {
+            onComplete?(false, "Only accountants can send invoices to approval.")
+            return
+        }
+        POCodableTask.sendInvoiceToApproval(inv.id) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Invoice processed → approval")
-                    self?.loadInvoices()
+                    print("✅ Invoice sent to approval (\(inv.id))")
+                    self?.refreshCurrentInvoiceTab()
+                    onComplete?(true, nil)
                 case .failure(let error):
-                    print("❌ Process invoice failed: \(error)")
+                    print("❌ Send invoice to approval failed: \(error)")
+                    onComplete?(false, error.localizedDescription)
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    /// Put an invoice on hold. `reason` is required by the server
+    /// validator; `note` is optional additional context. The server
+    /// snapshots the current status into `previous_status` so
+    /// `releaseInvoiceHold` can restore it.
+    func holdInvoice(_ inv: Invoice,
+                     reason: String,
+                     note: String? = nil,
+                     onComplete: ((Bool, String?) -> Void)? = nil) {
+        let trimmedReason = reason.trimmingCharacters(in: .whitespaces)
+        guard !trimmedReason.isEmpty else {
+            onComplete?(false, "Hold reason is required.")
+            return
+        }
+        var body: [String: Any] = ["hold_reason": trimmedReason]
+        if let n = note?.trimmingCharacters(in: .whitespaces), !n.isEmpty {
+            body["hold_note"] = n
+        }
+        POCodableTask.holdInvoice(inv.id, body) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    print("✅ Invoice held (\(inv.id))")
+                    self?.refreshCurrentInvoiceTab()
+                    onComplete?(true, nil)
+                case .failure(let error):
+                    print("❌ Hold invoice failed: \(error)")
+                    onComplete?(false, error.localizedDescription)
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    /// Release an invoice from hold — server restores it to
+    /// `previous_status` (the snapshot taken at Hold time).
+    func releaseInvoiceHold(_ inv: Invoice,
+                            onComplete: ((Bool, String?) -> Void)? = nil) {
+        POCodableTask.releaseInvoiceHold(inv.id) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    print("✅ Invoice released (\(inv.id))")
+                    self?.refreshCurrentInvoiceTab()
+                    onComplete?(true, nil)
+                case .failure(let error):
+                    print("❌ Release invoice failed: \(error)")
+                    onComplete?(false, error.localizedDescription)
+                }
+            }
+        }.urlDataTask?.resume()
+    }
+
+    /// Accountant-only: post an approved (or override-approved)
+    /// invoice to the ledger, moving it to `ready_to_pay` so a
+    /// payment run can pick it up.
+    func postInvoiceToLedger(_ inv: Invoice,
+                             onComplete: ((Bool, String?) -> Void)? = nil) {
+        guard currentUser?.isAccountant == true else {
+            onComplete?(false, "Only accountants can post invoices.")
+            return
+        }
+        POCodableTask.postInvoiceToLedger(inv.id) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    print("✅ Invoice posted to ledger (\(inv.id))")
+                    self?.refreshCurrentInvoiceTab()
+                    onComplete?(true, nil)
+                case .failure(let error):
+                    print("❌ Post invoice failed: \(error)")
+                    onComplete?(false, error.localizedDescription)
                 }
             }
         }.urlDataTask?.resume()
@@ -1246,8 +1488,12 @@ extension POViewModel {
         uploadError = nil
         uploadExtraction = nil
         uploadId = nil
+        // Upload goes to the invoices microservice on its dedicated
+        // base URL (localhost:3004 in dev) — same host that serves
+        // the rest of the `/api/v2/invoices/*` routes.
         guard let req = APIClient.shared.buildMultipartRequest(
-            "/api/v2/invoices/upload", fileData: data, fileName: fileName, mimeType: mimeType, fieldName: "file"
+            "\(PORequest.baseURL)/api/v2/invoices/upload",
+            fileData: data, fileName: fileName, mimeType: mimeType, fieldName: "file"
         ) else {
             uploadError = "Failed to build upload request"; uploading = false; return
         }
@@ -1290,8 +1536,11 @@ extension POViewModel {
             "status": "inbox",
         ]
         body["gross_amount"] = gross
-        if net > 0 { body["net_amount"] = net }
-        if vat > 0 { body["vat_amount"] = vat }
+        // `net_amount` / `vat_amount` / `vat_rate` are deprecated on
+        // the invoice create endpoint — the server now strips them
+        // via the validator (see invoices-server validator update
+        // Apr 2026). Gross is the single source of truth; per-line
+        // tax comes from the line item's `tax_type` / `tax_rate`.
         if let d = ext.invoiceDate, !d.isEmpty { body["invoice_date"] = d }
         if let d = ext.dueDate, !d.isEmpty { body["due_date"] = d }
         if let n = ext.invoiceNumber, !n.isEmpty { body["invoice_number"] = n }
@@ -1329,7 +1578,7 @@ extension POViewModel {
                 switch result {
                 case .success:
                     self?.uploadSubmitted = true; self?.uploadSubmitting = false; self?.showTypeSelect = false
-                    self?.loadInvoices()
+                    self?.refreshCurrentInvoiceTab()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { self?.closeInvoiceUpload() }
                 case .failure(let error):
                     self?.uploadError = error.localizedDescription; self?.uploadSubmitting = false

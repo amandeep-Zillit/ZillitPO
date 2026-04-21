@@ -61,6 +61,9 @@ enum CardExpenseRequest {
     case getReceipt(String)                                // id
     case fetchReceiptDetail(String)                        // id → /receipts/{id}/detail
 
+    // MARK: - Approval Tiers (card expenses)
+    case fetchCardApprovalTiers
+
     // MARK: - Bank Accounts
     case fetchBankAccounts
 
@@ -250,6 +253,19 @@ case .fetchMyReceipts:
 
         case .fetchReceiptDetail(let id):
             return buildLocal(.get, "/api/v2/card-expenses/receipts/\(id)/detail")
+
+        // MARK: Approval Tiers (card expenses)
+        case .fetchCardApprovalTiers:
+            let path = "/api/v2/account-hub/approval-tiers?module=card_expenses"
+            guard let u = URL(string: "\(CardExpenseRequest.accountHubBaseURL)\(path)") else { return nil }
+            var req = URLRequest(url: u)
+            req.httpMethod = "GET"
+            req.timeoutInterval = 30
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.setValue(APIClient.shared.projectId, forHTTPHeaderField: "x-project-id")
+            req.setValue(APIClient.shared.userId, forHTTPHeaderField: "x-user-id")
+            req.setValue(String(APIClient.shared.isAccountant), forHTTPHeaderField: "x-is-accountant")
+            return req
 
         // MARK: Bank Accounts
         case .fetchBankAccounts:

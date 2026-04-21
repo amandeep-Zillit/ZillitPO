@@ -3,34 +3,22 @@ import SwiftUI
 // ═══════════════════════════════════════════════════════════════════
 // MARK: - DateFieldView (reusable)
 //
-// Behaviour the caller asked for (no compromises):
-//   1. Tap empty field → iOS's native compact calendar floats below.
-//      The outer `date` binding stays nil until the user actually
-//      selects a date — the field does NOT pre-fill today on tap.
-//   2. User picks a date → calendar closes automatically and the
-//      field fills with the picked date.
-//   3. Selected date renders in our custom `dd/MM/yyyy` format (not
-//      the locale-default "17 Apr 2026" iOS would show).
-//
-// Implementation:
-//   • The native compact DatePicker sits behind our visible text as a
-//     hit-testable — but invisible — layer. Visibility is killed via
-//     `.colorMultiply(.clear)`, which zeros the picker's RENDER output
-//     without altering its view hierarchy, window anchor, or hit
-//     testing. Previous versions used `.opacity(0.02)` / `.scaleEffect`
-//     / `.id()` recreation — all of those crashed UIKit's targeted-
-//     preview presenter ("view is in a window"). `colorMultiply` does
-//     not, because it only modifies the composite colour output.
-//   • Our visible overlay text (placeholder or formatted date) sits on
-//     top with `allowsHitTesting(false)` so taps pass straight through
-//     to the picker behind.
-//   • When the user picks a date, iOS's setter fires on our binding
-//     which commits to `date` AND bumps an internal `@State` so the
-//     picker view is recreated on the next render — recreating the
-//     picker is what dismisses its still-open popover (the only way
-//     to programmatically close a compact DatePicker's calendar). The
-//     recreation is deferred via `DispatchQueue.main.async` so UIKit
-//     has finished its own selection-handling pass first.
+// Behaviour (Apr 2026 redesign):
+//   1. Visual: matches `InputField` siblings exactly — same font size
+//      (13), padding (10h × 9v), corner radius (6), background
+//      (`bgSurface`), and border (`borderColor`) regardless of whether
+//      a date is set. Picked dates render bold; placeholder renders in
+//      grey. A trailing `chevron.down` mirrors `PickerField`.
+//   2. The whole field is tappable — a wrapping `Button` with
+//      `PlainButtonStyle` covers the entire row, so taps on the icon,
+//      label, or empty space all open the calendar.
+//   3. Tap opens a BOTTOM SHEET with a graphical calendar. On iOS 16+
+//      the sheet uses `.presentationDetents([.medium])` so it takes
+//      roughly half the screen. Earlier iOS presents a full sheet.
+//   4. The sheet has Cancel / Done nav buttons. "Done" commits the
+//      date; "Cancel" leaves the outer binding untouched.
+//   5. When a date is set, a small `xmark.circle.fill` appears to
+//      clear it (same affordance as before).
 // ═══════════════════════════════════════════════════════════════════
 
 struct DateField: View {
@@ -42,29 +30,16 @@ struct DateField: View {
     // MARK: - Customisation
 
     var placeholder: String = "Select a date"
-    var formatHint: String = "dd/mm/yyyy"
     var displayFormat: String = "dd/MM/yyyy"
     var minDate: Date? = nil
     var maxDate: Date? = nil
     var navigationTitle: String = "Select Date"
-    var horizontalPadding: CGFloat = 10
-    /// Vertical padding — defaults to 4pt because the native compact
-    /// DatePicker has an intrinsic height of ~32pt. Padding of 4pt on
-    /// each side gives a total field height of ~40pt, matching the
-    /// common `TextField` pattern `padding(10)` (20pt text + 20pt
-    /// padding = 40pt). Callers whose neighbouring input uses
-    /// different padding can override this.
-    var verticalPadding: CGFloat = 4
-    var cornerRadius: CGFloat = 6
 
     // MARK: - Local state
 
-    /// Bumped after every successful pick to force the DatePicker view
-    /// to recreate on the next render. Swapping the `.id` destroys the
-    /// previous picker — which is what dismisses its popover. The bump
-    /// happens on the next run-loop tick so it doesn't fight UIKit's
-    /// ongoing selection handling.
-    @State private var pickerKey: Int = 0
+    @State private var showSheet = false
+    /// Staging copy edited inside the sheet. Committed to `date` on Done.
+    @State private var tempDate: Date = Date()
 
     private var dateFormatter: DateFormatter {
         let f = DateFormatter()
@@ -74,137 +49,143 @@ struct DateField: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: date != nil ? "calendar" : "calendar.badge.plus")
-                .font(.system(size: 14))
-                .foregroundColor(date != nil ? .goldDark : .gray)
+        Button(action: openSheet) {
+            HStack(spacing: 6) {
+                Image(systemName: date != nil ? "calendar" : "calendar.badge.plus")
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+                    .layoutPriority(-1)   // icon yields first if the row is tight
 
-            pickerStack
-
-            Spacer(minLength: 0)
-
-            if date != nil {
-                Button(action: { date = nil }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 16))
-                        .foregroundColor(.gray.opacity(0.55))
-                }.buttonStyle(BorderlessButtonStyle())
-            }
-        }
-        .padding(.horizontal, horizontalPadding)
-        .padding(.vertical, verticalPadding)
-        .background(date != nil ? Color.gold.opacity(0.06) : Color.bgSurface)
-        .cornerRadius(cornerRadius)
-        .overlay(
-            RoundedRectangle(cornerRadius: cornerRadius)
-                .stroke(date != nil ? Color.gold.opacity(0.3) : Color.borderColor,
-                        lineWidth: 1)
-        )
-    }
-
-    // MARK: - Picker stack
-
-    /// Invisible native compact picker behind our visible placeholder/
-    /// date text. The picker receives the tap (native calendar floats
-    /// below); the text shows our custom format.
-    @ViewBuilder
-    private var pickerStack: some View {
-        if #available(iOS 14.0, *) {
-            ZStack(alignment: .leading) {
-                invisibleCompactPicker
-
-                // Visible overlay.
                 if let d = date {
+                    // The picked date gets the highest layout priority
+                    // so on small screens (iPhone SE / landscape) the
+                    // date wins the available width over the trailing
+                    // clear button. `minimumScaleFactor` lets the text
+                    // shrink to 75 % before SwiftUI would fall back to
+                    // truncating — at that scale "21/04/2026" still
+                    // fits in ≈ 66pt which clears the smallest cell.
                     Text(dateFormatter.string(from: d))
-                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                        .font(.system(size: 13, weight: .medium, design: .monospaced))
                         .foregroundColor(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .truncationMode(.tail)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(2)
+                } else {
+                    Text(placeholder)
+                        .font(.system(size: 13))
+                        .foregroundColor(.gray)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                         .truncationMode(.tail)
-                        .allowsHitTesting(false)
-                } else {
-                    HStack(spacing: 6) {
-                        Text(placeholder)
+                        .layoutPriority(1)
+                }
+
+                Spacer(minLength: 4)
+
+                if date != nil {
+                    // Inner clear button — matches the old component's
+                    // affordance. Buttons nested in SwiftUI Lists use
+                    // BorderlessButtonStyle so they fire their own
+                    // action instead of bubbling to the row button.
+                    Button(action: { date = nil }) {
+                        Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 14))
-                            .foregroundColor(.gray)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                            .truncationMode(.tail)
-                            .layoutPriority(1)
-                        Spacer(minLength: 4)
-                        Text(formatHint)
-                            .font(.system(size: 11, weight: .medium, design: .monospaced))
-                            .foregroundColor(.gray.opacity(0.5))
-                            .lineLimit(1)
-                            .layoutPriority(-1)
+                            .foregroundColor(.gray.opacity(0.55))
                     }
-                    .allowsHitTesting(false)
+                    .buttonStyle(BorderlessButtonStyle())
+                    .layoutPriority(-1)
+                } else {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.gray)
+                        .layoutPriority(-1)
                 }
             }
-        } else {
-            // iOS 13 — no compact style; fall back to a tap-to-reveal
-            // wheel picker pattern. The empty-state tap seeds today so
-            // the wheel has a value to render.
-            if let d = date {
-                DatePicker("", selection: Binding(
-                    get: { d }, set: { date = $0 }
-                ), displayedComponents: .date)
-                .labelsHidden()
-                .environment(\.locale, Locale(identifier: "en_GB"))
-            } else {
-                Button(action: { date = clampedToday() }) {
-                    HStack(spacing: 6) {
-                        Text(placeholder)
-                            .font(.system(size: 14))
-                            .foregroundColor(.gray)
-                            .lineLimit(1)
-                        Spacer(minLength: 4)
-                        Text(formatHint)
-                            .font(.system(size: 11, weight: .medium, design: .monospaced))
-                            .foregroundColor(.gray.opacity(0.5))
-                            .lineLimit(1)
-                    }
-                }.buttonStyle(BorderlessButtonStyle())
-            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
+            .background(Color.bgSurface)
+            .cornerRadius(6)
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
+            .contentShape(Rectangle())   // full row hit-tests, not just the text
+        }
+        .buttonStyle(PlainButtonStyle())
+        .sheet(isPresented: $showSheet) {
+            pickerSheet
         }
     }
 
-    /// The native compact DatePicker rendered invisibly via
-    /// `.colorMultiply(.clear)`. It is the HIT-TESTABLE layer — a tap
-    /// on the field area lands here and opens iOS's system calendar.
-    /// When the user picks a date inside the calendar:
-    ///   1. Setter writes the new value to the outer `date` binding.
-    ///   2. `pickerKey` is bumped on the next run-loop tick via
-    ///      `DispatchQueue.main.async`.
-    ///   3. The `.id(pickerKey)` modifier sees the new key and SwiftUI
-    ///      destroys + recreates the DatePicker — dismissing its still-
-    ///      open popover. This is the only reliable way to get the
-    ///      auto-close UX without tripping UIKit's internal presenter.
-    @available(iOS 14.0, *)
-    private var invisibleCompactPicker: some View {
-        let binding = Binding<Date>(
-            get: { date ?? clampedToday() },
-            set: { newValue in
-                date = newValue
-                DispatchQueue.main.async { pickerKey &+= 1 }
+    private func openSheet() {
+        tempDate = date ?? clampedToday()
+        showSheet = true
+    }
+
+    // MARK: - Bottom sheet
+
+    /// The calendar sheet content wrapped in `NavigationView` so it
+    /// carries a title + Cancel/Done buttons. On iOS 16+ it uses a
+    /// DYNAMIC height detent — sized from the currently-available
+    /// detent space (`CalendarDetent.height(in:)`) so the calendar
+    /// fits comfortably on every device from iPhone SE up to iPad:
+    ///
+    ///  • Screens < 700pt tall (SE, mini)   → ~78 % of available height
+    ///  • 700–850pt (std iPhones)           → ~65 %
+    ///  • ≥ 850pt (Pro Max, iPad)           → ~55 %
+    ///
+    /// A `.large` detent is always added so users who need the bigger
+    /// calendar can drag up. A drag indicator is shown for both.
+    /// Older iOS falls back to the default full-height sheet.
+    @ViewBuilder
+    private var pickerSheet: some View {
+        if #available(iOS 16.0, *) {
+            pickerSheetBody
+                .presentationDetents([.custom(CalendarDetent.self), .large])
+                .presentationDragIndicator(.visible)
+        } else {
+            pickerSheetBody
+        }
+    }
+
+    private var pickerSheetBody: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                pickerBody
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
+                Spacer(minLength: 0)
             }
-        )
-        return rangedPicker(binding: binding)
-            .datePickerStyle(CompactDatePickerStyle())
-            .labelsHidden()
-            .accentColor(.goldDark)
-            .environment(\.locale, Locale(identifier: "en_GB"))
-            // `.colorMultiply(.clear)` = all render output × 0 alpha.
-            // Safe for UIKit's compact picker because it's a render
-            // modifier, not a hierarchy / opacity / window change.
-            .colorMultiply(.clear)
-            // Stretch horizontally so the picker's hit area covers the
-            // full field width, not just its natural pill. The compact
-            // DatePicker respects `maxWidth: .infinity` in iOS 14+ and
-            // expands its button/tap target across the whole cell —
-            // so tapping ANYWHERE in the field opens the calendar.
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .id(pickerKey)
+            .background(Color.bgBase.edgesIgnoringSafeArea(.all))
+            .navigationBarTitle(Text(navigationTitle), displayMode: .inline)
+            .navigationBarItems(
+                leading: Button("Cancel") { showSheet = false },
+                trailing: Button(action: {
+                    date = tempDate
+                    showSheet = false
+                }) {
+                    Text("Done").fontWeight(.semibold)
+                }
+            )
+        }
+    }
+
+    /// Renders a graphical calendar on iOS 14+ (matches the Close-PO
+    /// sheet and other date fields in the app); wheel style on iOS 13
+    /// where GraphicalDatePickerStyle isn't available.
+    @ViewBuilder
+    private var pickerBody: some View {
+        if #available(iOS 14.0, *) {
+            rangedPicker(binding: $tempDate)
+                .datePickerStyle(GraphicalDatePickerStyle())
+                .labelsHidden()
+                .accentColor(.goldDark)
+                .environment(\.locale, Locale(identifier: "en_GB"))
+        } else {
+            rangedPicker(binding: $tempDate)
+                .datePickerStyle(WheelDatePickerStyle())
+                .labelsHidden()
+                .environment(\.locale, Locale(identifier: "en_GB"))
+        }
     }
 
     @ViewBuilder
@@ -226,6 +207,37 @@ struct DateField: View {
         if let min = minDate, d < min { d = min }
         if let max = maxDate, d > max { d = max }
         return d
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MARK: - Custom presentation detent (iOS 16+)
+//
+// Scales the calendar sheet height to the current device so the
+// GraphicalDatePicker (which has ~420pt intrinsic content) is always
+// fully visible without wasted vertical whitespace.
+//
+// `context.maxDetentValue` is the height SwiftUI is willing to allot
+// a sheet on the current device (safe-area adjusted). We pick a
+// fraction of that based on screen size class — smaller phones need a
+// larger proportion so the calendar doesn't get clipped by the Done /
+// Cancel bar, while bigger phones and iPads can afford a tighter fit.
+// ═══════════════════════════════════════════════════════════════════
+
+@available(iOS 16.0, *)
+private struct CalendarDetent: CustomPresentationDetent {
+    static func height(in context: Context) -> CGFloat? {
+        let max = context.maxDetentValue
+        // Guardrail: the calendar header + grid + nav bar won't render
+        // properly under ~420pt; bump smaller screens up proportionally.
+        let minimum: CGFloat = 420
+        let fraction: CGFloat
+        switch max {
+        case ..<700:   fraction = 0.82   // iPhone SE / mini / landscape phones
+        case ..<850:   fraction = 0.65   // Standard iPhones
+        default:       fraction = 0.55   // Pro Max / iPad
+        }
+        return Swift.max(minimum, max * fraction)
     }
 }
 

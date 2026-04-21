@@ -11,6 +11,7 @@ enum POCodableTask {
     case createVendor([String: Any], (Result<Data?, Error>) -> Void)
     case updateVendor(String, [String: Any], (Result<Data?, Error>) -> Void)
     case deleteVendor(String, (Result<Data?, Error>) -> Void)
+    case verifyVendor(String, (Result<Data?, Error>) -> Void)
     case fetchVendorHistory(String, (Result<APIResponse<[InvoiceHistoryEntry]>?, Error>) -> Void)
 
     // MARK: - Approval Tiers (typed response)
@@ -46,11 +47,18 @@ enum POCodableTask {
 
     // MARK: - Invoices (typed responses)
     case fetchInvoices(String, (Result<APIResponse<[InvoiceRaw]>?, Error>) -> Void)
+    case fetchInvoice(String, (Result<APIResponse<InvoiceRaw>?, Error>) -> Void)
+    case fetchApprovalQueueInvoices((Result<APIResponse<[InvoiceRaw]>?, Error>) -> Void)
+    case fetchMyInvoices((Result<APIResponse<[InvoiceRaw]>?, Error>) -> Void)
     case createInvoice([String: Any], (Result<Data?, Error>) -> Void)
     case updateInvoice(String, [String: Any], (Result<Data?, Error>) -> Void)
     case deleteInvoice(String, (Result<Data?, Error>) -> Void)
     case approveInvoice(String, [String: Any], (Result<Data?, Error>) -> Void)
     case rejectInvoice(String, [String: Any], (Result<Data?, Error>) -> Void)
+    case holdInvoice(String, [String: Any], (Result<Data?, Error>) -> Void)
+    case releaseInvoiceHold(String, (Result<Data?, Error>) -> Void)
+    case sendInvoiceToApproval(String, (Result<Data?, Error>) -> Void)
+    case postInvoiceToLedger(String, (Result<Data?, Error>) -> Void)
     case fetchInvoiceHistory(String, (Result<APIResponse<[InvoiceHistoryEntry]>?, Error>) -> Void)
     case fetchInvoiceQueries(String, (Result<APIResponse<InvoiceQueryThread>?, Error>) -> Void)
 
@@ -88,6 +96,10 @@ extension POCodableTask: PODataTaskProtocol {
 
         case .deleteVendor(let id, let completion):
             guard let urlRequest = PORequest.deleteVendor(id).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
+
+        case .verifyVendor(let id, let completion):
+            guard let urlRequest = PORequest.verifyVendor(id).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
 
         case .fetchVendorHistory(let id, let completion):
@@ -191,6 +203,18 @@ extension POCodableTask: PODataTaskProtocol {
             guard let urlRequest = PORequest.fetchInvoices(path).urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
 
+        case .fetchInvoice(let id, let completion):
+            guard let urlRequest = PORequest.fetchInvoice(id).urlRequest else { return nil }
+            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+
+        case .fetchApprovalQueueInvoices(let completion):
+            guard let urlRequest = PORequest.fetchApprovalQueueInvoices.urlRequest else { return nil }
+            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+
+        case .fetchMyInvoices(let completion):
+            guard let urlRequest = PORequest.fetchMyInvoices.urlRequest else { return nil }
+            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+
         case .createInvoice(let body, let completion):
             guard let urlRequest = PORequest.createInvoice(body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
@@ -209,6 +233,22 @@ extension POCodableTask: PODataTaskProtocol {
 
         case .rejectInvoice(let id, let body, let completion):
             guard let urlRequest = PORequest.rejectInvoice(id, body).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
+
+        case .holdInvoice(let id, let body, let completion):
+            guard let urlRequest = PORequest.holdInvoice(id, body).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
+
+        case .releaseInvoiceHold(let id, let completion):
+            guard let urlRequest = PORequest.releaseInvoiceHold(id).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
+
+        case .sendInvoiceToApproval(let id, let completion):
+            guard let urlRequest = PORequest.sendInvoiceToApproval(id).urlRequest else { return nil }
+            return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
+
+        case .postInvoiceToLedger(let id, let completion):
+            guard let urlRequest = PORequest.postInvoiceToLedger(id).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
 
         case .fetchInvoiceHistory(let id, let completion):

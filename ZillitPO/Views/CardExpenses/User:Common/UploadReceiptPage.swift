@@ -76,22 +76,49 @@ struct UploadReceiptPage: View {
         .alert(isPresented: $showError) {
             Alert(title: Text("Error"), message: Text(uploadError ?? "Unknown error"), dismissButton: .default(Text("OK")))
         }
-        .appActionSheet(title: "Category", isPresented: $showCategorySheet, items:
-            claimCategories.map { c in
-                .action(c.1) {
-                    if drafts.indices.contains(activeDraftIdx) { drafts[activeDraftIdx].category = c.0 }
-                }
-            }
-        )
-        .appActionSheet(title: "Budget Code", isPresented: $showCodeSheet, items:
-            [.action("None") {
-                if drafts.indices.contains(activeDraftIdx) { drafts[activeDraftIdx].budgetCode = "" }
-            }] + costCodeOptions.map { c in
-                .action(c.1) {
-                    if drafts.indices.contains(activeDraftIdx) { drafts[activeDraftIdx].budgetCode = c.0 }
-                }
-            }
-        )
+        // Category → searchable bottom sheet (matches the cost-code
+        // picker below and the PO-side pickers). Writes the selected
+        // category back to the currently-active receipt draft via
+        // `activeDraftIdx`.
+        .sheet(isPresented: $showCategorySheet) {
+            PickerSheetView(
+                selection: Binding<String>(
+                    get: {
+                        drafts.indices.contains(activeDraftIdx)
+                            ? drafts[activeDraftIdx].category : ""
+                    },
+                    set: { newValue in
+                        if drafts.indices.contains(activeDraftIdx) {
+                            drafts[activeDraftIdx].category = newValue
+                        }
+                    }
+                ),
+                options: claimCategories.map { DropdownOption($0.0, $0.1) },
+                isPresented: $showCategorySheet
+            )
+        }
+        // Budget / Cost Code → searchable bottom sheet (matches the
+        // picker pattern on the PO side and the EditCardTransaction
+        // page). Writes the selected code back to the currently-active
+        // draft via `activeDraftIdx`.
+        .sheet(isPresented: $showCodeSheet) {
+            PickerSheetView(
+                selection: Binding<String>(
+                    get: {
+                        drafts.indices.contains(activeDraftIdx)
+                            ? drafts[activeDraftIdx].budgetCode : ""
+                    },
+                    set: { newValue in
+                        if drafts.indices.contains(activeDraftIdx) {
+                            drafts[activeDraftIdx].budgetCode = newValue
+                        }
+                    }
+                ),
+                options: [DropdownOption("", "None")]
+                    + costCodeOptions.map { DropdownOption($0.0, $0.1) },
+                isPresented: $showCodeSheet
+            )
+        }
     }
 
     @ViewBuilder

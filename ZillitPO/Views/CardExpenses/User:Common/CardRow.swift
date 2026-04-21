@@ -19,7 +19,14 @@ struct CardRow: View {
     var onActivate: (() -> Void)? = nil
 
     private var displayBankName: String { resolvedBankName ?? card.bankName }
-    private var totalTiers: Int { max(tierCount, (card.approvals ?? []).count + (card.status == "pending" ? 1 : 0)) }
+    // Only show a fraction when the tier count was actually resolved from the
+    // tier config at the call site (tierCount > 0). The old formula added +1
+    // whenever a card was "pending" to ensure a non-zero value, but that
+    // produced misleading "(0/1)" badges for cards whose config wasn't loaded.
+    private var totalTiers: Int {
+        guard tierCount > 0 else { return 0 }
+        return max(tierCount, (card.approvals ?? []).count)
+    }
     private var approvedCount: Int { (card.approvals ?? []).count }
 
     var body: some View {
