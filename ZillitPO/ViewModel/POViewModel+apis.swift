@@ -17,7 +17,7 @@ extension POViewModel {
                 switch result {
                 case .success(let response):
                     self?.vendors = response?.data ?? []
-                    print("✅ Loaded \(self?.vendors.count ?? 0) vendors")
+                    debugPrint("✅ Loaded \(self?.vendors.count ?? 0) vendors")
                     // Re-hydrate vendor display fields on any POs / drafts
                     // that were mapped BEFORE vendors finished loading.
                     // Without this, the All Purchase Orders list shows blank
@@ -28,7 +28,7 @@ extension POViewModel {
                     // from the fresh list.
                     self?.hydrateVendorDisplayFields()
                 case .failure(let error):
-                    print("❌ Fetch vendors failed: \(error)")
+                    debugPrint("❌ Fetch vendors failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -41,9 +41,9 @@ extension POViewModel {
     /// list no longer waits for the next full reload to populate.
     private func hydrateVendorDisplayFields() {
         guard !vendors.isEmpty else { return }
-        let byId: [String: Vendor] = Dictionary(uniqueKeysWithValues: vendors.compactMap { v in
-            // Vendors are Identifiable so the id field is always present.
-            (v.id, v)
+        let byId: [String: Vendor] = Dictionary(uniqueKeysWithValues: vendors.compactMap { v -> (String, Vendor)? in
+            guard let id = v.id else { return nil }
+            return (id, v)
         })
         func patch(_ list: [PurchaseOrder]) -> [PurchaseOrder] {
             list.map { po -> PurchaseOrder in
@@ -94,9 +94,9 @@ extension POViewModel {
                 switch result {
                 case .success(let response):
                     self?.vendors = response?.data ?? []
-                    print("✅ Loaded \(self?.vendors.count ?? 0) vendors")
+                    debugPrint("✅ Loaded \(self?.vendors.count ?? 0) vendors")
                 case .failure(let error):
-                    print("❌ Fetch vendors failed: \(error)")
+                    debugPrint("❌ Fetch vendors failed: \(error)")
                 }
                 group.leave()
             }
@@ -110,13 +110,13 @@ extension POViewModel {
                 switch result {
                 case .success(let response):
                     self?.tierConfigRows = response?.data ?? []
-                    print("✅ Loaded \(self?.tierConfigRows.count ?? 0) tier configs")
+                    debugPrint("✅ Loaded \(self?.tierConfigRows.count ?? 0) tier configs")
                     // Debug: log tier details for pending count resolution
                     for row in self?.tierConfigRows ?? [] {
-                        print("  📌 Tier scope=\(row.scope ?? "") deptId=\(row.departmentId ?? "nil") tiers=\(row.tiers?.count ?? 0)")
+                        debugPrint("  📌 Tier scope=\(row.scope ?? "") deptId=\(row.departmentId ?? "nil") tiers=\(row.tiers?.count ?? 0)")
                     }
                 case .failure(let error):
-                    print("❌ Fetch tier configs failed: \(error)")
+                    debugPrint("❌ Fetch tier configs failed: \(error)")
                 }
                 group.leave()
             }
@@ -130,16 +130,16 @@ extension POViewModel {
                 switch result {
                 case .success(let response):
                     self?.invoiceTierConfigRows = response?.data ?? []
-                    print("✅ Loaded \(self?.invoiceTierConfigRows.count ?? 0) invoice tier configs")
+                    debugPrint("✅ Loaded \(self?.invoiceTierConfigRows.count ?? 0) invoice tier configs")
                     for row in self?.invoiceTierConfigRows ?? [] {
-                        print("  📌 Invoice tier: module=\(row.module ?? "") scope=\(row.scope ?? "") deptId=\(row.departmentId ?? "nil") tiers=\(row.tiers?.count ?? 0)")
+                        debugPrint("  📌 Invoice tier: module=\(row.module ?? "") scope=\(row.scope ?? "") deptId=\(row.departmentId ?? "nil") tiers=\(row.tiers?.count ?? 0)")
                         for tier in row.tiers ?? [] {
                             let userIds = (tier.rules ?? []).flatMap { $0.userIds ?? [] }
-                            print("    🔹 Tier order=\(tier.order ?? 0) users=\(userIds)")
+                            debugPrint("    🔹 Tier order=\(tier.order ?? 0) users=\(userIds)")
                         }
                     }
                 case .failure(let error):
-                    print("❌ Fetch invoice tier configs failed: \(error)")
+                    debugPrint("❌ Fetch invoice tier configs failed: \(error)")
                 }
                 group.leave()
             }
@@ -161,9 +161,9 @@ extension POViewModel {
                 case .success(let response):
                     let tpl = response?.data
                     self?.floatFormTemplate = tpl
-                    print("📋 Float form template: \(tpl?.template?.count ?? 0) sections")
+                    debugPrint("📋 Float form template: \(tpl?.template?.count ?? 0) sections")
                 case .failure(let error):
-                    print("❌ Fetch float form template failed: \(error)")
+                    debugPrint("❌ Fetch float form template failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -176,9 +176,9 @@ extension POViewModel {
                 case .success(let response):
                     let tpl = response?.data
                     self?.formTemplate = tpl
-                    print("📋 Form template: \(tpl?.template?.count ?? 0) sections")
+                    debugPrint("📋 Form template: \(tpl?.template?.count ?? 0) sections")
                 case .failure(let error):
-                    print("❌ Fetch form template failed: \(error)")
+                    debugPrint("❌ Fetch form template failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -209,16 +209,18 @@ extension POViewModel {
                 case .success(let response):
                     let raw = response?.data ?? []
                     let v = self?.vendors ?? []; let d = DepartmentsData.all
-                    let pos = raw.filter { ($0.status ?? "") != "DRAFT" }.map { $0.toPO(vendors: v, departments: d) }
+                    let pos: [PurchaseOrder] = raw
+                        .filter { ($0.status ?? "") != "DRAFT" }
+                        .map { var p = $0; p.enrich(vendors: v, departments: d); return p }
                     self?.purchaseOrders = pos
-                    print("✅ Loaded \(pos.count) POs")
+                    debugPrint("✅ Loaded \(pos.count) POs")
                     // Debug: log PO VAT details
                     for p in pos.prefix(5) {
-                        let liVats = (p.lineItems ?? []).map { "\($0.id.prefix(6))=\($0.vatTreatment ?? "")" }
-                        print("  📥 PO \(p.poNumber ?? "") poVat=\(p.vatTreatment ?? "") amt=\(p.totalAmount) liVats=\(liVats)")
+                        let liVats = (p.lineItems ?? []).map { "\(($0.id ?? "").prefix(6))=\($0.vatTreatment ?? "")" }
+                        debugPrint("  📥 PO \(p.poNumber ?? "") poVat=\(p.vatTreatment ?? "") amt=\(p.totalAmount) liVats=\(liVats)")
                     }
                 case .failure(let error):
-                    print("❌ Fetch POs failed: \(error)")
+                    debugPrint("❌ Fetch POs failed: \(error)")
                 }
                 self?.isLoading = false
             }
@@ -243,12 +245,13 @@ extension POViewModel {
                     // Server already filters to non-DRAFT; we keep the
                     // belt-and-braces filter so stray drafts don't leak
                     // into the list if the backend changes.
-                    let pos = raw.filter { ($0.status ?? "") != "DRAFT" }
-                                 .map { $0.toPO(vendors: v, departments: d) }
+                    let pos: [PurchaseOrder] = raw
+                        .filter { ($0.status ?? "") != "DRAFT" }
+                        .map { var p = $0; p.enrich(vendors: v, departments: d); return p }
                     self?.purchaseOrders = pos
-                    print("✅ Loaded \(pos.count) approval-queue POs")
+                    debugPrint("✅ Loaded \(pos.count) approval-queue POs")
                 case .failure(let error):
-                    print("❌ Fetch approval queue failed: \(error)")
+                    debugPrint("❌ Fetch approval queue failed: \(error)")
                 }
                 self?.isLoading = false
                 onComplete?()
@@ -269,12 +272,13 @@ extension POViewModel {
                     let raw = response?.data ?? []
                     let v = self?.vendors ?? []
                     let d = DepartmentsData.all
-                    let pos = raw.filter { ($0.status ?? "") != "DRAFT" }
-                                 .map { $0.toPO(vendors: v, departments: d) }
+                    let pos: [PurchaseOrder] = raw
+                        .filter { ($0.status ?? "") != "DRAFT" }
+                        .map { var p = $0; p.enrich(vendors: v, departments: d); return p }
                     self?.purchaseOrders = pos
-                    print("✅ Loaded \(pos.count) my-POs")
+                    debugPrint("✅ Loaded \(pos.count) my-POs")
                 case .failure(let error):
-                    print("❌ Fetch my POs failed: \(error)")
+                    debugPrint("❌ Fetch my POs failed: \(error)")
                 }
                 self?.isLoading = false
                 onComplete?()
@@ -327,12 +331,13 @@ extension POViewModel {
                     let raw = response?.data ?? []
                     let v = self?.vendors ?? []
                     let d = DepartmentsData.all
-                    let pos = raw.filter { ($0.status ?? "") != "DRAFT" }
-                                 .map { $0.toPO(vendors: v, departments: d) }
+                    let pos: [PurchaseOrder] = raw
+                        .filter { ($0.status ?? "") != "DRAFT" }
+                        .map { var p = $0; p.enrich(vendors: v, departments: d); return p }
                     self?.purchaseOrders = pos
-                    print("✅ Loaded \(pos.count) department POs (\(deptId))")
+                    debugPrint("✅ Loaded \(pos.count) department POs (\(deptId))")
                 case .failure(let error):
-                    print("❌ Fetch department POs failed: \(error)")
+                    debugPrint("❌ Fetch department POs failed: \(error)")
                 }
                 self?.isLoading = false
                 onComplete?()
@@ -349,11 +354,11 @@ extension POViewModel {
                 case .success(let response):
                     let raw = response?.data ?? []
                     let v = self?.vendors ?? []; let d = DepartmentsData.all
-                    let drafts = raw.map { $0.toPO(vendors: v, departments: d) }
+                    let drafts: [PurchaseOrder] = raw.map { var p = $0; p.enrich(vendors: v, departments: d); return p }
                     self?.drafts = drafts
-                    print("✅ Loaded \(drafts.count) drafts")
+                    debugPrint("✅ Loaded \(drafts.count) drafts")
                 case .failure(let error):
-                    print("❌ Fetch drafts failed: \(error)")
+                    debugPrint("❌ Fetch drafts failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -368,9 +373,9 @@ extension POViewModel {
                 case .success(let response):
                     let t = response?.data ?? []
                     self?.templates = t
-                    print("📋 Templates: \(t.count)")
+                    debugPrint("📋 Templates: \(t.count)")
                 case .failure(let error):
-                    print("❌ Fetch templates failed: \(error)")
+                    debugPrint("❌ Fetch templates failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -386,25 +391,26 @@ extension POViewModel {
                 self?.isLoadingInvoices = false
                 switch result {
                 case .success(let response):
-                    let raw = response?.data ?? []
-                    let v = self?.vendors ?? []; let d = DepartmentsData.all
-                    let invoices = raw.map { $0.toInvoice(vendors: v, departments: d) }
+                    var invoices = response?.data ?? []
+                    let v = self?.vendors ?? []
+                    for i in invoices.indices {
+                        let vendor = v.first { $0.id == (invoices[i].vendorId ?? "") }
+                        invoices[i].enrich(vendor: vendor)
+                    }
                     self?.invoices = invoices
                     self?.updateInvoiceApproverStatus()
                     // Mirror the inline `history` array from each invoice row
                     // into the per-invoice history cache so the History page
                     // has data instantly, before (or instead of) the separate
                     // /history endpoint returns.
-                    for (idx, r) in raw.enumerated() where !(r.history?.isEmpty ?? true) {
-                        let id = invoices[idx].id
-                        // Sort newest-first for display consistency
-                        let sorted = (r.history ?? []).sorted { ($0.timestamp ?? 0) > ($1.timestamp ?? 0) }
-                        self?.invoiceHistory[id] = sorted
+                    for invoice in invoices where !(invoice.history?.isEmpty ?? true) {
+                        let sorted = (invoice.history ?? []).sorted { ($0.timestamp ?? 0) > ($1.timestamp ?? 0) }
+                        self?.invoiceHistory[invoice.id ?? ""] = sorted
                     }
                     let withFile = invoices.filter { ($0.file?.isEmpty == false) || ($0.uploadId?.isEmpty == false) }.count
-                    print("✅ Loaded \(invoices.count) invoices (\(withFile) with attachments)")
+                    debugPrint("✅ Loaded \(invoices.count) invoices (\(withFile) with attachments)")
                 case .failure(let error):
-                    print("❌ Fetch invoices failed: \(error)")
+                    debugPrint("❌ Fetch invoices failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -420,14 +426,16 @@ extension POViewModel {
                 self?.isLoadingInvoices = false
                 switch result {
                 case .success(let response):
-                    let raw = response?.data ?? []
-                    let v = self?.vendors ?? []; let d = DepartmentsData.all
-                    let invoices = raw.map { $0.toInvoice(vendors: v, departments: d) }
+                    var invoices = response?.data ?? []
+                    let v = self?.vendors ?? []
+                    for i in invoices.indices {
+                        invoices[i].enrich(vendor: v.first { $0.id == (invoices[i].vendorId ?? "") })
+                    }
                     self?.invoices = invoices
                     self?.updateInvoiceApproverStatus()
-                    print("✅ Loaded \(invoices.count) approval-queue invoices")
+                    debugPrint("✅ Loaded \(invoices.count) approval-queue invoices")
                 case .failure(let error):
-                    print("❌ Fetch approval-queue invoices failed: \(error)")
+                    debugPrint("❌ Fetch approval-queue invoices failed: \(error)")
                 }
                 onComplete?()
             }
@@ -444,14 +452,16 @@ extension POViewModel {
                 self?.isLoadingInvoices = false
                 switch result {
                 case .success(let response):
-                    let raw = response?.data ?? []
-                    let v = self?.vendors ?? []; let d = DepartmentsData.all
-                    let invoices = raw.map { $0.toInvoice(vendors: v, departments: d) }
+                    var invoices = response?.data ?? []
+                    let v = self?.vendors ?? []
+                    for i in invoices.indices {
+                        invoices[i].enrich(vendor: v.first { $0.id == (invoices[i].vendorId ?? "") })
+                    }
                     self?.invoices = invoices
                     self?.updateInvoiceApproverStatus()
-                    print("✅ Loaded \(invoices.count) my-invoices")
+                    debugPrint("✅ Loaded \(invoices.count) my-invoices")
                 case .failure(let error):
-                    print("❌ Fetch my invoices failed: \(error)")
+                    debugPrint("❌ Fetch my invoices failed: \(error)")
                 }
                 onComplete?()
             }
@@ -479,14 +489,16 @@ extension POViewModel {
                 self?.isLoadingInvoices = false
                 switch result {
                 case .success(let response):
-                    let raw = response?.data ?? []
-                    let v = self?.vendors ?? []; let d = DepartmentsData.all
-                    let invoices = raw.map { $0.toInvoice(vendors: v, departments: d) }
+                    var invoices = response?.data ?? []
+                    let v = self?.vendors ?? []
+                    for i in invoices.indices {
+                        invoices[i].enrich(vendor: v.first { $0.id == (invoices[i].vendorId ?? "") })
+                    }
                     self?.invoices = invoices
                     self?.updateInvoiceApproverStatus()
-                    print("✅ Loaded \(invoices.count) department invoices (\(deptId))")
+                    debugPrint("✅ Loaded \(invoices.count) department invoices (\(deptId))")
                 case .failure(let error):
-                    print("❌ Fetch department invoices failed: \(error)")
+                    debugPrint("❌ Fetch department invoices failed: \(error)")
                 }
                 onComplete?()
             }
@@ -526,19 +538,53 @@ extension POViewModel {
                 self?.isRefreshingInvoice = false
                 switch result {
                 case .success(let response):
-                    if let raw = response?.data {
-                        let v = self?.vendors ?? []
-                        let d = DepartmentsData.all
-                        let fresh = raw.toInvoice(vendors: v, departments: d)
+                    if var fresh = response?.data {
+                        let vendor = self?.vendors.first { $0.id == (fresh.vendorId ?? "") }
+                        fresh.enrich(vendor: vendor)
                         if let idx = self?.invoices.firstIndex(where: { $0.id == fresh.id }) {
                             self?.invoices[idx] = fresh
                         } else {
                             self?.invoices.append(fresh)
                         }
-                        print("✅ Refreshed invoice \(id) — file: \(fresh.file ?? "—")")
+                        debugPrint("✅ Refreshed invoice \(id) — file: \(fresh.file ?? "—")")
                     }
                 case .failure(let error):
-                    print("❌ Fetch invoice \(id) failed: \(error)")
+                    debugPrint("❌ Fetch invoice \(id) failed: \(error)")
+                }
+                onComplete?()
+            }
+        }.urlDataTask?.resume()
+    }
+
+    /// Fetches a single PO from `GET /api/v2/purchase-orders/{id}` and
+    /// replaces the stale row in `purchaseOrders` (or `drafts`) so the
+    /// detail page sees the latest status / approvals / line-items
+    /// without reloading the whole list. Called on detail-page open —
+    /// mirrors the invoice-side `refreshInvoice(_:)` pattern.
+    func refreshPO(_ id: String, onComplete: (() -> Void)? = nil) {
+        guard !id.isEmpty else { onComplete?(); return }
+        isRefreshingPO = true
+        POCodableTask.fetchPO(id) { [weak self] result in
+            DispatchQueue.main.async {
+                self?.isRefreshingPO = false
+                switch result {
+                case .success(let response):
+                    if var fresh = response?.data {
+                        let v = self?.vendors ?? []
+                        let d = DepartmentsData.all
+                        fresh.enrich(vendors: v, departments: d)
+                        if let idx = self?.purchaseOrders.firstIndex(where: { $0.id == fresh.id }) {
+                            self?.purchaseOrders[idx] = fresh
+                        } else if let idx = self?.drafts.firstIndex(where: { $0.id == fresh.id }) {
+                            self?.drafts[idx] = fresh
+                        } else {
+                            self?.purchaseOrders.append(fresh)
+                        }
+                        if self?.selectedPO?.id == fresh.id { self?.selectedPO = fresh }
+                        debugPrint("✅ Refreshed PO \(fresh.poNumber ?? id)")
+                    }
+                case .failure(let error):
+                    debugPrint("❌ Fetch PO \(id) failed: \(error)")
                 }
                 onComplete?()
             }
@@ -561,9 +607,9 @@ extension POViewModel {
                 switch result {
                 case .success(let response):
                     self?.poHistory[poId] = response?.data ?? []
-                    print("✅ Loaded PO history for \(poId): \(response?.data?.count ?? 0) entries")
+                    debugPrint("✅ Loaded PO history for \(poId): \(response?.data?.count ?? 0) entries")
                 case .failure(let error):
-                    print("❌ Fetch PO history failed: \(error)")
+                    debugPrint("❌ Fetch PO history failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -581,14 +627,14 @@ extension POViewModel {
                 case .success(let response):
                     if let thread = response?.data {
                         self?.poQueries[poId] = thread
-                        print("✅ Loaded PO query thread for \(poId): \((thread.messages ?? []).count) messages")
+                        debugPrint("✅ Loaded PO query thread for \(poId): \((thread.messages ?? []).count) messages")
                     } else {
                         // Empty response — clear any stale thread so the
                         // empty state renders correctly on re-open.
                         self?.poQueries.removeValue(forKey: poId)
                     }
                 case .failure(let error):
-                    print("❌ Fetch PO queries failed: \(error)")
+                    debugPrint("❌ Fetch PO queries failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -602,9 +648,9 @@ extension POViewModel {
                 switch result {
                 case .success(let response):
                     self?.invoiceHistory[invoiceId] = response?.data ?? []
-                    print("✅ Loaded invoice history for \(invoiceId): \(response?.data?.count ?? 0) entries")
+                    debugPrint("✅ Loaded invoice history for \(invoiceId): \(response?.data?.count ?? 0) entries")
                 case .failure(let error):
-                    print("❌ Fetch invoice history failed: \(error)")
+                    debugPrint("❌ Fetch invoice history failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -622,14 +668,14 @@ extension POViewModel {
                 case .success(let response):
                     if let thread = response?.data {
                         self?.invoiceQueries[invoiceId] = thread
-                        print("✅ Loaded invoice query thread for \(invoiceId): \((thread.messages ?? []).count) messages")
+                        debugPrint("✅ Loaded invoice query thread for \(invoiceId): \((thread.messages ?? []).count) messages")
                     } else {
                         // Empty response → clear any stale thread so the
                         // empty state renders correctly.
                         self?.invoiceQueries.removeValue(forKey: invoiceId)
                     }
                 case .failure(let error):
-                    print("❌ Fetch invoice queries failed: \(error)")
+                    debugPrint("❌ Fetch invoice queries failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -643,13 +689,13 @@ extension POViewModel {
         let vis = ApprovalHelpers.getVisibility(po: po, config: cfg, userId: u.id ?? "")
         guard vis.canApprove, let next = vis.nextTier else { return }
         let body: [String: Any] = ["tier_number": next, "total_tiers": ApprovalHelpers.getTotalTiers(cfg)]
-        POCodableTask.approvePO(po.id, body) { [weak self] result in
+        POCodableTask.approvePO(po.id ?? "", body) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
                     self?.refreshCurrentTab(); self?.selectedPO = nil
                 case .failure(let error):
-                    print("❌ Approve PO failed: \(error)")
+                    debugPrint("❌ Approve PO failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -658,26 +704,26 @@ extension POViewModel {
     func rejectPO() {
         guard let t = rejectTarget, !rejectReason.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         let body: [String: Any] = ["rejection_reason": rejectReason.trimmingCharacters(in: .whitespaces)]
-        POCodableTask.rejectPO(t.id, body) { [weak self] result in
+        POCodableTask.rejectPO(t.id ?? "", body) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
                     self?.refreshCurrentTab(); self?.rejectTarget = nil; self?.rejectReason = ""; self?.showRejectSheet = false; self?.selectedPO = nil
                 case .failure(let error):
-                    print("❌ Reject PO failed: \(error)")
+                    debugPrint("❌ Reject PO failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
     }
 
     func deletePO(_ po: PurchaseOrder) {
-        POCodableTask.deletePO(po.id) { [weak self] result in
+        POCodableTask.deletePO(po.id ?? "") { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ PO deleted"); self?.refreshCurrentTab(); self?.loadDrafts(); self?.popToRoot = true
+                    debugPrint("✅ PO deleted"); self?.refreshCurrentTab(); self?.loadDrafts(); self?.popToRoot = true
                 case .failure(let error):
-                    print("❌ Delete PO failed: \(error)")
+                    debugPrint("❌ Delete PO failed: \(error)")
                 }
                 self?.deleteTarget = nil
             }
@@ -706,7 +752,7 @@ extension POViewModel {
         // department display, etc.) without a second round-trip.
         let lineItemPayload: [[String: Any]] = (po.lineItems ?? []).map { item in
             var li: [String: Any] = [
-                "id": item.id,
+                "id": item.id ?? "",
                 "description": item.description ?? "",
                 "quantity": item.quantity ?? 0,
                 "unit_price": item.unitPrice ?? 0,
@@ -750,16 +796,16 @@ extension POViewModel {
         ]
         if let ed = effectiveDate ?? po.effectiveDate { body["effectiveDate"] = ed }
 
-        POCodableTask.postPO(po.id, body) { [weak self] result in
+        POCodableTask.postPO(po.id ?? "", body) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ PO posted (\(po.id))")
+                    debugPrint("✅ PO posted (\(po.id ?? ""))")
                     self?.refreshCurrentTab()
                     onComplete(true, nil)
                 case .failure(let error):
                     let msg = error.localizedDescription
-                    print("❌ Post PO failed: \(msg)")
+                    debugPrint("❌ Post PO failed: \(msg)")
                     onComplete(false, msg)
                 }
             }
@@ -775,16 +821,16 @@ extension POViewModel {
         var body: [String: Any] = ["reason": reason]
         if let d = effectiveDate { body["effective_date"] = d }
 
-        POCodableTask.closePO(po.id, body) { [weak self] result in
+        POCodableTask.closePO(po.id ?? "", body) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ PO closed (\(po.id))")
+                    debugPrint("✅ PO closed (\(po.id ?? ""))")
                     self?.refreshCurrentTab()
                     onComplete(true, nil)
                 case .failure(let error):
                     let msg = error.localizedDescription
-                    print("❌ Close PO failed: \(msg)")
+                    debugPrint("❌ Close PO failed: \(msg)")
                     onComplete(false, msg)
                 }
             }
@@ -803,12 +849,12 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Bulk update (\(ids.count) POs)")
+                    debugPrint("✅ Bulk update (\(ids.count) POs)")
                     self?.refreshCurrentTab()
                     onComplete(true, nil)
                 case .failure(let error):
                     let msg = error.localizedDescription
-                    print("❌ Bulk update failed: \(msg)")
+                    debugPrint("❌ Bulk update failed: \(msg)")
                     onComplete(false, msg)
                 }
             }
@@ -822,12 +868,12 @@ extension POViewModel {
     }
 
     func submitPO(_ fd: POFormData, onComplete: (() -> Void)? = nil) {
-        guard let u = currentUser else { print("❌ submitPO: no currentUser"); return }; formSubmitting = true
+        guard let u = currentUser else { debugPrint("❌ submitPO: no currentUser"); return }; formSubmitting = true
         let dept = fd.departmentId.isEmpty ? (u.departmentId ?? "") : resolveDeptId(fd.departmentId)
         let cfg = ApprovalHelpers.resolveConfig(tierConfigRows, deptId: dept, amount: fd.netAmount)
         let auto = ApprovalHelpers.getAutoApprovals(cfg, userId: u.id ?? "", deptId: dept)
         let lineItemPayloads: [[String: Any]] = fd.lineItems.map {
-            var item: [String: Any] = ["id":$0.id,"description":$0.description ?? "","quantity":$0.quantity ?? 0,"unit_price":$0.unitPrice ?? 0,"total":$0.total ?? 0,"account":$0.account ?? "","department":self.resolveDeptId($0.department ?? ""),"expenditure_type":$0.expenditureType ?? "","vat_treatment":$0.vatTreatment ?? ""]
+            var item: [String: Any] = ["id":$0.id ?? "","description":$0.description ?? "","quantity":$0.quantity ?? 0,"unit_price":$0.unitPrice ?? 0,"total":$0.total ?? 0,"account":$0.account ?? "","department":self.resolveDeptId($0.department ?? ""),"expenditure_type":$0.expenditureType ?? "","vat_treatment":$0.vatTreatment ?? ""]
             // Per-line tax fields (Apr 2026). Only included when set —
             // the server's validator rejects empty-string `tax_type`,
             // and a null `tax_rate` is legal.
@@ -836,7 +882,7 @@ extension POViewModel {
             if let tags = $0.tags                { item["tags"] = tags }
             // Include VAT in custom_fields so the API persists it
             var cfArr: [[String: String]] = [["name": "vat", "value": $0.vatTreatment ?? ""]]
-            if let customVals = fd.lineItemCustomValues[$0.id] {
+            if let customVals = fd.lineItemCustomValues[$0.id ?? ""] {
                 for (k, v) in customVals where !v.isEmpty && k != "vat" { cfArr.append(["name": k, "value": v]) }
             }
             item["custom_fields"] = cfArr
@@ -881,15 +927,15 @@ extension POViewModel {
                     self?.editingPO = nil
                     onComplete?()
                 case .failure(let error):
-                    print("❌ Submit PO failed: \(error)")
+                    debugPrint("❌ Submit PO failed: \(error)")
                 }
             }
         }
 
         // Debug: log VAT values being sent
-        print("📤 Submit PO: vat_treatment=\(fd.vatTreatment) existingId=\(fd.existingDraftId ?? "new")")
+        debugPrint("📤 Submit PO: vat_treatment=\(fd.vatTreatment) existingId=\(fd.existingDraftId ?? "new")")
         for li in fd.lineItems {
-            print("  📤 LI \(li.id.prefix(8)): vat=\(li.vatTreatment ?? "") desc=\(li.description ?? "") total=\(li.total ?? 0)")
+            debugPrint("  📤 LI \((li.id ?? "").prefix(8)): vat=\(li.vatTreatment ?? "") desc=\(li.description ?? "") total=\(li.total ?? 0)")
         }
 
         if let eid = fd.existingDraftId {
@@ -900,7 +946,7 @@ extension POViewModel {
     }
 
     func saveDraft(_ fd: POFormData, onComplete: (() -> Void)? = nil) {
-        guard let u = currentUser else { print("❌ saveDraft: no currentUser"); return }
+        guard let u = currentUser else { debugPrint("❌ saveDraft: no currentUser"); return }
         // Flip the save-specific flag so only the Save button renders a
         // loader. `formSubmitting` is reserved for the Submit button so
         // the two actions don't share a spinner.
@@ -909,14 +955,14 @@ extension POViewModel {
 
         let lineItemPayloads: [[String: Any]] = fd.lineItems.map {
             var item: [String: Any] = [
-                "id": $0.id, "description": $0.description ?? "",
+                "id": $0.id ?? "", "description": $0.description ?? "",
                 "quantity": $0.quantity ?? 0, "unit_price": $0.unitPrice ?? 0, "total": $0.total ?? 0,
                 "account": $0.account ?? "", "department": self.resolveDeptId($0.department ?? ""),
                 "expenditure_type": $0.expenditureType ?? "", "vat_treatment": $0.vatTreatment ?? ""
             ]
             // Include VAT in custom_fields so the API persists it
             var cfArr: [[String: String]] = [["name": "vat", "value": $0.vatTreatment ?? ""]]
-            if let customVals = fd.lineItemCustomValues[$0.id] {
+            if let customVals = fd.lineItemCustomValues[$0.id ?? ""] {
                 for (k, v) in customVals where !v.isEmpty && k != "vat" { cfArr.append(["name": k, "value": v]) }
             }
             item["custom_fields"] = cfArr
@@ -957,10 +1003,10 @@ extension POViewModel {
                 self?.formSaving = false
                 switch result {
                 case .success:
-                    print("✅ Draft saved")
+                    debugPrint("✅ Draft saved")
                     self?.loadDrafts(); self?.showCreatePO = false; self?.resumeDraft = nil; self?.editingPO = nil; onComplete?()
                 case .failure(let error):
-                    print("❌ Save draft failed: \(error)")
+                    debugPrint("❌ Save draft failed: \(error)")
                 }
             }
         }
@@ -981,9 +1027,9 @@ extension POViewModel {
                 self?.formSaving = false
                 switch result {
                 case .success:
-                    print("✅ Template saved"); self?.loadTemplates(); onComplete?()
+                    debugPrint("✅ Template saved"); self?.loadTemplates(); onComplete?()
                 case .failure(let error):
-                    print("❌ Save template failed: \(error)")
+                    debugPrint("❌ Save template failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -998,9 +1044,9 @@ extension POViewModel {
                 self?.formSaving = false
                 switch result {
                 case .success:
-                    print("✅ Template updated"); self?.loadTemplates(); self?.editingTemplate = nil; onComplete?()
+                    debugPrint("✅ Template updated"); self?.loadTemplates(); self?.editingTemplate = nil; onComplete?()
                 case .failure(let error):
-                    print("❌ Update template failed: \(error)")
+                    debugPrint("❌ Update template failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -1011,9 +1057,9 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Template deleted"); self?.loadTemplates()
+                    debugPrint("✅ Template deleted"); self?.loadTemplates()
                 case .failure(let error):
-                    print("❌ Delete template failed: \(error)")
+                    debugPrint("❌ Delete template failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -1024,9 +1070,9 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Draft deleted"); self?.loadDrafts()
+                    debugPrint("✅ Draft deleted"); self?.loadDrafts()
                 case .failure(let error):
-                    print("❌ Delete draft failed: \(error)")
+                    debugPrint("❌ Delete draft failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -1042,17 +1088,17 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Vendor verified: \(id)")
+                    debugPrint("✅ Vendor verified: \(id)")
                     // Set verifiedAt to now so the computed `verified`
                     // property flips to true immediately while the reload
                     // fetches the authoritative server value.
                     if let idx = self?.vendors.firstIndex(where: { $0.id == id }) {
-                        self?.vendors[idx].verifiedAt = Int(Date().timeIntervalSince1970 * 1000)
+                        self?.vendors[idx].verifiedAt = Int64(Date().timeIntervalSince1970 * 1000)
                     }
                     self?.loadVendors()
                     onComplete(true)
                 case .failure(let error):
-                    print("❌ Verify vendor failed: \(error)")
+                    debugPrint("❌ Verify vendor failed: \(error)")
                     onComplete(false)
                 }
             }
@@ -1064,11 +1110,11 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Vendor deleted")
+                    debugPrint("✅ Vendor deleted")
                     self?.vendors.removeAll { $0.id == id }
                     self?.loadVendors()
                 case .failure(let error):
-                    print("❌ Delete vendor failed: \(error)")
+                    debugPrint("❌ Delete vendor failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -1086,11 +1132,11 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Vendor updated: \(id)")
+                    debugPrint("✅ Vendor updated: \(id)")
                     self?.loadVendors()
                     onComplete(true)
                 case .failure(let error):
-                    print("❌ Update vendor failed: \(error)")
+                    debugPrint("❌ Update vendor failed: \(error)")
                     onComplete(false)
                 }
             }
@@ -1110,9 +1156,9 @@ extension POViewModel {
                 switch result {
                 case .success(let response):
                     self?.vendorHistory[vendorId] = response?.data ?? []
-                    print("✅ Loaded vendor history for \(vendorId): \(response?.data?.count ?? 0) entries")
+                    debugPrint("✅ Loaded vendor history for \(vendorId): \(response?.data?.count ?? 0) entries")
                 case .failure(let error):
-                    print("❌ Fetch vendor history failed: \(error)")
+                    debugPrint("❌ Fetch vendor history failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -1127,19 +1173,19 @@ extension POViewModel {
     }
 
     func approveInvoice(_ inv: Invoice) {
-        guard let u = currentUser,
+        guard currentUser != nil,
               let cfg = ApprovalHelpers.resolveConfig(effectiveInvoiceTierConfigs, deptId: inv.departmentId, amount: inv.totalAmount)
         else { return }
         let vis = invoiceApprovalVisibility(for: inv)
         guard vis.canApprove, let next = vis.nextTier else { return }
         let body: [String: Any] = ["tier_number": next, "total_tiers": ApprovalHelpers.getTotalTiers(cfg)]
-        POCodableTask.approveInvoice(inv.id, body) { [weak self] result in
+        POCodableTask.approveInvoice(inv.id ?? "", body) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
                     self?.refreshCurrentInvoiceTab(); self?.selectedInvoice = nil
                 case .failure(let error):
-                    print("❌ Approve invoice failed: \(error)")
+                    debugPrint("❌ Approve invoice failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -1151,7 +1197,7 @@ extension POViewModel {
         // (see invoices-server validator Apr 2026). The older
         // `rejection_reason` key was silently ignored.
         let body: [String: Any] = ["reason": rejectInvoiceReason.trimmingCharacters(in: .whitespaces)]
-        POCodableTask.rejectInvoice(t.id, body) { [weak self] result in
+        POCodableTask.rejectInvoice(t.id ?? "", body) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
@@ -1159,7 +1205,7 @@ extension POViewModel {
                     self?.rejectInvoiceReason = ""; self?.showRejectInvoiceSheet = false
                     self?.selectedInvoice = nil
                 case .failure(let error):
-                    print("❌ Reject invoice failed: \(error)")
+                    debugPrint("❌ Reject invoice failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -1171,15 +1217,15 @@ extension POViewModel {
         let terminalStates: [InvoiceStatus] = [.approved, .paid, .rejected, .voided, .override_]
         let isTerminal = terminalStates.contains(inv.invoiceStatus)
         guard isOwner, hasNoApprovals, !isTerminal else { return }
-        POCodableTask.deleteInvoice(inv.id) { [weak self] result in
+        POCodableTask.deleteInvoice(inv.id ?? "") { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Invoice deleted")
+                    debugPrint("✅ Invoice deleted")
                     self?.deleteInvoiceTarget = nil
                     self?.refreshCurrentInvoiceTab()
                 case .failure(let error):
-                    print("❌ Delete invoice failed: \(error)")
+                    debugPrint("❌ Delete invoice failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -1190,11 +1236,11 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Invoice submitted")
+                    debugPrint("✅ Invoice submitted")
                     self?.refreshCurrentInvoiceTab()
                     completion(true, nil)
                 case .failure(let error):
-                    print("❌ Submit invoice failed: \(error)")
+                    debugPrint("❌ Submit invoice failed: \(error)")
                     completion(false, error.localizedDescription)
                 }
             }
@@ -1213,15 +1259,15 @@ extension POViewModel {
             onComplete?(false, "Only accountants can send invoices to approval.")
             return
         }
-        POCodableTask.sendInvoiceToApproval(inv.id) { [weak self] result in
+        POCodableTask.sendInvoiceToApproval(inv.id ?? "") { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Invoice sent to approval (\(inv.id))")
+                    debugPrint("✅ Invoice sent to approval (\(inv.id ?? ""))")
                     self?.refreshCurrentInvoiceTab()
                     onComplete?(true, nil)
                 case .failure(let error):
-                    print("❌ Send invoice to approval failed: \(error)")
+                    debugPrint("❌ Send invoice to approval failed: \(error)")
                     onComplete?(false, error.localizedDescription)
                 }
             }
@@ -1245,15 +1291,15 @@ extension POViewModel {
         if let n = note?.trimmingCharacters(in: .whitespaces), !n.isEmpty {
             body["hold_note"] = n
         }
-        POCodableTask.holdInvoice(inv.id, body) { [weak self] result in
+        POCodableTask.holdInvoice(inv.id ?? "", body) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Invoice held (\(inv.id))")
+                    debugPrint("✅ Invoice held (\(inv.id ?? ""))")
                     self?.refreshCurrentInvoiceTab()
                     onComplete?(true, nil)
                 case .failure(let error):
-                    print("❌ Hold invoice failed: \(error)")
+                    debugPrint("❌ Hold invoice failed: \(error)")
                     onComplete?(false, error.localizedDescription)
                 }
             }
@@ -1264,15 +1310,15 @@ extension POViewModel {
     /// `previous_status` (the snapshot taken at Hold time).
     func releaseInvoiceHold(_ inv: Invoice,
                             onComplete: ((Bool, String?) -> Void)? = nil) {
-        POCodableTask.releaseInvoiceHold(inv.id) { [weak self] result in
+        POCodableTask.releaseInvoiceHold(inv.id ?? "") { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Invoice released (\(inv.id))")
+                    debugPrint("✅ Invoice released (\(inv.id ?? ""))")
                     self?.refreshCurrentInvoiceTab()
                     onComplete?(true, nil)
                 case .failure(let error):
-                    print("❌ Release invoice failed: \(error)")
+                    debugPrint("❌ Release invoice failed: \(error)")
                     onComplete?(false, error.localizedDescription)
                 }
             }
@@ -1288,15 +1334,15 @@ extension POViewModel {
             onComplete?(false, "Only accountants can post invoices.")
             return
         }
-        POCodableTask.postInvoiceToLedger(inv.id) { [weak self] result in
+        POCodableTask.postInvoiceToLedger(inv.id ?? "") { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Invoice posted to ledger (\(inv.id))")
+                    debugPrint("✅ Invoice posted to ledger (\(inv.id ?? ""))")
                     self?.refreshCurrentInvoiceTab()
                     onComplete?(true, nil)
                 case .failure(let error):
-                    print("❌ Post invoice failed: \(error)")
+                    debugPrint("❌ Post invoice failed: \(error)")
                     onComplete?(false, error.localizedDescription)
                 }
             }
@@ -1371,7 +1417,7 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
-                    var runs = (response?.data ?? []).map { $0.toPaymentRun() }
+                    var runs = response?.data ?? []
                     // API doesn't embed invoice details — merge from static data where available
                     for i in runs.indices where (runs[i].invoices ?? []).isEmpty {
                         if let staticRun = PaymentRunsData.all.first(where: { $0.id == runs[i].id }) {
@@ -1380,9 +1426,9 @@ extension POViewModel {
                     }
                     self?.paymentRuns = runs
                     self?.isLoadingPaymentRuns = false
-                    print("✅ Loaded \(runs.count) payment runs")
+                    debugPrint("✅ Loaded \(runs.count) payment runs")
                 case .failure(let error):
-                    print("❌ Fetch payment runs (/api/v2/payment-runs) failed: \(error)")
+                    debugPrint("❌ Fetch payment runs (/api/v2/payment-runs) failed: \(error)")
                     // Fallback: try account-hub path (also clears the flag inside)
                     self?.loadPaymentRunsFallback()
                 }
@@ -1395,7 +1441,7 @@ extension POViewModel {
         // The real data comes from /api/v2/invoices/active-runs (now the primary path).
         paymentRuns = PaymentRunsData.all
         isLoadingPaymentRuns = false
-        print("⚠️ Using static payment runs (\(paymentRuns.count) items)")
+        debugPrint("⚠️ Using static payment runs (\(paymentRuns.count) items)")
     }
 
     func paymentRunApprovalVisibility(for run: PaymentRun) -> ApprovalVisibility {
@@ -1430,13 +1476,13 @@ extension POViewModel {
         var nextTier = 1
         for t in 1...totalTiers { if !approvedTiers.contains(t) { nextTier = t; break } }
         let body: [String: Any] = ["tier_number": nextTier, "total_tiers": totalTiers]
-        POCodableTask.approvePaymentRun(run.id, body) { [weak self] result in
+        POCodableTask.approvePaymentRun(run.id ?? "", body) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
                     self?.loadPaymentRuns()
                 case .failure(let error):
-                    print("❌ Approve payment run failed: \(error)")
+                    debugPrint("❌ Approve payment run failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -1445,7 +1491,7 @@ extension POViewModel {
     func rejectPaymentRun() {
         guard let t = rejectPaymentRunTarget, !rejectPaymentRunReason.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         let body: [String: Any] = ["rejection_reason": rejectPaymentRunReason.trimmingCharacters(in: .whitespaces)]
-        POCodableTask.rejectPaymentRun(t.id, body) { [weak self] result in
+        POCodableTask.rejectPaymentRun(t.id ?? "", body) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
@@ -1454,7 +1500,7 @@ extension POViewModel {
                     self?.rejectPaymentRunReason = ""
                     self?.loadPaymentRuns()
                 case .failure(let error):
-                    print("❌ Reject payment run failed: \(error)")
+                    debugPrint("❌ Reject payment run failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -1472,10 +1518,10 @@ extension POViewModel {
                         self?.invoiceTeamMembers = d.teamMembers ?? []
                         self?.invoiceRunAuth = d.runAuthorization ?? []
                         self?.invoiceAssignmentRules = d.assignmentRules ?? []
-                        print("✅ Invoice settings: \((d.alerts ?? []).count) alerts, \((d.teamMembers ?? []).count) team, \((d.runAuthorization ?? []).count) run auth, \((d.assignmentRules ?? []).count) rules")
+                        debugPrint("✅ Invoice settings: \((d.alerts ?? []).count) alerts, \((d.teamMembers ?? []).count) team, \((d.runAuthorization ?? []).count) run auth, \((d.assignmentRules ?? []).count) rules")
                     }
                 case .failure(let error):
-                    print("❌ Invoice settings failed: \(error)")
+                    debugPrint("❌ Invoice settings failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -1492,12 +1538,12 @@ extension POViewModel {
         // base URL (localhost:3004 in dev) — same host that serves
         // the rest of the `/api/v2/invoices/*` routes.
         guard let req = APIClient.shared.buildMultipartRequest(
-            "\(PORequest.baseURL)/api/v2/invoices/upload",
+            "/api/v2/invoices/upload",
             fileData: data, fileName: fileName, mimeType: mimeType, fieldName: "file"
         ) else {
             uploadError = "Failed to build upload request"; uploading = false; return
         }
-        let task: URLSessionDataTask = APIClient.shared.codableResultTask(with: req) { [weak self] (result: Result<APIResponse<InvoiceExtraction>?, Error>) in
+        let task: URLSessionDataTask? = FCURLSession.sharedInstance.session?.codableResultTask(with: req) { [weak self] (result: Result<ZLGenericResponse<InvoiceExtraction>?, Error>) in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
@@ -1511,15 +1557,16 @@ extension POViewModel {
                 self?.uploading = false
             }
         }
-        task.resume()
+        task?.resume()
     }
 
     func submitInvoiceUpload() {
         guard let ext = uploadExtraction, let type = invoiceType else { return }
         uploadSubmitting = true
         let gross = ext.grossValue
-        let net = ext.netValue
-        let vat = ext.vatValue
+        // `net_amount` / `vat_amount` / `vat_rate` are deprecated on
+        // the invoice create endpoint (see comment below); we no longer
+        // pull `netValue` / `vatValue` here.
         let payMethod: String = {
             switch type {
             case "wire": return "wire"
@@ -1606,15 +1653,20 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
-                    if let raw = response?.data {
-                        let run = raw.run?.toPaymentRun() ?? PaymentRun()
+                    if var detail = response?.data {
+                        // Enrich invoice vendor details from the loaded vendor list
                         let v = self?.vendors ?? []
-                        let d = DepartmentsData.all
-                        let invoices = (raw.invoices ?? []).map { $0.toInvoice(vendors: v, departments: d) }
-                        self?.selectedRunDetail = PaymentRunDetail(run: run, invoices: invoices)
+                        if var invoices = detail.invoices {
+                            for i in invoices.indices {
+                                let vendor = v.first { $0.id == (invoices[i].vendorId ?? "") }
+                                invoices[i].enrich(vendor: vendor)
+                            }
+                            detail.invoices = invoices
+                        }
+                        self?.selectedRunDetail = detail
                     }
                 case .failure(let error):
-                    print("❌ Fetch run detail failed: \(error)")
+                    debugPrint("❌ Fetch run detail failed: \(error)")
                     self?.selectedRunDetail = nil
                 }
                 self?.runDetailLoading = false
@@ -1631,13 +1683,13 @@ extension POViewModel {
         guard let level = nextLevel else { return }
         approvingRunId = run.id
         let body: [String: Any] = ["tier_number": level.tier ?? 0, "total_tiers": sortedAuth.count]
-        POCodableTask.approvePaymentRun(run.id, body) { [weak self] result in
+        POCodableTask.approvePaymentRun(run.id ?? "", body) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    self?.openRunDetail(run.id); self?.loadPaymentRuns()
+                    self?.openRunDetail(run.id ?? ""); self?.loadPaymentRuns()
                 case .failure(let error):
-                    print("❌ Approve run failed: \(error)")
+                    debugPrint("❌ Approve run failed: \(error)")
                 }
                 self?.approvingRunId = nil
             }

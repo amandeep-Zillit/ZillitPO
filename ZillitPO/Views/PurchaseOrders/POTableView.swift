@@ -5,6 +5,7 @@ struct POTableView: View {
     @State private var selectedPO: PurchaseOrder?
     @State private var navigateToDetail = false
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack {
             if appState.filteredPOs.isEmpty {
@@ -51,6 +52,7 @@ struct POTableView: View {
 struct PORow: View {
     let po: PurchaseOrder
     @EnvironmentObject var appState: POViewModel
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
@@ -60,13 +62,12 @@ struct PORow: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 4) {
-                Text(FormatUtils.formatCurrency((po.lineItems ?? []).isEmpty
-                    ? VATHelpers.calcVat(po.totalAmount, treatment: po.vatTreatment ?? "pending").gross
-                    : (po.lineItems ?? []).reduce(0.0) { $0 + VATHelpers.calcVat(($1.quantity ?? 0) * ($1.unitPrice ?? 0), treatment: $1.vatTreatment ?? "pending").gross },
-                    code: po.currency ?? "GBP"))
+                if let gross = po.grossTotal {
+                    Text(FormatUtils.formatCurrency(gross, code: po.currency ?? "GBP"))
                     .font(.system(size: 13, design: .monospaced))
+                }
                 statusBadge
-            }
+            }	
         }.padding(12)
         .contentShape(Rectangle())
     }

@@ -29,6 +29,7 @@ struct FloatApprovalDetailPage: View {
         (displayFloat.status ?? "").uppercased() == "AWAITING_APPROVAL"
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack(alignment: .bottom) {
             Color.bgSurface.edgesIgnoringSafeArea(.all)
@@ -101,7 +102,7 @@ struct FloatApprovalDetailPage: View {
         .background(
             NavigationLink(
                 destination: FloatHistoryPage(
-                    floatId: displayFloat.id,
+                    floatId: displayFloat.id ?? "",
                     floatLabel: "#\(displayFloat.reqNumber ?? "")"
                 ).environmentObject(appState),
                 isActive: $showHistory
@@ -333,8 +334,7 @@ struct FloatApprovalDetailPage: View {
                 Spacer()
                 Text("\((details?.batches ?? []).count)").font(.system(size: 11, design: .monospaced)).foregroundColor(.secondary)
             }
-            ForEach(details?.batches ?? [], id: \.id) { raw in
-                let batch = raw.toClaimBatch()
+            ForEach(details?.batches ?? [], id: \.id) { batch in
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("#\(batch.batchReference ?? "")").font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundColor(.goldDark)
@@ -534,9 +534,9 @@ struct FloatApprovalDetailPage: View {
     // MARK: - Actions
 
     private func reload() {
-        appState.loadFloatDetails(displayFloat.id) { d in
+        appState.loadFloatDetails(displayFloat.id ?? "") { d in
             details = d
-            if let raw = d?.float { liveFloat = raw.toFloatRequest() }
+            if let f = d?.float { liveFloat = f }
             isLoading = false
         }
     }
@@ -546,7 +546,7 @@ struct FloatApprovalDetailPage: View {
         // Backend is keyed on tier_number. Approver supplies their own tier; for now use next tier.
         let nextTier = ((displayFloat.approvals ?? []).map { $0.tierNumber ?? 0 }.max() ?? 0) + 1
         let totalTiers = max(nextTier, 1)
-        appState.approveFloatRequest(id: displayFloat.id, tierNumber: nextTier, totalTiers: totalTiers) { success in
+        appState.approveFloatRequest(id: displayFloat.id ?? "", tierNumber: nextTier, totalTiers: totalTiers) { success in
             actioning = false
             if success { presentationMode.wrappedValue.dismiss() }
         }
@@ -554,7 +554,7 @@ struct FloatApprovalDetailPage: View {
 
     private func reject(reason: String) {
         actioning = true
-        appState.rejectFloatRequest(id: displayFloat.id, reason: reason) { success in
+        appState.rejectFloatRequest(id: displayFloat.id ?? "", reason: reason) { success in
             actioning = false
             if success { presentationMode.wrappedValue.dismiss() }
         }
@@ -564,7 +564,7 @@ struct FloatApprovalDetailPage: View {
     /// standard approve payload. Backend stamps the float as ACCT_OVERRIDE.
     private func overrideFloat() {
         actioning = true
-        appState.overrideFloatRequest(id: displayFloat.id) { success in
+        appState.overrideFloatRequest(id: displayFloat.id ?? "") { success in
             actioning = false
             if success { presentationMode.wrappedValue.dismiss() }
         }

@@ -183,7 +183,7 @@ struct InvoiceWebView: UIViewRepresentable {
         request.setValue(client.userId, forHTTPHeaderField: "x-user-id")
         request.setValue(String(client.isAccountant), forHTTPHeaderField: "x-is-accountant")
 
-        print("🧾 InvoiceDocumentViewer → \(url.absoluteString)")
+        debugPrint("🧾 InvoiceDocumentViewer → \(url.absoluteString)")
 
         URLSession.shared.dataTask(with: request) { [weak webView] data, response, error in
             guard let webView = webView else { return }

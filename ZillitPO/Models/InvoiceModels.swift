@@ -10,12 +10,22 @@ import Foundation
 
 // MARK: - Invoice History Entry
 
-struct InvoiceHistoryEntry: Decodable, Identifiable {
-    var id: String { "\(timestamp ?? 0)-\(action ?? "")" }
+struct InvoiceHistoryEntry: Codable, Identifiable {
+    var id: String { "\(effectiveTimestamp ?? 0)-\(action ?? "")" }
     var action: String?
     var details: String?
+    /// Server-sent `timestamp` (separate history endpoint shape).
+    /// Consumers should prefer `effectiveTimestamp` for display so the
+    /// inline `action_at` fallback is honoured.
     var timestamp: Int64?
+    /// Inline-history timestamp (`action_at` key) — present when the
+    /// entry is embedded on the invoice row instead of the dedicated
+    /// history endpoint.
+    var actionAt: Int64?
+    /// Server-sent `user_id` (separate history endpoint shape).
     var userId: String?
+    /// Inline-history user id (`action_by` key).
+    var actionBy: String?
     var userName: String?
 
     /// Supports BOTH history shapes the backend returns:
@@ -23,40 +33,19 @@ struct InvoiceHistoryEntry: Decodable, Identifiable {
     /// - Inline on invoice rows:     `{ action, action_at, action_by }`
     enum CodingKeys: String, CodingKey {
         case action, details, timestamp
-        case userId = "user_id"
+        case userId   = "user_id"
         case userName = "user_name"
-        case action_at, action_by
+        case actionAt = "action_at"
+        case actionBy = "action_by"
     }
 
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        action = try? c.decode(String.self, forKey: .action)
-        details = try? c.decode(String.self, forKey: .details)
+    /// Merged timestamp for display — the separate history endpoint
+    /// populates `timestamp`; the inline shape populates `action_at`.
+    var effectiveTimestamp: Int64? { timestamp ?? actionAt }
 
-        // Timestamp: try both `timestamp` and `action_at`, and accept any of
-        // Int / Double / String representations (backend is inconsistent).
-        let tsKeys: [CodingKeys] = [.timestamp, .action_at]
-        var resolvedTs: Int64? = nil
-        for key in tsKeys {
-            if let v = try? c.decode(Int64.self, forKey: key) { resolvedTs = v; break }
-            if let v = try? c.decode(Double.self, forKey: key) { resolvedTs = Int64(v); break }
-            if let s = try? c.decode(String.self, forKey: key), let v = Int64(s) { resolvedTs = v; break }
-        }
-        timestamp = resolvedTs
-
-        // User id: `user_id` or `action_by`. User name: `user_name` (inline
-        // history doesn't ship a name — we resolve via UsersData at display).
-        userId = (try? c.decode(String.self, forKey: .userId))
-            ?? (try? c.decode(String.self, forKey: .action_by))
-        userName = try? c.decode(String.self, forKey: .userName)
-    }
-
-    /// Plain memberwise init used when building entries from raw dictionaries
-    /// (e.g. when mirroring the inline `history` array from an invoice row).
-    init(action: String?, details: String?, timestamp: Int64?, userId: String?, userName: String?) {
-        self.action = action; self.details = details; self.timestamp = timestamp
-        self.userId = userId; self.userName = userName
-    }
+    /// Merged user id for display — prefers the canonical `user_id`,
+    /// falls back to the inline `action_by`.
+    var effectiveUserId: String? { userId ?? actionBy }
 }
 
 // MARK: - Invoice Query Thread (raised against an invoice)
@@ -75,8 +64,8 @@ struct InvoiceHistoryEntry: Decodable, Identifiable {
 ///   ],
 ///   "created_at": "…", "updated_at": "…"
 /// }
-struct InvoiceQueryThread: Decodable, Identifiable {
-    var id: String
+struct InvoiceQueryThread: Codable, Identifiable {
+    var id: String?
     var entityType: String?
     var entityId: String?
     var raisedBy: String?
@@ -86,7 +75,7 @@ struct InvoiceQueryThread: Decodable, Identifiable {
     var messages: [InvoiceQueryMessage]?
 
     enum CodingKeys: String, CodingKey {
-        case id, queries
+        case id, messages = "queries"
         case entityType = "entity_type"
         case entityId   = "entity_id"
         case raisedBy   = "raised_by"
@@ -94,30 +83,11 @@ struct InvoiceQueryThread: Decodable, Identifiable {
         case createdAt  = "created_at"
         case updatedAt  = "updated_at"
     }
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id         = (try? c.decode(String.self, forKey: .id)) ?? UUID().uuidString
-        entityType = try? c.decode(String.self, forKey: .entityType)
-        entityId   = try? c.decode(String.self, forKey: .entityId)
-        raisedBy   = try? c.decode(String.self, forKey: .raisedBy)
-        messages   = try? c.decode([InvoiceQueryMessage].self, forKey: .queries)
-
-        func flexTs(_ key: CodingKeys) -> Int64? {
-            if let v = try? c.decode(Int64.self,  forKey: key) { return v }
-            if let v = try? c.decode(Double.self, forKey: key) { return Int64(v) }
-            if let s = try? c.decode(String.self, forKey: key), let v = Int64(s) { return v }
-            return nil
-        }
-        raisedAt  = flexTs(.raisedAt)
-        createdAt = flexTs(.createdAt)
-        updatedAt = flexTs(.updatedAt)
-    }
 }
 
 /// One message inside an InvoiceQueryThread's `queries` array.
 /// Each entry is shaped `{ query, queried_at, queried_by }`.
-struct InvoiceQueryMessage: Decodable, Identifiable {
+struct InvoiceQueryMessage: Codable, Identifiable {
     /// Composite id derived from user + timestamp — the backend doesn't
     /// send a per-message id.
     var id: String { "\(queriedBy ?? "unknown")-\(queriedAt ?? 0)" }
@@ -131,15 +101,6 @@ struct InvoiceQueryMessage: Decodable, Identifiable {
         case queriedBy = "queried_by"
     }
 
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        query = try? c.decode(String.self, forKey: .query)
-        queriedBy = try? c.decode(String.self, forKey: .queriedBy)
-        if let v = try? c.decode(Int64.self,  forKey: .queriedAt)      { queriedAt = v }
-        else if let v = try? c.decode(Double.self, forKey: .queriedAt) { queriedAt = Int64(v) }
-        else if let s = try? c.decode(String.self, forKey: .queriedAt), let v = Int64(s) { queriedAt = v }
-        else { queriedAt = nil }
-    }
 }
 
 // MARK: - Run Authorization Level
@@ -151,7 +112,7 @@ struct RunAuthLevel: Codable, Equatable {
 
 // MARK: - Invoice Settings
 
-struct InvoiceSettingsRaw: Codable {
+struct InvoiceSettings: Codable {
     var id: String?
     var projectId: String?
     var alerts: [String]?
@@ -160,8 +121,8 @@ struct InvoiceSettingsRaw: Codable {
     var assignmentRules: [InvoiceAssignmentRule]?
     var createdBy: String?
     var updatedBy: String?
-    var createdAt: String?
-    var updatedAt: String?
+    var createdAt: Int64?
+    var updatedAt: Int64?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -175,76 +136,28 @@ struct InvoiceSettingsRaw: Codable {
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = try? c.decode(String.self, forKey: .id)
-        projectId = try? c.decode(String.self, forKey: .projectId)
-        createdBy = try? c.decode(String.self, forKey: .createdBy)
-        updatedBy = try? c.decode(String.self, forKey: .updatedBy)
-        createdAt = try? c.decode(String.self, forKey: .createdAt)
-        updatedAt = try? c.decode(String.self, forKey: .updatedAt)
-
-        // alerts: array or JSON string
-        if let arr = try? c.decode([String].self, forKey: .alerts) {
-            alerts = arr
-        } else if let s = try? c.decode(String.self, forKey: .alerts),
-                  let d = s.data(using: .utf8),
-                  let arr = try? JSONDecoder().decode([String].self, from: d) {
-            alerts = arr
-        } else { alerts = nil }
-
-        // team_members: array or JSON string
-        if let arr = try? c.decode([InvoiceTeamMember].self, forKey: .teamMembers) {
-            teamMembers = arr
-        } else if let s = try? c.decode(String.self, forKey: .teamMembers),
-                  let d = s.data(using: .utf8),
-                  let arr = try? JSONDecoder().decode([InvoiceTeamMember].self, from: d) {
-            teamMembers = arr
-        } else { teamMembers = nil }
-
-        // run_authorization: array or JSON string
-        if let arr = try? c.decode([RunAuthLevel].self, forKey: .runAuthorization) {
-            runAuthorization = arr
-        } else if let s = try? c.decode(String.self, forKey: .runAuthorization),
-                  let d = s.data(using: .utf8),
-                  let arr = try? JSONDecoder().decode([RunAuthLevel].self, from: d) {
-            runAuthorization = arr
-        } else { runAuthorization = nil }
-
-        // assignment_rules: array or JSON string
-        if let arr = try? c.decode([InvoiceAssignmentRule].self, forKey: .assignmentRules) {
-            assignmentRules = arr
-        } else if let s = try? c.decode(String.self, forKey: .assignmentRules),
-                  let d = s.data(using: .utf8),
-                  let arr = try? JSONDecoder().decode([InvoiceAssignmentRule].self, from: d) {
-            assignmentRules = arr
-        } else { assignmentRules = nil }
-    }
 }
 
 // MARK: - Team Member
 
 struct InvoiceTeamMember: Codable, Equatable, Identifiable {
     var userId: String?
-    var postingLimit: AnyCodableValue?
+    /// Raw posting-limit string. Server sends "unlimited" (or null/empty)
+    /// for no cap, or a numeric string like "500" for a per-posting cap.
+    var postingLimit: String?
     var runAccess: Bool?
     var overrideAccess: Bool?
 
     var id: String { userId ?? "" }
 
     var isUnlimited: Bool {
-        guard let limit = postingLimit else { return true }
-        switch limit {
-        case .null: return true
-        case .string(let s): return s == "unlimited" || s.isEmpty
-        default: return false
-        }
+        let trimmed = (postingLimit ?? "").trimmingCharacters(in: .whitespaces)
+        return trimmed.isEmpty || trimmed.lowercased() == "unlimited"
     }
 
     var postingLimitValue: Double? {
         if isUnlimited { return nil }
-        return postingLimit?.doubleValue
+        return Double(postingLimit ?? "")
     }
 
     enum CodingKeys: String, CodingKey {
@@ -254,19 +167,12 @@ struct InvoiceTeamMember: Codable, Equatable, Identifiable {
         case overrideAccess = "override_access"
     }
 
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        userId = try? c.decode(String.self, forKey: .userId)
-        postingLimit = try? c.decode(AnyCodableValue.self, forKey: .postingLimit)
-        runAccess = try? c.decode(Bool.self, forKey: .runAccess)
-        overrideAccess = try? c.decode(Bool.self, forKey: .overrideAccess)
-    }
 }
 
 // MARK: - Invoice Assignment Rule
 
 struct InvoiceAssignmentRule: Codable, Equatable, Identifiable {
-    var id: String
+    var id: String?
     var projectId: String?
     var userId: String?
     var name: String?
@@ -278,8 +184,8 @@ struct InvoiceAssignmentRule: Codable, Equatable, Identifiable {
     var priority: Int?
     var isActive: Bool?
     var module: String?
-    var createdAt: String?
-    var updatedAt: String?
+    var createdAt: Int64?
+    var updatedAt: Int64?
 
     enum CodingKeys: String, CodingKey {
         case id, name, departments, vendors, priority, module
@@ -292,67 +198,16 @@ struct InvoiceAssignmentRule: Codable, Equatable, Identifiable {
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = (try? c.decode(String.self, forKey: .id)) ?? UUID().uuidString
-        projectId = try? c.decode(String.self, forKey: .projectId)
-        userId = try? c.decode(String.self, forKey: .userId)
-        name = try? c.decode(String.self, forKey: .name)
-        targetUserId = try? c.decode(String.self, forKey: .targetUserId)
-        priority = try? c.decode(Int.self, forKey: .priority)
-        isActive = try? c.decode(Bool.self, forKey: .isActive)
-        module = try? c.decode(String.self, forKey: .module)
-        createdAt = try? c.decode(String.self, forKey: .createdAt)
-        updatedAt = try? c.decode(String.self, forKey: .updatedAt)
-        amountMin = try? c.decode(Double.self, forKey: .amountMin)
-
-        // departments: array or JSON string
-        if let arr = try? c.decode([String].self, forKey: .departments) {
-            departments = arr
-        } else if let s = try? c.decode(String.self, forKey: .departments),
-                  let d = s.data(using: .utf8),
-                  let arr = try? JSONDecoder().decode([String].self, from: d) {
-            departments = arr
-        } else { departments = nil }
-
-        // vendors: array or JSON string
-        if let arr = try? c.decode([String].self, forKey: .vendors) {
-            vendors = arr
-        } else if let s = try? c.decode(String.self, forKey: .vendors),
-                  let d = s.data(using: .utf8),
-                  let arr = try? JSONDecoder().decode([String].self, from: d) {
-            vendors = arr
-        } else { vendors = nil }
-
-        // nominal_codes: array or JSON string
-        if let arr = try? c.decode([String].self, forKey: .nominalCodes) {
-            nominalCodes = arr
-        } else if let s = try? c.decode(String.self, forKey: .nominalCodes),
-                  let d = s.data(using: .utf8),
-                  let arr = try? JSONDecoder().decode([String].self, from: d) {
-            nominalCodes = arr
-        } else { nominalCodes = nil }
-    }
 }
 
-// MARK: - Payment Run Detail (parsed result for UI)
+// MARK: - Payment Run Detail
 
-struct PaymentRunDetail {
+struct PaymentRunDetail: Codable {
     var run: PaymentRun?
     var invoices: [Invoice]?
-}
 
-// MARK: - Payment Run Detail Raw (for getPaymentRun API response)
-
-struct PaymentRunDetailRaw: Decodable {
-    var run: PaymentRunRaw?
-    var invoices: [InvoiceRaw]?
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        run = try? c.decode(PaymentRunRaw.self, forKey: .run)
-        invoices = try? c.decode([InvoiceRaw].self, forKey: .invoices)
+    init(run: PaymentRun? = nil, invoices: [Invoice]? = nil) {
+        self.run = run; self.invoices = invoices
     }
 
     enum CodingKeys: String, CodingKey { case run, invoices }
@@ -369,10 +224,10 @@ struct InvoiceExtraction: Codable {
     var dueDate: String?
     var supplier: InvoiceExtractionSupplier?
     var lineItems: [InvoiceExtractionLineItem]?
-    var net: AnyCodableValue?
-    var vat: AnyCodableValue?
-    var gross: AnyCodableValue?
-    var vatRate: AnyCodableValue?
+    var net: Double?
+    var vat: Double?
+    var gross: Double?
+    var vatRate: Double?
     var currency: String?
     var confidence: Int?
     var rawText: String?
@@ -389,17 +244,9 @@ struct InvoiceExtraction: Codable {
         case rawText = "raw_text"
     }
 
-    var grossValue: Double {
-        gross?.doubleValue ?? 0
-    }
-
-    var netValue: Double {
-        net?.doubleValue ?? 0
-    }
-
-    var vatValue: Double {
-        vat?.doubleValue ?? 0
-    }
+    var grossValue: Double { gross ?? 0 }
+    var netValue: Double { net ?? 0 }
+    var vatValue: Double { vat ?? 0 }
 
     struct InvoiceExtractionSupplier: Codable {
         var name: String?
@@ -416,17 +263,17 @@ struct InvoiceExtraction: Codable {
 
     struct InvoiceExtractionLineItem: Codable {
         var description: String?
-        var quantity: AnyCodableValue?
-        var unitPrice: AnyCodableValue?
-        var amount: AnyCodableValue?
+        var quantity: Double?
+        var unitPrice: Double?
+        var amount: Double?
 
         enum CodingKeys: String, CodingKey {
             case description, quantity, amount
             case unitPrice = "unit_price"
         }
 
-        var quantityValue: Double { quantity?.doubleValue ?? 0 }
-        var unitPriceValue: Double { unitPrice?.doubleValue ?? 0 }
-        var amountValue: Double { amount?.doubleValue ?? 0 }
+        var quantityValue: Double { quantity ?? 0 }
+        var unitPriceValue: Double { unitPrice ?? 0 }
+        var amountValue: Double { amount ?? 0 }
     }
 }

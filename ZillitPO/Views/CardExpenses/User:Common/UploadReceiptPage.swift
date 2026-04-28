@@ -22,6 +22,7 @@ struct UploadReceiptPage: View {
         }
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack {
             Color.bgBase.edgesIgnoringSafeArea(.all)
@@ -419,6 +420,7 @@ struct ReceiptDocumentViewerSheet: View {
     var fileName: String = "Receipt"
     @Environment(\.presentationMode) var presentationMode
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         NavigationView {
             ReceiptWebViewContent(url: url)

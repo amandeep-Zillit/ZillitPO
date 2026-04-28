@@ -27,7 +27,7 @@ struct FloatDetailView: View {
     /// completed yet and the claims list happens to be populated.
     private var batches: [ClaimBatch] {
         if let d = details, !(d.batches ?? []).isEmpty {
-            return (d.batches ?? []).map { $0.toClaimBatch() }
+            return d.batches ?? []
         }
         return appState.allClaims.filter { $0.floatRequestId == float.id }
     }
@@ -216,6 +216,7 @@ struct FloatDetailView: View {
         }
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack(alignment: .bottom) {
             Color.bgSurface.edgesIgnoringSafeArea(.all)
@@ -425,7 +426,7 @@ struct FloatDetailView: View {
         .background(
             ZStack {
                 NavigationLink(
-                    destination: FloatHistoryPage(floatId: float.id, floatLabel: "#\(float.reqNumber ?? "")")
+                    destination: FloatHistoryPage(floatId: float.id ?? "", floatLabel: "#\(float.reqNumber ?? "")")
                         .environmentObject(appState),
                     isActive: $navigateToHistory
                 ) { EmptyView() }.frame(width: 0, height: 0).hidden()
@@ -444,7 +445,7 @@ struct FloatDetailView: View {
             // Balance reflect the latest backend state (after a return
             // was recorded or a batch posted via another screen).
             isLoading = true
-            appState.loadFloatDetails(float.id) { d in
+            appState.loadFloatDetails(float.id ?? "") { d in
                 if let d = d { self.details = d }
                 // Whether the call succeeded or returned empty, we're
                 // done loading — the existing `float` prop + any new
@@ -616,7 +617,7 @@ struct FloatDetailView: View {
     }
 
     /// Table of receipts inside a batch. Individual receipts aren't
-    /// decoded in the current `ClaimBatchRaw`; we surface a single
+    /// decoded in the current `ClaimBatch`; we surface a single
     /// aggregate row (description = notes/coding, amount = totalGross).
     /// When the backend returns per-receipt data we can switch this
     /// `ForEach` to iterate the real line items.
@@ -759,6 +760,7 @@ struct FloatHistoryPage: View {
     @State private var entries: [FloatHistoryEntry] = []
     @State private var isLoading: Bool = true
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack {
             Color.bgSurface.edgesIgnoringSafeArea(.all)

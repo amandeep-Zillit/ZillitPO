@@ -11,7 +11,7 @@ import Foundation
 /// is a human-readable label the backend pre-formats (e.g.
 /// "Float: AWAITING_APPROVAL" or "Batch #RB-0008: POSTED"), `action_at`
 /// is epoch ms, and `note` carries any optional reason/rejection text.
-struct FloatHistoryEntry: Decodable, Identifiable {
+struct FloatHistoryEntry: Codable, Identifiable {
     var id: String { "\(action ?? "")-\(actionAt ?? 0)-\(actionBy ?? "")" }
     var action: String?
     var actionBy: String?
@@ -23,17 +23,6 @@ struct FloatHistoryEntry: Decodable, Identifiable {
         case actionBy = "action_by"
         case actionAt = "action_at"
         case note
-    }
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        action   = try? c.decode(String.self, forKey: .action)
-        actionBy = try? c.decode(String.self, forKey: .actionBy)
-        note     = try? c.decode(String.self, forKey: .note)
-        if let v = try? c.decode(Int64.self,  forKey: .actionAt)      { actionAt = v }
-        else if let v = try? c.decode(Double.self, forKey: .actionAt) { actionAt = Int64(v) }
-        else if let s = try? c.decode(String.self, forKey: .actionAt), let v = Int64(s) { actionAt = v }
-        else { actionAt = nil }
     }
 }
 
@@ -54,6 +43,15 @@ struct CashExpenseMetadata: Codable {
     /// Missing this flag previously meant iOS showed the Override
     /// button in scenarios where the web would hide it.
     var cardOverride: Bool?
+    /// Per-user cap on the gross value a team member can post. `null`
+    /// = unlimited. Server uses this to gate batch posting.
+    var postingLimit: Double?
+    /// Approval-override toggles mirroring the web settings. Both flags
+    /// ride alongside `canOverride` — the server sends them on the
+    /// user-roles / metadata endpoint and the web uses them to
+    /// differentiate receipt-level vs float-level overrides.
+    var overrideReceiptBatch: Bool?
+    var overrideFloatReq: Bool?
     var requireSeniorSignOff: Bool?
     var viewDepartmentFloats: Bool?
     var codingRequired: Bool?
@@ -74,31 +72,20 @@ struct CashExpenseMetadata: Codable {
         case isSenior = "is_senior"
         case canOverride = "can_override"
         case cardOverride = "card_override"
+        case postingLimit = "posting_limit"
+        case overrideReceiptBatch = "override_receipt_batch"
+        case overrideFloatReq = "override_float_req"
         case requireSeniorSignOff = "require_senior_sign_off"
         case viewDepartmentFloats = "view_department_floats"
         case codingRequired = "coding_required"
     }
 
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        isApprover = try? c.decode(Bool.self, forKey: .isApprover)
-        approverDepartmentIds = try? c.decode([String].self, forKey: .approverDepartmentIds)
-        isCoordinator = try? c.decode(Bool.self, forKey: .isCoordinator)
-        coordinatorDepartmentIds = try? c.decode([String].self, forKey: .coordinatorDepartmentIds)
-        isTeamMember = try? c.decode(Bool.self, forKey: .isTeamMember)
-        isSenior = try? c.decode(Bool.self, forKey: .isSenior)
-        canOverride = try? c.decode(Bool.self, forKey: .canOverride)
-        cardOverride = try? c.decode(Bool.self, forKey: .cardOverride)
-        requireSeniorSignOff = try? c.decode(Bool.self, forKey: .requireSeniorSignOff)
-        viewDepartmentFloats = try? c.decode(Bool.self, forKey: .viewDepartmentFloats)
-        codingRequired = try? c.decode(Bool.self, forKey: .codingRequired)
-    }
 }
 
 // MARK: - Float Request
 
-struct FloatRequest: Identifiable, Equatable {
-    var id: String = UUID().uuidString
+struct FloatRequest: Identifiable, Codable, Equatable {
+    var id: String?
     var userId: String?
     var departmentId: String?
     var reqNumber: String?
@@ -125,10 +112,13 @@ struct FloatRequest: Identifiable, Equatable {
     var approvals: [Approval]?
     var rejectionReason: String?
     var rejectedBy: String?
-    var department: String?
     var createdAt: Int64?
     var updatedAt: Int64?
+
     static func == (lhs: FloatRequest, rhs: FloatRequest) -> Bool { lhs.id == rhs.id }
+
+    /// Department display name — resolved from DepartmentsData singleton.
+    var department: String? { DepartmentsData.all.first { $0.id == (departmentId ?? "") }?.displayName }
 
     /// Remaining balance. Prefer the backend-authoritative `balance`
     /// column — it already accounts for top-ups, posted batches, and
@@ -156,6 +146,7 @@ struct FloatRequest: Identifiable, Equatable {
         }
         return 0
     }
+
     // Status values (mirrors backend FloatRequestService STATUS enum):
     //   AWAITING_APPROVAL → APPROVED (all tiers) | REJECTED | ACCT_OVERRIDE
     //   APPROVED / ACCT_OVERRIDE → READY_TO_COLLECT → COLLECTED
@@ -179,8 +170,6 @@ struct FloatRequest: Identifiable, Equatable {
     }
 
     /// Short action-oriented guidance shown under or alongside the status badge.
-    /// Aligned with backend workflow: Awaiting → Approved → Ready to Collect →
-    /// Collected → Spending → Spent → Pending Return → Closed/Cancelled.
     var statusSubtitle: String {
         switch status?.uppercased() ?? "" {
         case "AWAITING_APPROVAL":   return "Float request submitted — awaiting approval"
@@ -198,115 +187,30 @@ struct FloatRequest: Identifiable, Equatable {
         default: return ""
         }
     }
-}
-
-struct FloatRequestRaw: Codable {
-    var id: String
-    var userId: String?; var departmentId: String?
-    var reqNumber: String?; var reqAmount: String?; var issuedFloat: String?
-    var receiptsAmount: String?; var returnAmount: String?; var duration: String?
-    /// Running "spent" total — backend column `spent`.
-    var spent: String?
-    /// Authoritative remaining balance — backend column `balance`.
-    var balance: String?
-    var costCode: String?; var startDate: String?; var purpose: String?
-    var collectionMethod: String?; var status: String?
-    var approvals: [CashApprovalRaw]?
-    var rejectionReason: String?; var rejectedBy: String?
-    var createdAt: String?; var updatedAt: String?
 
     enum CodingKeys: String, CodingKey {
         case id, duration, purpose, status, approvals, spent, balance
-        case userId = "user_id"
-        case departmentId = "department_id"
-        case reqNumber = "req_number"
-        case reqAmount = "req_amount"
-        case issuedFloat = "issued_float"
-        case receiptsAmount = "receipts_amount"
-        case returnAmount = "return_amount"
-        case costCode = "cost_code"
-        case startDate = "start_date"
+        case userId           = "user_id"
+        case departmentId     = "department_id"
+        case reqNumber        = "req_number"
+        case reqAmount        = "req_amount"
+        case issuedFloat      = "issued_float"
+        case receiptsAmount   = "receipts_amount"
+        case returnAmount     = "return_amount"
+        case costCode         = "cost_code"
+        case startDate        = "start_date"
         case collectionMethod = "collection_method"
-        case rejectionReason = "rejection_reason"
-        case rejectedBy = "rejected_by"
-        case createdAt = "created_at"
-        case updatedAt = "updated_at"
-    }
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = try c.decode(String.self, forKey: .id)
-        userId = try? c.decode(String.self, forKey: .userId)
-        departmentId = try? c.decode(String.self, forKey: .departmentId)
-        reqNumber = try? c.decode(String.self, forKey: .reqNumber)
-        reqAmount = try? c.decode(String.self, forKey: .reqAmount)
-        issuedFloat = try? c.decode(String.self, forKey: .issuedFloat)
-        receiptsAmount = try? c.decode(String.self, forKey: .receiptsAmount)
-        returnAmount = try? c.decode(String.self, forKey: .returnAmount)
-        // Numeric Postgres columns can arrive as either String or Number in
-        // JSON depending on driver / serializer. Accept both so we don't
-        // silently lose the value and fall back to 0.
-        if let s = try? c.decode(String.self, forKey: .spent) { spent = s }
-        else if let d = try? c.decode(Double.self, forKey: .spent) { spent = String(d) }
-        if let s = try? c.decode(String.self, forKey: .balance) { balance = s }
-        else if let d = try? c.decode(Double.self, forKey: .balance) { balance = String(d) }
-        duration = try? c.decode(String.self, forKey: .duration)
-        costCode = try? c.decode(String.self, forKey: .costCode)
-        startDate = try? c.decode(String.self, forKey: .startDate)
-        purpose = try? c.decode(String.self, forKey: .purpose)
-        collectionMethod = try? c.decode(String.self, forKey: .collectionMethod)
-        status = try? c.decode(String.self, forKey: .status)
-        approvals = try? c.decode([CashApprovalRaw].self, forKey: .approvals)
-        rejectionReason = try? c.decode(String.self, forKey: .rejectionReason)
-        rejectedBy = try? c.decode(String.self, forKey: .rejectedBy)
-        createdAt = try? c.decode(String.self, forKey: .createdAt)
-        updatedAt = try? c.decode(String.self, forKey: .updatedAt)
-    }
-
-    func toFloatRequest() -> FloatRequest {
-        let dept = DepartmentsData.all.first { $0.id == (departmentId ?? "") }
-        var f = FloatRequest()
-        f.id = id; f.userId = userId ?? ""; f.departmentId = departmentId ?? ""
-        f.reqNumber = reqNumber ?? ""; f.reqAmount = Double(reqAmount ?? "") ?? 0
-        f.issuedFloat = Double(issuedFloat ?? "") ?? 0
-        f.receiptsAmount = Double(receiptsAmount ?? "") ?? 0
-        f.returnAmount = Double(returnAmount ?? "") ?? 0
-        // Backend-authoritative running totals. Fall back to legacy
-        // values when not present (older list endpoints) so we still
-        // render something sensible.
-        f.spent = Double(spent ?? "") ?? f.receiptsAmount
-        // Keep `balance` nil when the server didn't send it, so the
-        // `remaining` computed var falls back to the derivation.
-        f.balance = (balance?.isEmpty == false) ? Double(balance!) : nil
-        f.duration = duration ?? ""; f.costCode = costCode ?? ""
-        f.startDate = Int64(startDate ?? ""); f.purpose = purpose ?? ""
-        f.collectionMethod = collectionMethod ?? ""; f.status = status ?? ""
-        f.approvals = (approvals ?? []).map {
-            Approval(userId: $0.userId ?? "", tierNumber: $0.tierNumber ?? 0, approvedAt: Int64($0.approvedAt ?? 0))
-        }
-        f.rejectionReason = rejectionReason; f.rejectedBy = rejectedBy
-        f.department = dept?.displayName ?? ""
-        f.createdAt = Int64(createdAt ?? "") ?? 0; f.updatedAt = Int64(updatedAt ?? "") ?? 0
-        return f
-    }
-}
-
-struct CashApprovalRaw: Codable {
-    var userId: String?
-    var tierNumber: Int?
-    var approvedAt: Int64?
-
-    enum CodingKeys: String, CodingKey {
-        case userId = "user_id"
-        case tierNumber = "tier_number"
-        case approvedAt = "approved_at"
+        case rejectionReason  = "rejection_reason"
+        case rejectedBy       = "rejected_by"
+        case createdAt        = "created_at"
+        case updatedAt        = "updated_at"
     }
 }
 
 // MARK: - Claim Batch
 
-struct ClaimBatch: Identifiable, Equatable {
-    var id: String = UUID().uuidString
+struct ClaimBatch: Identifiable, Codable, Equatable {
+    var id: String?
     /// Parent batch id. When the list came from `/claims/my-claims` (which
     /// returns individual claim-item rows joined with their batch), `id`
     /// holds the claim-item id and `batchId` holds the true batch id —
@@ -328,7 +232,6 @@ struct ClaimBatch: Identifiable, Equatable {
     var category: String?
     var costCode: String?
     var codingDescription: String?
-    var department: String?
     var rejectionReason: String?
     var rejectedBy: String?
     var escalationReason: String?
@@ -337,16 +240,30 @@ struct ClaimBatch: Identifiable, Equatable {
     var postedAt: Int64?
     var createdAt: Int64?
     var updatedAt: Int64?
+    /// Raw settlement details object decoded from `settlement_details`.
+    /// The only field we surface downstream is `follow_up`, exposed via
+    /// the `followUp` computed helper.
+    var settlementDetails: SettlementDetails?
     /// Extra follow-up action stored under `settlement_details.follow_up`
     /// — typically "top_up" (reimburse back into float) or "close" (close
-    /// the float after this batch posts). Used by the detail view's
-    /// "Follow-up" column.
-    var followUp: String?
+    /// the float after this batch posts).
+    var followUp: String? { settlementDetails?.followUp }
     /// Tier approvals accumulated on this batch. Populated by the detail
-    /// fetch (`GET /claims/{id}`) and used by the Approval Progress panel
-    /// to render one entry per approver (name + Level N badge).
-    var approvals: [Approval] = []
+    /// fetch (`GET /claims/{id}`) — the list fetch may omit it entirely
+    /// (decoded as `nil`), which the Approval Progress panel treats the
+    /// same as an empty array.
+    var approvals: [Approval]?
+
+    /// Effective batch id — falls back to `id` when the server didn't
+    /// send a separate `batch_id` (i.e. when the row already IS a batch,
+    /// not a joined claim-item). Callers hitting batch-scoped endpoints
+    /// should prefer this over `batchId`.
+    var effectiveBatchId: String { (batchId?.isEmpty == false ? batchId : nil) ?? id ?? "" }
+
     static func == (lhs: ClaimBatch, rhs: ClaimBatch) -> Bool { lhs.id == rhs.id }
+
+    /// Department display name — resolved from DepartmentsData singleton.
+    var department: String? { DepartmentsData.all.first { $0.id == (departmentId ?? "") }?.displayName }
 
     var isPettyCash: Bool { (expenseType ?? "").lowercased() == "pc" }
     var isOutOfPocket: Bool { (expenseType ?? "").lowercased() == "oop" }
@@ -365,136 +282,43 @@ struct ClaimBatch: Identifiable, Equatable {
         default: return (status ?? "").capitalized
         }
     }
-}
 
-struct ClaimBatchRaw: Codable {
-    var id: String
-    var batchId: String?
-    var batchReference: String?; var userId: String?; var departmentId: String?
-    var expenseType: String?; var floatRequestId: String?; var settlementType: String?
-    var status: String?; var totalGross: String?; var totalNet: String?; var totalVat: String?
-    var claimCount: Int?; var notes: String?
-    var category: String?; var costCode: String?; var codingDescription: String?
-    var rejectionReason: String?; var rejectedBy: String?
-    var escalationReason: String?; var assignedTo: String?
-    var postedBy: String?; var postedAt: String?
-    var createdAt: String?; var updatedAt: String?
-
-    /// `settlement_details` is a nested JSON object. We only need
-    /// `follow_up` out of it, so decode into this tiny struct.
-    struct SettlementDetails: Codable {
+    /// Nested struct for `settlement_details` — we only need `follow_up`.
+    struct SettlementDetails: Codable, Equatable {
         var followUp: String?
-        enum CodingKeys: String, CodingKey {
-            case followUp = "follow_up"
-        }
+        enum CodingKeys: String, CodingKey { case followUp = "follow_up" }
     }
-    var settlementDetails: SettlementDetails?
-    /// Present on `GET /claims/{id}` — array of `{ user_id, tier_number,
-    /// approved_at }` entries, one per tier approval so far. List views
-    /// don't receive this; only the detail fetch does.
-    var approvals: [CashApprovalRaw]?
 
     enum CodingKeys: String, CodingKey {
         case id, status, notes, category, approvals
-        case batchId = "batch_id"
-        case batchReference = "batch_reference"
-        case userId = "user_id"
-        case departmentId = "department_id"
-        case expenseType = "expense_type"
-        case floatRequestId = "float_request_id"
-        case settlementType = "settlement_type"
-        case totalGross = "total_gross"
-        case totalNet = "total_net"
-        case totalVat = "total_vat"
-        case claimCount = "claim_count"
-        case costCode = "cost_code"
+        case batchId          = "batch_id"
+        case batchReference   = "batch_reference"
+        case userId           = "user_id"
+        case departmentId     = "department_id"
+        case expenseType      = "expense_type"
+        case floatRequestId   = "float_request_id"
+        case settlementType   = "settlement_type"
+        case totalGross       = "total_gross"
+        case totalNet         = "total_net"
+        case totalVat         = "total_vat"
+        case claimCount       = "claim_count"
+        case costCode         = "cost_code"
         case codingDescription = "coding_description"
-        case rejectionReason = "rejection_reason"
-        case rejectedBy = "rejected_by"
+        case rejectionReason  = "rejection_reason"
+        case rejectedBy       = "rejected_by"
         case escalationReason = "escalation_reason"
-        case assignedTo = "assigned_to"
-        case postedBy = "posted_by"
-        case postedAt = "posted_at"
-        case createdAt = "created_at"
-        case updatedAt = "updated_at"
+        case assignedTo       = "assigned_to"
+        case postedBy         = "posted_by"
+        case postedAt         = "posted_at"
+        case createdAt        = "created_at"
+        case updatedAt        = "updated_at"
         case settlementDetails = "settlement_details"
-    }
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = try c.decode(String.self, forKey: .id)
-        batchId = try? c.decode(String.self, forKey: .batchId)
-        batchReference = try? c.decode(String.self, forKey: .batchReference)
-        userId = try? c.decode(String.self, forKey: .userId)
-        departmentId = try? c.decode(String.self, forKey: .departmentId)
-        expenseType = try? c.decode(String.self, forKey: .expenseType)
-        floatRequestId = try? c.decode(String.self, forKey: .floatRequestId)
-        settlementType = try? c.decode(String.self, forKey: .settlementType)
-        status = try? c.decode(String.self, forKey: .status)
-        totalGross = try? c.decode(String.self, forKey: .totalGross)
-        totalNet = try? c.decode(String.self, forKey: .totalNet)
-        totalVat = try? c.decode(String.self, forKey: .totalVat)
-        claimCount = try? c.decode(Int.self, forKey: .claimCount)
-        notes = try? c.decode(String.self, forKey: .notes)
-        category = try? c.decode(String.self, forKey: .category)
-        costCode = try? c.decode(String.self, forKey: .costCode)
-        codingDescription = try? c.decode(String.self, forKey: .codingDescription)
-        rejectionReason = try? c.decode(String.self, forKey: .rejectionReason)
-        rejectedBy = try? c.decode(String.self, forKey: .rejectedBy)
-        escalationReason = try? c.decode(String.self, forKey: .escalationReason)
-        assignedTo = try? c.decode(String.self, forKey: .assignedTo)
-        postedBy = try? c.decode(String.self, forKey: .postedBy)
-        postedAt = try? c.decode(String.self, forKey: .postedAt)
-        createdAt = try? c.decode(String.self, forKey: .createdAt)
-        updatedAt = try? c.decode(String.self, forKey: .updatedAt)
-        settlementDetails = try? c.decode(SettlementDetails.self, forKey: .settlementDetails)
-        // `approvals` may arrive as a parsed array OR as a JSON string the
-        // server forgot to parse. Try both, fall back to empty.
-        if let direct = try? c.decode([CashApprovalRaw].self, forKey: .approvals) {
-            approvals = direct
-        } else if let str = try? c.decode(String.self, forKey: .approvals),
-                  let data = str.data(using: .utf8),
-                  let parsed = try? JSONDecoder().decode([CashApprovalRaw].self, from: data) {
-            approvals = parsed
-        }
-    }
-
-    func toClaimBatch() -> ClaimBatch {
-        let dept = DepartmentsData.all.first { $0.id == (departmentId ?? "") }
-        var cb = ClaimBatch()
-        cb.id = id
-        // `/claims/my-claims` returns claim-item rows with the parent `batch_id`
-        // joined in — use that for batch-scoped calls. For `/claims` the
-        // response already IS a batch, so `batch_id` is absent and we fall
-        // back to `id`.
-        cb.batchId = (batchId?.isEmpty == false ? batchId! : id)
-        cb.batchReference = batchReference ?? ""
-        cb.userId = userId ?? ""; cb.departmentId = departmentId ?? ""
-        cb.expenseType = expenseType ?? ""; cb.floatRequestId = floatRequestId
-        cb.settlementType = settlementType ?? ""; cb.status = status ?? ""
-        cb.totalGross = Double(totalGross ?? "") ?? 0
-        cb.totalNet = Double(totalNet ?? "") ?? 0
-        cb.totalVat = Double(totalVat ?? "") ?? 0
-        cb.claimCount = claimCount ?? 0; cb.notes = notes ?? ""
-        cb.category = category ?? ""; cb.costCode = costCode ?? ""; cb.codingDescription = codingDescription ?? ""
-        cb.department = dept?.displayName ?? ""
-        cb.rejectionReason = rejectionReason; cb.rejectedBy = rejectedBy
-        cb.escalationReason = escalationReason; cb.assignedTo = assignedTo
-        cb.postedBy = postedBy; cb.postedAt = postedAt.flatMap { Int64($0) }
-        cb.createdAt = Int64(createdAt ?? "") ?? 0; cb.updatedAt = Int64(updatedAt ?? "") ?? 0
-        cb.followUp = settlementDetails?.followUp ?? ""
-        cb.approvals = (approvals ?? []).map {
-            Approval(userId: $0.userId ?? "",
-                     tierNumber: $0.tierNumber ?? 0,
-                     approvedAt: Int64($0.approvedAt ?? 0))
-        }
-        return cb
     }
 }
 
 // MARK: - Payment Routing Response
 
-struct PaymentRoutingResponse: Decodable {
+struct PaymentRoutingResponse: Codable {
     var stats: PaymentRoutingStats?
     var bacsBatches: [PaymentRoutingBatch]?
     var payrollBatches: [PaymentRoutingBatch]?
@@ -504,17 +328,9 @@ struct PaymentRoutingResponse: Decodable {
         case bacsBatches    = "bacs_batches"
         case payrollBatches = "payroll_batches"
     }
-
-    init() {}
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        stats          = try? c.decode(PaymentRoutingStats.self,   forKey: .stats)
-        bacsBatches    = try? c.decode([PaymentRoutingBatch].self, forKey: .bacsBatches)
-        payrollBatches = try? c.decode([PaymentRoutingBatch].self, forKey: .payrollBatches)
-    }
 }
 
-struct PaymentRoutingStats: Decodable {
+struct PaymentRoutingStats: Codable {
     var bacsReady: Double?
     var bacsCount: Int?
     var payrollTotal: Double?
@@ -526,24 +342,10 @@ struct PaymentRoutingStats: Decodable {
         case payrollTotal = "payroll_total"
         case payrollCount = "payroll_count"
     }
-
-    init() {}
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        func dbl(_ k: CodingKeys) -> Double? {
-            if let d = try? c.decode(Double.self, forKey: k) { return d }
-            if let s = try? c.decode(String.self, forKey: k), let d = Double(s) { return d }
-            return nil
-        }
-        bacsReady    = dbl(.bacsReady)
-        bacsCount    = try? c.decode(Int.self, forKey: .bacsCount)
-        payrollTotal = dbl(.payrollTotal)
-        payrollCount = try? c.decode(Int.self, forKey: .payrollCount)
-    }
 }
 
-struct PaymentRoutingBatch: Identifiable, Decodable {
-    var id: String = UUID().uuidString
+struct PaymentRoutingBatch: Identifiable, Codable {
+    var id: String?
     var userId: String?
     var batchReference: String?
     var totalGross: Double?
@@ -573,30 +375,6 @@ struct PaymentRoutingBatch: Identifiable, Decodable {
         case postedAt            = "posted_at"
     }
 
-    init() {}
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        func dbl(_ k: CodingKeys) -> Double? {
-            if let d = try? c.decode(Double.self, forKey: k) { return d }
-            if let s = try? c.decode(String.self, forKey: k), let d = Double(s) { return d }
-            return nil
-        }
-        id                  = (try? c.decode(String.self, forKey: .id))             ?? UUID().uuidString
-        userId              = try? c.decode(String.self, forKey: .userId)
-        batchReference      = try? c.decode(String.self, forKey: .batchReference)
-        totalGross          = dbl(.totalGross)
-        totalNet            = dbl(.totalNet)
-        totalVat            = dbl(.totalVat)
-        reimbursementAmount = dbl(.reimbursementAmount)
-        settlementType      = try? c.decode(String.self, forKey: .settlementType)
-        settlementDetails   = try? c.decode(RoutingSettlementDetails.self, forKey: .settlementDetails)
-        status              = try? c.decode(String.self, forKey: .status)
-        claimCount          = try? c.decode(Int.self,    forKey: .claimCount)
-        if let i = try? c.decode(Int64.self, forKey: .postedAt)                 { postedAt = i }
-        else if let s = try? c.decode(String.self, forKey: .postedAt),
-                let i = Int64(s)                                                 { postedAt = i }
-    }
-
     var holderName: String { UsersData.byId[userId ?? ""]?.fullName ?? userId ?? "" }
 
     /// Matches React's `b.reimbursement_amount ?? b.total_gross ?? 0`.
@@ -618,7 +396,7 @@ struct PaymentRoutingBatch: Identifiable, Decodable {
     }
 }
 
-struct RoutingSettlementDetails: Decodable {
+struct RoutingSettlementDetails: Codable {
     var bankDetails: RoutingBankDetails?
     var paymentMethod: String?
 
@@ -626,14 +404,9 @@ struct RoutingSettlementDetails: Decodable {
         case bankDetails   = "bank_details"
         case paymentMethod = "payment_method"
     }
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        bankDetails   = try? c.decode(RoutingBankDetails.self, forKey: .bankDetails)
-        paymentMethod = try? c.decode(String.self, forKey: .paymentMethod)
-    }
 }
 
-struct RoutingBankDetails: Decodable {
+struct RoutingBankDetails: Codable {
     var sortCode: String?
     var accountName: String?
     var accountNumber: String?
@@ -643,53 +416,29 @@ struct RoutingBankDetails: Decodable {
         case accountName   = "account_name"
         case accountNumber = "account_number"
     }
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        sortCode      = try? c.decode(String.self, forKey: .sortCode)
-        accountName   = try? c.decode(String.self, forKey: .accountName)
-        accountNumber = try? c.decode(String.self, forKey: .accountNumber)
-    }
 }
 
 // MARK: - Float Details (full breakdown from /float-requests/{id}/details)
 
-struct FloatTopUpEntry: Decodable {
+struct FloatTopUpEntry: Codable {
     var id: String?
     var amount: Double?
+    /// Server-issued amount after accountant override. Callers that want
+    /// a fallback to the requested `amount` when this column is null
+    /// should use `entry.issuedAmount ?? entry.amount` at the call site.
     var issuedAmount: Double?
     var status: String?
     var note: String?
     var createdAt: Int64?
 
-    struct Keys: CodingKey { let stringValue: String; var intValue: Int? = nil
-        init?(stringValue: String) { self.stringValue = stringValue }
-        init?(intValue: Int) { self.stringValue = "\(intValue)"; self.intValue = intValue } }
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: Keys.self)
-        func str(_ keys: String...) -> String? {
-            for k in keys { guard let key = Keys(stringValue: k) else { continue }
-                if let v = try? c.decode(String.self, forKey: key), !v.isEmpty { return v }
-                if let v = try? c.decode(Int64.self, forKey: key) { return String(v) }
-                if let v = try? c.decode(Double.self, forKey: key) { return String(v) }
-            }
-            return nil
-        }
-        func dbl(_ keys: String...) -> Double? {
-            for k in keys { guard let key = Keys(stringValue: k) else { continue }
-                if let v = try? c.decode(Double.self, forKey: key) { return v }
-                if let s = try? c.decode(String.self, forKey: key), let v = Double(s) { return v } }
-            return nil
-        }
-        id           = str("id")
-        amount       = dbl("amount")
-        issuedAmount = dbl("issued_amount", "issuedAmount") ?? amount
-        status       = str("status")
-        note         = str("note")
-        if let s = str("created_at", "createdAt"), let v = Int64(s) { createdAt = v }
+    enum CodingKeys: String, CodingKey {
+        case id, amount, status, note
+        case issuedAmount = "issued_amount"
+        case createdAt    = "created_at"
     }
 }
 
-struct FloatReturnEntry: Decodable {
+struct FloatReturnEntry: Codable {
     var id: String?
     var returnAmount: Double?
     var returnReason: String?
@@ -699,37 +448,19 @@ struct FloatReturnEntry: Decodable {
     var recordedAt: Int64?
     var recordedBy: String?
 
-    struct Keys: CodingKey { let stringValue: String; var intValue: Int? = nil
-        init?(stringValue: String) { self.stringValue = stringValue }
-        init?(intValue: Int) { self.stringValue = "\(intValue)"; self.intValue = intValue } }
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: Keys.self)
-        func str(_ keys: String...) -> String? {
-            for k in keys { guard let key = Keys(stringValue: k) else { continue }
-                if let v = try? c.decode(String.self, forKey: key), !v.isEmpty { return v }
-                if let v = try? c.decode(Int64.self, forKey: key) { return String(v) }
-                if let v = try? c.decode(Double.self, forKey: key) { return String(v) }
-            }
-            return nil
-        }
-        func dbl(_ keys: String...) -> Double? {
-            for k in keys { guard let key = Keys(stringValue: k) else { continue }
-                if let v = try? c.decode(Double.self, forKey: key) { return v }
-                if let s = try? c.decode(String.self, forKey: key), let v = Double(s) { return v } }
-            return nil
-        }
-        id           = str("id")
-        returnAmount = dbl("return_amount", "returnAmount")
-        returnReason = str("return_reason", "returnReason")
-        reasonNotes  = str("reason_notes", "reasonNotes")
-        notes        = str("notes")
-        if let s = str("received_date", "receivedDate"), let v = Int64(s) { receivedDate = v }
-        if let s = str("recorded_at", "recordedAt"), let v = Int64(s) { recordedAt = v }
-        recordedBy   = str("recorded_by", "recordedBy")
+    enum CodingKeys: String, CodingKey {
+        case id, notes
+        case returnAmount = "return_amount"
+        case returnReason = "return_reason"
+        case reasonNotes  = "reason_notes"
+        case receivedDate = "received_date"
+        case recordedAt   = "recorded_at"
+        case recordedBy   = "recorded_by"
     }
+
 }
 
-struct FloatTotals: Decodable {
+struct FloatTotals: Codable {
     var issued: Double?
     var spent: Double?
     var toppedUp: Double?
@@ -738,130 +469,49 @@ struct FloatTotals: Decodable {
     var receiptsAmount: Double?
     var requested: Double?
 
-    init() {}
-
     enum CodingKeys: String, CodingKey {
         case issued, spent, returned, requested
-        case toppedUp = "topped_up"
-        case finalBalance = "final_balance"
+        case toppedUp       = "topped_up"
+        case finalBalance   = "final_balance"
         case receiptsAmount = "receipts_amount"
-    }
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        func dbl(_ k: CodingKeys) -> Double? {
-            if let v = try? c.decode(Double.self, forKey: k) { return v }
-            if let s = try? c.decode(String.self, forKey: k), let v = Double(s) { return v }
-            return nil
-        }
-        issued = dbl(.issued); spent = dbl(.spent); toppedUp = dbl(.toppedUp)
-        finalBalance = dbl(.finalBalance); returned = dbl(.returned)
-        receiptsAmount = dbl(.receiptsAmount); requested = dbl(.requested)
     }
 }
 
-struct FloatDetailsResponse: Decodable {
-    var float: FloatRequestRaw?
-    var batches: [ClaimBatchRaw]?
+struct FloatDetailsResponse: Codable {
+    var float: FloatRequest?
+    var batches: [ClaimBatch]?
     var topups: [FloatTopUpEntry]?
     var returns: [FloatReturnEntry]?
     var totals: FloatTotals?
 
     enum CodingKeys: String, CodingKey { case float, batches, topups, returns, totals }
 
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        float   = try? c.decode(FloatRequestRaw.self, forKey: .float)
-        batches = try? c.decode([ClaimBatchRaw].self, forKey: .batches)
-        topups  = try? c.decode([FloatTopUpEntry].self, forKey: .topups)
-        returns = try? c.decode([FloatReturnEntry].self, forKey: .returns)
-        totals  = try? c.decode(FloatTotals.self, forKey: .totals)
-    }
 }
 
-// MARK: - Claim item (one receipt inside a batch)
+// MARK: - Claim Item (one receipt inside a batch)
 
 /// A single claim row inside a batch. Populated from the `claims` array
 /// returned by `GET /api/v2/cash-expenses/claims/{batchId}`.
-struct ClaimItem: Identifiable, Equatable {
-    var id: String = UUID().uuidString
-    var itemDescription: String = ""
-    var category: String = ""
-    var amount: Double = 0
-    var date: Int64 = 0
-    var receiptUrl: String?
-    var nominalCode: String?
-    var status: String = ""
-    var notes: String = ""
-
-    static func == (lhs: ClaimItem, rhs: ClaimItem) -> Bool { lhs.id == rhs.id }
-}
-
-struct ClaimItemRaw: Decodable {
-    var id: String
+struct ClaimItem: Identifiable, Codable, Equatable {
+    var id: String?
     var itemDescription: String?
     var category: String?
-    var amount: String?
-    var date: String?
+    var amount: Double?
+    var date: Int64?
     var receiptUrl: String?
     var nominalCode: String?
     var status: String?
     var notes: String?
 
+    static func == (lhs: ClaimItem, rhs: ClaimItem) -> Bool { lhs.id == rhs.id }
+
     enum CodingKeys: String, CodingKey {
-        case id, category, amount, date, status, notes
+        case id, category, status, notes
         case itemDescription = "description"
+        case amount          = "amount"
+        case date            = "date"
         case receiptUrl      = "receipt_url"
         case nominalCode     = "nominal_code"
     }
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id              = (try? c.decode(String.self, forKey: .id)) ?? UUID().uuidString
-        itemDescription = try? c.decode(String.self, forKey: .itemDescription)
-        category        = try? c.decode(String.self, forKey: .category)
-        date            = try? c.decode(String.self, forKey: .date)
-        status          = try? c.decode(String.self, forKey: .status)
-        notes           = try? c.decode(String.self, forKey: .notes)
-        receiptUrl      = try? c.decode(String.self, forKey: .receiptUrl)
-        nominalCode     = try? c.decode(String.self, forKey: .nominalCode)
-        // amount may arrive as Double or String depending on the endpoint.
-        if let d = try? c.decode(Double.self, forKey: .amount) { amount = String(d) }
-        else { amount = try? c.decode(String.self, forKey: .amount) }
-    }
-
-    func toClaimItem() -> ClaimItem {
-        var item = ClaimItem()
-        item.id = id
-        item.itemDescription = itemDescription ?? ""
-        item.category = category ?? ""
-        item.amount = Double(amount ?? "") ?? 0
-        item.date = Int64(date ?? "") ?? 0
-        item.receiptUrl = receiptUrl
-        item.nominalCode = nominalCode
-        item.status = status ?? ""
-        item.notes = notes ?? ""
-        return item
-    }
 }
 
-/// Response envelope for `GET /api/v2/cash-expenses/claims/{batchId}` —
-/// the full batch record with its claims array embedded. Mirrors the
-/// React reference's `getExpenseClaimBatch(batch.id)` response shape.
-struct ClaimBatchDetailRaw: Decodable {
-    var batch: ClaimBatchRaw
-    var claims: [ClaimItemRaw]
-
-    init(from decoder: Decoder) throws {
-        // The server returns the batch record at the top level with a
-        // `claims` array tacked on. Decode the batch normally, then pull
-        // claims out of a secondary container.
-        batch = try ClaimBatchRaw(from: decoder)
-        if let nested = try? decoder.container(keyedBy: ClaimsKey.self) {
-            claims = (try? nested.decode([ClaimItemRaw].self, forKey: .claims)) ?? []
-        } else {
-            claims = []
-        }
-    }
-
-    private enum ClaimsKey: String, CodingKey { case claims }
-}

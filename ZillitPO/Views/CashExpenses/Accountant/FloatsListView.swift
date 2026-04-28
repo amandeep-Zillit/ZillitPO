@@ -23,6 +23,7 @@ struct FloatsListView: View {
         }
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         Group {
             if appState.isLoadingActiveFloats && floats.isEmpty {
@@ -322,6 +323,7 @@ struct FloatCard: View {
         .padding(12).contentShape(Rectangle())
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if let onTap = onTap {

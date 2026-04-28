@@ -127,7 +127,17 @@ struct AllTransactionsPage: View {
                 } else {
                     VStack(spacing: 10) {
                         ForEach(filtered) { tx in
-                            AllTransactionsRow(tx: tx)
+                            // Wrap each row in a NavigationLink so tapping
+                            // pushes the detail page (matches the pattern
+                            // used by `CardListPage`, `AccountantApprovalQueuePage`,
+                            // and `CoordinatorApprovalQueueView`).
+                            //
+                            // `allowEdit: false` — the All Transactions page is
+                            // an accountant read-only view; the Edit Receipt
+                            // button on the detail page is hidden here.
+                            NavigationLink(destination: CardTransactionDetailPage(transaction: tx, allowEdit: false).environmentObject(appState)) {
+                                AllTransactionsRow(tx: tx)
+                            }.buttonStyle(PlainButtonStyle())
                         }
                     }
                     .padding(.bottom, 12)

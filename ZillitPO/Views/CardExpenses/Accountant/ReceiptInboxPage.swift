@@ -55,6 +55,7 @@ struct ReceiptInboxPage: View {
         inboxItems.filter { $0.personalScore != nil && !($0.personalDismissed ?? false) }
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         Group {
             if appState.isLoadingInboxReceipts && inboxItems.isEmpty {
@@ -334,7 +335,7 @@ struct ReceiptInboxPage: View {
             HStack(spacing: 10) {
                 if isSystemMatched {
                     if showAttach {
-                        Button(action: { appState.attachInboxReceipt(r.id) }) {
+                        Button(action: { appState.attachInboxReceipt(r.id ?? "") }) {
                             HStack(spacing: 5) {
                                 Image(systemName: "paperclip").font(.system(size: 11, weight: .semibold))
                                 Text("Attach").font(.system(size: 12, weight: .bold))
@@ -347,7 +348,7 @@ struct ReceiptInboxPage: View {
                 }
 
                 if isNoMatch {
-                    Button(action: { matchingReceiptId = r.id; showManualMatch = true }) {
+                    Button(action: { matchingReceiptId = r.id ?? ""; showManualMatch = true }) {
                         Text("Manual Match")
                             .font(.system(size: 12, weight: .semibold)).foregroundColor(.primary)
                             .frame(maxWidth: .infinity).padding(.vertical, 9)
@@ -454,6 +455,7 @@ struct ManualMatchSheet: View {
         }
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
@@ -505,7 +507,7 @@ struct ManualMatchSheet: View {
 
     private func matchTransaction(_ tx: CardTransaction) {
         matching = true
-        appState.matchReceipt(receiptId, transactionId: tx.id) { _ in
+        appState.matchReceipt(receiptId, transactionId: tx.id ?? "") { _ in
             matching = false
             isPresented = false
         }

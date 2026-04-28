@@ -110,7 +110,7 @@ struct ActivateCardPage: View {
                                 PickerSheetView(
                                     selection: $selectedBankId,
                                     options: appState.bankAccounts.map {
-                                        DropdownOption($0.id, $0.name ?? $0.id)
+                                        DropdownOption($0.id ?? "", $0.name ?? ($0.id ?? ""))
                                     },
                                     isPresented: $showBankSheet
                                 )
@@ -239,7 +239,7 @@ struct ActivateCardPage: View {
         }
         errorMessage = nil
         submitting = true
-        appState.activateCard(id: card.id, cardNumber: rawDigits, cardType: type, bankAccountId: selectedBankId) { success, error in
+        appState.activateCard(id: card.id ?? "", cardNumber: rawDigits, cardType: type, bankAccountId: selectedBankId) { success, error in
             submitting = false
             if success {
                 showSuccess = true

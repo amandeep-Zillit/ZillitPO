@@ -196,7 +196,10 @@ struct CardRow: View {
                 // Inline action buttons (mirrors the web logic):
                 //   • Override → only when the caller passed an
                 //     `onOverride` handler (i.e. user has card-override
-                //     permission).
+                //     permission) AND the card is not already overridden.
+                //     Once `card.status == "override"` the action has
+                //     already been applied; showing the button again
+                //     would let the accountant double-override.
                 //   • Approve / Reject → only when the user is in the
                 //     active tier of this card's approval chain
                 //     (`canApprove == true`). If a non-approver
@@ -204,7 +207,7 @@ struct CardRow: View {
                 //     Override button shows.
                 let showApprove = canApprove && onApprove != nil
                 let showReject  = canApprove && onReject  != nil
-                let showOverride = onOverride != nil
+                let showOverride = onOverride != nil && card.status != "override"
                 if showApprove || showReject || showOverride {
                     HStack(spacing: 8) {
                         Spacer()

@@ -53,7 +53,7 @@ struct VendorSearchField: View {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(filteredVendors, id: \.id) { vendor in
                             Button(action: {
-                                vendorId = vendor.id; searchText = ""; isEditing = false
+                                vendorId = vendor.id ?? ""; searchText = ""; isEditing = false
                                 #if canImport(UIKit)
                                 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                                 #endif

@@ -234,7 +234,7 @@ struct RecordCashReturnPage: View {
                 } else if floats.count == 1 {
                     // Convenience: if the caller passed a single-float
                     // list (e.g., from FloatDetailView), use it directly.
-                    selectedFloatId = floats[0].id
+                    selectedFloatId = floats[0].id ?? ""
                 }
             }
         }
@@ -410,7 +410,7 @@ struct FloatPickerSheet: View {
                         ScrollView {
                             VStack(spacing: 8) {
                                 ForEach(filtered) { f in
-                                    Button(action: { onPick(f.id) }) {
+                                    Button(action: { onPick(f.id ?? "") }) {
                                         floatRow(f)
                                     }.buttonStyle(PlainButtonStyle())
                                 }

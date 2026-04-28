@@ -345,7 +345,7 @@ struct RequestCardPage: View {
                                 } else {
                                     ForEach(filteredBanks.prefix(6)) { bank in
                                         Button(action: {
-                                            selectedBankId = bank.id; bankSearch = ""
+                                            selectedBankId = bank.id ?? ""; bankSearch = ""
                                             withAnimation { showBankDropdown = false }
                                         }) {
                                             HStack(spacing: 10) {

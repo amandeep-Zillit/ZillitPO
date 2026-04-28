@@ -166,14 +166,14 @@ struct POFormView: View {
                     case "exp_type":
                         if (li.expenditureType ?? "").trimmingCharacters(in: .whitespaces).isEmpty { errors.append("Line \(idx + 1): Expenditure Type is required") }
                     case "vat", "tax_type":
-                        let vatVal = lineItemCustomValues[li.id]?["vat"] ?? ""
+                        let vatVal = lineItemCustomValues[li.id ?? ""]?["vat"] ?? ""
                         if vatVal.isEmpty { errors.append("Line \(idx + 1): VAT Treatment is required") }
                     case "tax_rate": break // auto-derived from VAT treatment
                     default: break
                     }
                 } else {
                     let key = label.isEmpty ? (field.name ?? "") : label
-                    let val = (lineItemCustomValues[li.id]?[key]) ?? ""
+                    let val = (lineItemCustomValues[li.id ?? ""]?[key]) ?? ""
                     if val.trimmingCharacters(in: .whitespaces).isEmpty {
                         errors.append("Line \(idx + 1): \(field.name ?? "") is required")
                     }
@@ -196,6 +196,7 @@ struct POFormView: View {
         appState.formTemplate?.template?.sorted { ($0.order ?? 0) < ($1.order ?? 0) }
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack {
             List {
@@ -710,7 +711,7 @@ struct POFormView: View {
             if field.selectionType == "vendor" {
                 errorWrappedPicker(label: (field.name ?? "").uppercased(), value: binding.wrappedValue, required: field.isRequired) {
                     PickerField(selection: binding, placeholder: "Select...",
-                        options: appState.vendors.map { DropdownOption($0.id, $0.name ?? "") })
+                        options: appState.vendors.map { DropdownOption($0.id ?? "", $0.name ?? "") })
                 }
             } else if field.selectionType == "department" {
                 errorWrappedPicker(label: (field.name ?? "").uppercased(), value: binding.wrappedValue, required: field.isRequired) {
@@ -805,12 +806,12 @@ struct POFormView: View {
         var grossTotal = 0.0
         for item in lineItems {
             let itemNet = (item.quantity ?? 0) * (item.unitPrice ?? 0)
-            let treatment = lineItemCustomValues[item.id]?["vat"] ?? "pending"
+            let treatment = lineItemCustomValues[item.id ?? ""]?["vat"] ?? "pending"
             let result = VATHelpers.calcVat(itemNet, treatment: treatment)
             totalVat += result.vatAmount
             grossTotal += result.gross
         }
-        let hasVat = lineItems.contains { (lineItemCustomValues[$0.id]?["vat"] ?? "pending") != "pending" }
+        let hasVat = lineItems.contains { (lineItemCustomValues[$0.id ?? ""]?["vat"] ?? "pending") != "pending" }
         return (totalVat, grossTotal, hasVat)
     }
 
@@ -1026,10 +1027,10 @@ struct POFormView: View {
             lineItems = items
             // Populate per-line-item custom fields and VAT
             for item in items {
-                if lineItemCustomValues[item.id] == nil { lineItemCustomValues[item.id] = [:] }
+                if lineItemCustomValues[item.id ?? ""] == nil { lineItemCustomValues[item.id ?? ""] = [:] }
                 // Load custom fields from line item
                 for cf in item.customFields ?? [] {
-                    lineItemCustomValues[item.id]?[cf.name ?? ""] = cf.value
+                    lineItemCustomValues[item.id ?? ""]?[cf.name ?? ""] = cf.value
                 }
                 // Set VAT: prefer line item's own vatTreatment, then PO-level, then "pending"
                 let vatValue: String
@@ -1040,7 +1041,7 @@ struct POFormView: View {
                 } else {
                     vatValue = "pending"
                 }
-                lineItemCustomValues[item.id]?["vat"] = vatValue
+                lineItemCustomValues[item.id ?? ""]?["vat"] = vatValue
             }
             if let ms = po.effectiveDate, ms > 0 { effectiveDate = Date(timeIntervalSince1970: Double(ms)/1000); hasEffDate = true }
             if let ms = po.deliveryDate, ms > 0 { deliveryDate = Date(timeIntervalSince1970: Double(ms)/1000); hasDelDate = true }
@@ -1065,22 +1066,22 @@ struct POFormView: View {
 
     private func buildForm() -> POFormData {
         // Debug: log lineItemCustomValues before building
-        print("🔧 buildForm: lineItemCustomValues keys=\(lineItemCustomValues.keys.map { String($0.prefix(8)) })")
+        debugPrint("🔧 buildForm: lineItemCustomValues keys=\(lineItemCustomValues.keys.map { String($0.prefix(8)) })")
         for (id, vals) in lineItemCustomValues {
-            print("  🔧 LI \(id.prefix(8)): \(vals)")
+            debugPrint("  🔧 LI \(id.prefix(8)): \(vals)")
         }
         for i in lineItems.indices {
             lineItems[i].total = (lineItems[i].quantity ?? 0) * (lineItems[i].unitPrice ?? 0)
-            let vatFromCustom = lineItemCustomValues[lineItems[i].id]?["vat"]
+            let vatFromCustom = lineItemCustomValues[lineItems[i].id ?? ""]?["vat"]
             lineItems[i].vatTreatment = vatFromCustom ?? lineItems[i].vatTreatment
-            print("  🔧 LI[\(i)] id=\(lineItems[i].id.prefix(8)) vatFromCustom=\(vatFromCustom ?? "nil") final=\(lineItems[i].vatTreatment ?? "nil")")
+            debugPrint("  🔧 LI[\(i)] id=\((lineItems[i].id ?? "").prefix(8)) vatFromCustom=\(vatFromCustom ?? "nil") final=\(lineItems[i].vatTreatment ?? "nil")")
         }
         let da = DeliveryAddress(name: daName, email: daEmail, phoneCode: daPhoneCode, phone: daPhone,
                                   line1: daLine1, line2: daLine2, city: daCity,
                                   state: daState, postalCode: daPostal, country: daCountry)
         let hasDA = ![daName, daEmail, daPhone, daLine1, daCity].allSatisfy { $0.isEmpty }
         // Derive PO-level vatTreatment from line items (use first non-pending, or "pending")
-        let derivedVat = lineItems.compactMap { lineItemCustomValues[$0.id]?["vat"] ?? ((($0.vatTreatment ?? "pending") != "pending") ? $0.vatTreatment : nil) }.first(where: { $0 != "pending" }) ?? "pending"
+        let derivedVat = lineItems.compactMap { lineItemCustomValues[$0.id ?? ""]?["vat"] ?? ((($0.vatTreatment ?? "pending") != "pending") ? $0.vatTreatment : nil) }.first(where: { $0 != "pending" }) ?? "pending"
         return POFormData(vendorId: vendorId, departmentId: departmentId, nominalCode: nominalCode,
                           description: desc, currency: currency, vatTreatment: derivedVat,
                           effectiveDate: hasEffDate ? effectiveDate : nil,
@@ -1125,7 +1126,7 @@ struct POFormView: View {
 
     /// Save as new draft — no existingDraftId, creates a brand new draft
     private func saveAsNewDraft() {
-        print("📝 saveAsNewDraft called")
+        debugPrint("📝 saveAsNewDraft called")
         var fd = buildForm()
         fd.existingDraftId = nil
         appState.saveDraft(fd, onComplete: onBack)

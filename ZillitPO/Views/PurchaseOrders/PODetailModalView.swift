@@ -22,9 +22,11 @@ struct PODetailPage: View {
         (livePO.poNumber ?? "").isEmpty ? "PO" : (livePO.poNumber ?? "")
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         PODetailContentView(po: livePO, onClose: { presentationMode.wrappedValue.dismiss() })
             .environmentObject(appState)
+            .onAppear { appState.refreshPO(po.id ?? "") }
             .navigationBarTitle(Text(livePO.poNumber ?? ""), displayMode: .inline)
             .navigationBarBackButtonHidden(true)
             .navigationBarItems(
@@ -40,11 +42,11 @@ struct PODetailPage: View {
             .background(
                 ZStack {
                     NavigationLink(
-                        destination: POHistoryPage(poId: livePO.id, poLabel: poLabel).environmentObject(appState),
+                        destination: POHistoryPage(poId: livePO.id ?? "", poLabel: poLabel).environmentObject(appState),
                         isActive: $navigateToHistory
                     ) { EmptyView() }.frame(width: 0, height: 0).hidden()
                     NavigationLink(
-                        destination: POQueriesPage(poId: livePO.id, poLabel: poLabel).environmentObject(appState),
+                        destination: POQueriesPage(poId: livePO.id ?? "", poLabel: poLabel).environmentObject(appState),
                         isActive: $navigateToQueries
                     ) { EmptyView() }.frame(width: 0, height: 0).hidden()
 
@@ -154,6 +156,7 @@ struct PODetailContentView: View {
     private var canPost: Bool  { isAccountant && [.approved, .acctEntered].contains(po.poStatus) }
     private var canClose: Bool { isAccountant && po.poStatus == .posted }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack {
             Color.bgBase.edgesIgnoringSafeArea(.all)
@@ -175,13 +178,12 @@ struct PODetailContentView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    // ── Vendor + Delivery Address, side-by-side. The
-                    //    extra 14pt horizontal padding matches the inner
-                    //    padding of the Line Items card below, so the
-                    //    details text visually lines up with the line
-                    //    items text (both start at the same x-position).
-                    //    Text inside each block stays left-aligned.
-                    HStack(alignment: .top, spacing: 16) {
+                    // ── Vendor + Delivery Address, stacked one-per-row
+                    //    (full width). The 14pt horizontal padding matches
+                    //    the inner padding of the Line Items card below,
+                    //    so the details text visually lines up with the
+                    //    line items text.
+                    VStack(alignment: .leading, spacing: 16) {
                         labelledBlock(label: "VENDOR") {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text((po.vendor ?? "").isEmpty ? "—" : (po.vendor ?? ""))
@@ -200,6 +202,7 @@ struct PODetailContentView: View {
                             deliveryAddressBlock
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 14)
 
                     Divider().padding(.horizontal, 14)
@@ -736,14 +739,14 @@ struct PODetailContentView: View {
         let unit = li.unitPrice ?? 0
         let qty = li.quantity ?? 0
         let amount = qty * unit
-        let isExpanded = expandedLineItems.contains(li.id)
+        let isExpanded = expandedLineItems.contains(li.id ?? "")
 
         VStack(alignment: .leading, spacing: 0) {
             // Header (always visible) — tap anywhere on the row to toggle.
             Button(action: {
                 withAnimation(.easeInOut(duration: 0.18)) {
-                    if isExpanded { expandedLineItems.remove(li.id) }
-                    else { expandedLineItems.insert(li.id) }
+                    if isExpanded { expandedLineItems.remove(li.id ?? "") }
+                    else { expandedLineItems.insert(li.id ?? "") }
                 }
             }) {
                 HStack(alignment: .center, spacing: 10) {
@@ -1031,7 +1034,7 @@ struct PODetailContentView: View {
             "departmentMap": deptMap
         ]
 
-        let task = POCodableTask.generatePDF(po.id, displayNames) { result in
+        let task = POCodableTask.generatePDF(po.id ?? "", displayNames) { result in
             DispatchQueue.main.async {
                 self.isLoadingPDF = false
                 switch result {
@@ -1039,11 +1042,11 @@ struct PODetailContentView: View {
                     if let data = data {
                         self.pdfData = data
                         self.navigateToPDF = true
-                        print("✅ PDF generated: \(data.count) bytes")
+                        debugPrint("✅ PDF generated: \(data.count) bytes")
                     }
                 case .failure(let error):
                     self.pdfError = "Failed to generate PDF: \(error.localizedDescription)"
-                    print("❌ PDF generation failed: \(error)")
+                    debugPrint("❌ PDF generation failed: \(error)")
                 }
             }
         }

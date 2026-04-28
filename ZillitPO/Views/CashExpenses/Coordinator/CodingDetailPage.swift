@@ -161,7 +161,7 @@ struct CodingDetailPage: View {
     private func saveDraft() {
         saving = true; showError = nil
         let body: [String: Any] = ["nominal_code": nominalCode, "vat_treatment": vatTreatment, "notes": codingNotes]
-        CashExpenseCodableTask.saveClaims(claim.id, body) { result in
+        CashExpenseCodableTask.saveClaims(claim.id ?? "", body) { result in
             DispatchQueue.main.async {
                 saving = false
                 if case .success = result { appState.loadCodingQueue(); presentationMode.wrappedValue.dismiss() }
@@ -173,7 +173,7 @@ struct CodingDetailPage: View {
     private func forwardToAccounts() {
         forwarding = true; showError = nil
         let body: [String: Any] = ["nominal_code": nominalCode, "vat_treatment": vatTreatment, "notes": codingNotes]
-        CashExpenseCodableTask.saveAndSubmit(claim.id, body) { result in
+        CashExpenseCodableTask.saveAndSubmit(claim.id ?? "", body) { result in
             DispatchQueue.main.async {
                 forwarding = false
                 if case .success = result { appState.loadCodingQueue(); presentationMode.wrappedValue.dismiss() }

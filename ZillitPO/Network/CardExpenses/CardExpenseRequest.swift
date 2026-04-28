@@ -6,10 +6,10 @@
 import Foundation
 
 enum CardExpenseRequest {
-    static let baseURL = "http://192.168.29.92:3005"
+    static let baseURL = "https://accounthub-dev.zillit.com"
     /// Account-hub service runs on a separate local port. The `/queries`
     /// endpoint lives there, not on the card-expenses server.
-    static let accountHubBaseURL = "http://192.168.29.92:3003"
+    static let accountHubBaseURL = "https://accounthub-dev.zillit.com"
 
     // MARK: - Receipts
     case fetchAllReceipts

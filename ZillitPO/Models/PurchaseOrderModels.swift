@@ -1,21 +1,5 @@
 import Foundation
 
-// MARK: - Flexible Int decode helper (handles string/double/int from API)
-
-func flexibleIntDecode<K: CodingKey>(_ container: KeyedDecodingContainer<K>, _ key: K) -> Int? {
-    if let v = try? container.decode(Int.self, forKey: key) { return v }
-    if let v = try? container.decode(Double.self, forKey: key) { return Int(v) }
-    if let v = try? container.decode(String.self, forKey: key) { return Int(v) ?? Int(Double(v) ?? 0) }
-    return nil
-}
-
-func flexibleDoubleDecode<K: CodingKey>(_ container: KeyedDecodingContainer<K>, _ key: K) -> Double? {
-    if let v = try? container.decode(Double.self, forKey: key) { return v }
-    if let v = try? container.decode(Int.self, forKey: key) { return Double(v) }
-    if let v = try? container.decode(String.self, forKey: key) { return Double(v) }
-    return nil
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // Models — 1:1 with DB Migrations (001–010)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -44,30 +28,6 @@ struct ApprovalTierConfig: Identifiable, Codable, Equatable {
         case updatedAt = "updated_at"
     }
 
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = try? c.decode(String.self, forKey: .id)
-        projectId = try? c.decode(String.self, forKey: .projectId)
-        module = try? c.decode(String.self, forKey: .module)
-        scope = try? c.decode(String.self, forKey: .scope)
-        departmentId = try? c.decode(String.self, forKey: .departmentId)
-        tiers = try? c.decode([TierDef].self, forKey: .tiers)
-        createdBy = try? c.decode(String.self, forKey: .createdBy)
-        updatedBy = try? c.decode(String.self, forKey: .updatedBy)
-        // API may return timestamps as String or Int64
-        if let v = try? c.decode(Int64.self, forKey: .createdAt) { createdAt = v }
-        else if let s = try? c.decode(String.self, forKey: .createdAt) { createdAt = Int64(s) }
-        else { createdAt = nil }
-        if let v = try? c.decode(Int64.self, forKey: .updatedAt) { updatedAt = v }
-        else if let s = try? c.decode(String.self, forKey: .updatedAt) { updatedAt = Int64(s) }
-        else { updatedAt = nil }
-    }
-
-    init(id: String?, projectId: String?, module: String?, scope: String?, departmentId: String?, tiers: [TierDef]?, createdBy: String?, updatedBy: String?, createdAt: Int64?, updatedAt: Int64?) {
-        self.id = id; self.projectId = projectId; self.module = module; self.scope = scope
-        self.departmentId = departmentId; self.tiers = tiers; self.createdBy = createdBy
-        self.updatedBy = updatedBy; self.createdAt = createdAt; self.updatedAt = updatedAt
-    }
 }
 
 struct TierDef: Codable, Equatable {
@@ -75,24 +35,13 @@ struct TierDef: Codable, Equatable {
     var gate: TierGate?
     var rules: [TierRule]?
 
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        order = try? c.decode(Int.self, forKey: .order)
-        gate = try? c.decode(TierGate.self, forKey: .gate)
-        rules = try? c.decode([TierRule].self, forKey: .rules)
-    }
-
-    init(order: Int?, gate: TierGate?, rules: [TierRule]?) {
-        self.order = order; self.gate = gate; self.rules = rules
-    }
-
     enum CodingKeys: String, CodingKey { case order, gate, rules }
 }
 
 struct TierGate: Codable, Equatable {
     var enabled: Bool?
     var type: String?
-    let amountThreshold: Double?
+    var amountThreshold: Double?
     enum CodingKeys: String, CodingKey {
         case enabled, type
         case amountThreshold = "amount_threshold"
@@ -101,20 +50,13 @@ struct TierGate: Codable, Equatable {
 
 struct TierRule: Codable, Equatable {
     var type: String?             // "default" | "amount"
-    let amountThreshold: Double?
+    var amountThreshold: Double?
     var userIds: [String]?
 
     enum CodingKeys: String, CodingKey {
         case type
         case amountThreshold = "amount_threshold"
         case userIds = "user_ids"
-    }
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        type = try? c.decode(String.self, forKey: .type)
-        amountThreshold = try? c.decode(Double.self, forKey: .amountThreshold)
-        userIds = try? c.decode([String].self, forKey: .userIds)
     }
 
     init(type: String?, amountThreshold: Double?, userIds: [String]?) {
@@ -125,7 +67,7 @@ struct TierRule: Codable, Equatable {
 // MARK: - 002 vendors
 
 struct Vendor: Identifiable, Codable, Equatable {
-    var id: String
+    var id: String?
     var projectId: String?
     var userId: String?
     var name: String?
@@ -135,24 +77,33 @@ struct Vendor: Identifiable, Codable, Equatable {
     var contactPerson: String?
     var vatNumber: String?
     var status: String?
-    var verifiedAt: Int?
+    var verifiedAt: Int64?
     var verifiedBy: String?
     var addedBy: String?
     var updatedBy: String?
     var departmentId: String?
     var companyType: String?           // e.g. "Limited", "Sole Trader"
     var terms: String?                 // payment terms key (net_30, etc.)
+    /// FK into `account_hub_bank_accounts`. Bank details live in a
+    /// separate table since migration 002 — fetch by id when needed.
+    var bankId: String?
+    var vendorType: String?
+    var defaultCode: String?
+    var compliance: String?
+    var compliances: [String]?
+    /// Inline audit trail. Each entry: { action, action_by, action_at }.
+    var history: [VendorHistoryEntry]?
+    /// Legacy embedded bank block. No longer populated by the server
+    /// (columns were dropped in migration 002); retained for the form
+    /// pages that still read/write it until the bank-fetch flow lands.
     var bankDetails: VendorBankDetails?
-    var createdAt: Int?
-    var updatedAt: Int?
+    var createdAt: Int64?
+    var updatedAt: Int64?
 
-    var verified: Bool {
-        guard let v = verifiedAt else { return false }
-        return v > 0
-    }
+    var verified: Bool { (verifiedAt ?? 0) > 0 }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, address, email, phone, status, terms
+        case id, name, address, email, phone, status, terms, compliance, compliances, history
         case projectId = "project_id"
         case userId = "user_id"
         case contactPerson = "contact_person"
@@ -163,52 +114,52 @@ struct Vendor: Identifiable, Codable, Equatable {
         case updatedBy = "updated_by"
         case departmentId = "department_id"
         case companyType = "company_type"
+        case bankId = "bank_id"
+        case vendorType = "vendor_type"
+        case defaultCode = "default_code"
         case bankDetails = "bank_details"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
 
-    init(id: String = UUID().uuidString, projectId: String? = nil, userId: String? = nil,
+    init(id: String? = nil, projectId: String? = nil, userId: String? = nil,
          name: String? = nil, address: VendorAddress? = nil, email: String? = nil,
          phone: VendorPhone? = nil, contactPerson: String? = nil,
          vatNumber: String? = nil, status: String? = nil,
-         verifiedAt: Int? = nil, verifiedBy: String? = nil,
+         verifiedAt: Int64? = nil, verifiedBy: String? = nil,
          addedBy: String? = nil, updatedBy: String? = nil, departmentId: String? = nil,
          companyType: String? = nil, terms: String? = nil,
+         bankId: String? = nil, vendorType: String? = nil,
+         defaultCode: String? = nil, compliance: String? = nil,
+         compliances: [String]? = nil, history: [VendorHistoryEntry]? = nil,
          bankDetails: VendorBankDetails? = nil,
-         createdAt: Int? = nil, updatedAt: Int? = nil) {
+         createdAt: Int64? = nil, updatedAt: Int64? = nil) {
         self.id = id; self.projectId = projectId; self.userId = userId
         self.name = name; self.address = address; self.email = email; self.phone = phone
         self.contactPerson = contactPerson; self.vatNumber = vatNumber; self.status = status
         self.verifiedAt = verifiedAt; self.verifiedBy = verifiedBy; self.addedBy = addedBy
         self.updatedBy = updatedBy; self.departmentId = departmentId
-        self.companyType = companyType; self.terms = terms; self.bankDetails = bankDetails
+        self.companyType = companyType; self.terms = terms
+        self.bankId = bankId; self.vendorType = vendorType
+        self.defaultCode = defaultCode; self.compliance = compliance
+        self.compliances = compliances; self.history = history
+        self.bankDetails = bankDetails
         self.createdAt = createdAt; self.updatedAt = updatedAt
     }
+}
 
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = (try? c.decode(String.self, forKey: .id)) ?? UUID().uuidString
-        projectId = try? c.decode(String.self, forKey: .projectId)
-        userId = try? c.decode(String.self, forKey: .userId)
-        name = try? c.decode(String.self, forKey: .name)
-        address = try? c.decode(VendorAddress.self, forKey: .address)
-        email = try? c.decode(String.self, forKey: .email)
-        phone = try? c.decode(VendorPhone.self, forKey: .phone)
-        contactPerson = try? c.decode(String.self, forKey: .contactPerson)
-        vatNumber = try? c.decode(String.self, forKey: .vatNumber)
-        status = try? c.decode(String.self, forKey: .status)
-        verifiedBy = try? c.decode(String.self, forKey: .verifiedBy)
-        addedBy = try? c.decode(String.self, forKey: .addedBy)
-        updatedBy = try? c.decode(String.self, forKey: .updatedBy)
-        departmentId = try? c.decode(String.self, forKey: .departmentId)
-        companyType = try? c.decode(String.self, forKey: .companyType)
-        terms = try? c.decode(String.self, forKey: .terms)
-        bankDetails = try? c.decode(VendorBankDetails.self, forKey: .bankDetails)
-        // Flexible Int fields
-        verifiedAt = flexibleIntDecode(c, .verifiedAt)
-        createdAt = flexibleIntDecode(c, .createdAt)
-        updatedAt = flexibleIntDecode(c, .updatedAt)
+/// One entry in a Vendor's inline `history` JSONB array —
+/// `{ action, action_by, action_at }` (epoch-ms).
+struct VendorHistoryEntry: Codable, Equatable, Identifiable {
+    var id: String { "\(actionAt ?? 0)-\(action ?? "")" }
+    var action: String?
+    var actionBy: String?
+    var actionAt: Int64?
+
+    enum CodingKeys: String, CodingKey {
+        case action
+        case actionBy = "action_by"
+        case actionAt = "action_at"
     }
 }
 
@@ -262,21 +213,14 @@ struct VendorBankDetails: Codable, Equatable {
 /// vendor's bank details. Title/description naming matches the web
 /// form's labels so the two UIs round-trip cleanly.
 struct VendorBankAdditionalDetail: Codable, Equatable, Identifiable {
-    var id: String = UUID().uuidString
+    var id: String?
     var title: String?
     var description: String?
 
     enum CodingKeys: String, CodingKey { case title, description }
 
-    init(id: String = UUID().uuidString, title: String? = nil, description: String? = nil) {
+    init(id: String? = nil, title: String? = nil, description: String? = nil) {
         self.id = id; self.title = title; self.description = description
-    }
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = UUID().uuidString
-        title = try? c.decode(String.self, forKey: .title)
-        description = try? c.decode(String.self, forKey: .description)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -287,25 +231,11 @@ struct VendorBankAdditionalDetail: Codable, Equatable, Identifiable {
 }
 
 struct VendorPhone: Codable, Equatable {
-    var countryCode: String
-    var number: String
-    enum CodingKeys: String, CodingKey { case countryCode = "country_code"; case number }
-    init(countryCode: String = "", number: String = "") {
+    var countryCode: String?
+    var number: String?
+    enum CodingKeys: String, CodingKey { case countryCode = "isd"; case number }
+    init(countryCode: String? = nil, number: String? = nil) {
         self.countryCode = countryCode; self.number = number
-    }
-    init(from decoder: Decoder) throws {
-        // Try object format: { "country_code": "...", "number": "..." }
-        if let c = try? decoder.container(keyedBy: CodingKeys.self) {
-            countryCode = (try? c.decode(String.self, forKey: .countryCode)) ?? ""
-            number = (try? c.decode(String.self, forKey: .number)) ?? ""
-            return
-        }
-        // Try plain string format: "+44 123456"
-        if let str = try? decoder.singleValueContainer().decode(String.self) {
-            countryCode = ""; number = str
-            return
-        }
-        countryCode = ""; number = ""
     }
 }
 
@@ -313,7 +243,7 @@ struct VendorAddress: Codable, Equatable {
     var line1: String?; var line2: String?; var city: String?
     var state: String?; var postalCode: String?; var country: String?
     enum CodingKeys: String, CodingKey {
-        case line1, line2, city, state, country; case postalCode = "postal_code"
+        case line1, line2, city, state, country; case postalCode = "postcode"
     }
     init(line1: String? = nil, line2: String? = nil, city: String? = nil,
          state: String? = nil, postalCode: String? = nil, country: String? = nil) {
@@ -327,8 +257,8 @@ struct VendorAddress: Codable, Equatable {
 
 // MARK: - 003 purchase_orders
 
-struct PurchaseOrder: Identifiable, Equatable {
-    var id: String = UUID().uuidString
+struct PurchaseOrder: Identifiable, Codable, Equatable {
+    var id: String?
     var projectId: String?
     var userId: String?
     var poNumber: String?
@@ -364,18 +294,53 @@ struct PurchaseOrder: Identifiable, Equatable {
     var vatAmount: Double?
     var grossTotal: Double?
     var approvals: [Approval]?
+    var lineItems: [LineItem]?
     var createdAt: Int64?
     var updatedAt: Int64?
-    /// User who last mutated the PO (create / update / approve / etc.).
-    /// Server-populated — mirrors the `updated_by` column added alongside
-    /// the new post/close flows in the web app (Apr 2026).
     var updatedBy: String?
 
-    // Display fields (resolved, not in DB)
+    // Display fields (resolved client-side via enrich(vendors:departments:))
     var vendor: String?
     var vendorAddress: String?
     var department: String?
-    var lineItems: [LineItem]?
+
+    enum CodingKeys: String, CodingKey {
+        case id, description, currency, notes, status, approvals
+        case projectId          = "project_id"
+        case userId             = "user_id"
+        case poNumber           = "po_number"
+        case vendorId           = "vendor_id"
+        case departmentId       = "department_id"
+        case nominalCode        = "nominal_code"
+        case effectiveDate      = "effective_date"
+        case netAmount          = "net_amount"
+        case assignedTo         = "assigned_to"
+        case raisedBy           = "raised_by"
+        case raisedAt           = "raised_at"
+        case approvedBy         = "approved_by"
+        case approvedAt         = "approved_at"
+        case postedBy           = "posted_by"
+        case postedAt           = "posted_at"
+        case rejectedBy         = "rejected_by"
+        case rejectedAt         = "rejected_at"
+        case rejectionReason    = "rejection_reason"
+        case reassignmentReason = "reassignment_reason"
+        case reassignedBy       = "reassigned_by"
+        case reassignedAt       = "reassigned_at"
+        case vatTreatment       = "vat_treatment"
+        case deliveryAddress    = "delivery_address"
+        case deliveryDate       = "delivery_date"
+        case closedBy           = "closed_by"
+        case closedAt           = "closed_at"
+        case closureReason      = "closure_reason"
+        case customFields       = "custom_fields"
+        case vatAmount          = "vat_amount"
+        case grossTotal         = "gross_total"
+        case lineItems          = "line_items"
+        case createdAt          = "created_at"
+        case updatedAt          = "updated_at"
+        case updatedBy          = "updated_by"
+    }
 
     static func == (lhs: PurchaseOrder, rhs: PurchaseOrder) -> Bool {
         lhs.id == rhs.id && lhs.updatedAt == rhs.updatedAt && lhs.status == rhs.status
@@ -385,9 +350,42 @@ struct PurchaseOrder: Identifiable, Equatable {
     var poStatus: POStatus { POStatus.fromAPI(status ?? "") }
     var totalAmount: Double {
         if (netAmount ?? 0) > 0 { return netAmount ?? 0 }
-        // Fallback: compute from line items if net_amount is 0 or missing
         let computed = (lineItems ?? []).filter { $0.splitParentId == nil }.reduce(0.0) { $0 + ((($1.quantity ?? 0) * ($1.unitPrice ?? 0))) }
         return computed > 0 ? computed : (netAmount ?? 0)
+    }
+
+    /// Resolve vendor/department display fields and backfill legacy
+    /// defaults (currency = "GBP", status = "DRAFT", vat = "pending",
+    /// line-item quantity = 1, expenditureType = "Purchase") so the UI
+    /// sees populated values without scattering `?? "GBP"` everywhere.
+    /// Replaces the old `PurchaseOrderRaw.toPO(vendors:departments:)`.
+    mutating func enrich(vendors: [Vendor], departments: [Department]) {
+        let v = vendors.first { $0.id == (vendorId ?? "") }
+        let d = departments.first { $0.id == (departmentId ?? "") || $0.identifier == (departmentId ?? "") }
+        vendor = v?.name ?? ""
+        department = d?.displayName ?? ""
+        vendorAddress = [v?.address?.line1, v?.address?.city, v?.address?.postalCode]
+            .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
+
+        if currency?.isEmpty ?? true { currency = "GBP" }
+        if status?.isEmpty ?? true { status = "DRAFT" }
+        if vatTreatment?.isEmpty ?? true { vatTreatment = "pending" }
+
+        let poLevelVat = vatTreatment ?? "pending"
+        lineItems = (lineItems ?? []).map { li in
+            var li = li
+            let cfVat = li.customFields?.first(where: { $0.name == "vat" })?.value
+            if li.vatTreatment == nil { li.vatTreatment = cfVat ?? poLevelVat }
+            li.customFields = (li.customFields ?? []).filter { $0.name != "vat" }
+            if li.quantity == nil { li.quantity = 1 }
+            if li.total == nil { li.total = 0 }
+            if li.expenditureType?.isEmpty ?? true { li.expenditureType = "Purchase" }
+            return li
+        }
+
+        let rawNet = netAmount ?? 0
+        let computed = (lineItems ?? []).filter { $0.splitParentId == nil }.reduce(0.0) { $0 + (($1.quantity ?? 0) * ($1.unitPrice ?? 0)) }
+        if rawNet <= 0, computed > 0 { netAmount = computed }
     }
 }
 
@@ -444,7 +442,7 @@ enum POStatus: String, CaseIterable {
 // MARK: - 004 purchase_order_line_items
 
 struct LineItem: Identifiable, Codable, Equatable {
-    var id: String = UUID().uuidString
+    var id: String?
     var projectId: String?; var userId: String?; var poId: String?
     var lineNumber: Int?
     var description: String?
@@ -481,7 +479,7 @@ struct LineItem: Identifiable, Codable, Equatable {
         case createdAt = "created_at"; case updatedAt = "updated_at"
     }
 
-    init(id: String = UUID().uuidString, description: String? = nil, quantity: Double? = nil,
+    init(id: String? = nil, description: String? = nil, quantity: Double? = nil,
          unitPrice: Double? = nil, total: Double? = nil, account: String? = nil,
          department: String? = nil, expenditureType: String? = nil, vatTreatment: String? = nil,
          taxType: String? = nil, taxRate: Double? = nil, tags: [String]? = nil) {
@@ -496,15 +494,15 @@ struct LineItem: Identifiable, Codable, Equatable {
 // MARK: - 005 po_templates
 
 struct POTemplate: Identifiable, Codable {
-    var id: String
+    var id: String?
     var templateNumber: String?; var templateName: String?
     var vendorId: String?; var departmentId: String?; var nominalCode: String?
     var description: String?; var currency: String?; var notes: String?
     var netAmount: Double?; var vatTreatment: String?
-    var deliveryAddress: FlexibleDeliveryAddress?; var deliveryDate: Int?
-    var customFields: FlexibleCustomFields?; var effectiveDate: Int?
-    var createdAt: Int?; var updatedAt: Int?
-    var lineItems: FlexibleLineItems?
+    var deliveryAddress: DeliveryAddress?; var deliveryDate: Int64?
+    var customFields: [CustomFieldSection]?; var effectiveDate: Int64?
+    var createdAt: Int64?; var updatedAt: Int64?
+    var lineItems: [LineItem]?
 
     var displayName: String { templateName ?? "Untitled" }
 
@@ -519,28 +517,6 @@ struct POTemplate: Identifiable, Codable {
         case createdAt = "created_at"; case updatedAt = "updated_at"
     }
 
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = try c.decode(String.self, forKey: .id)
-        templateNumber = try? c.decode(String.self, forKey: .templateNumber)
-        templateName = try? c.decode(String.self, forKey: .templateName)
-        vendorId = try? c.decode(String.self, forKey: .vendorId)
-        departmentId = try? c.decode(String.self, forKey: .departmentId)
-        nominalCode = try? c.decode(String.self, forKey: .nominalCode)
-        description = try? c.decode(String.self, forKey: .description)
-        currency = try? c.decode(String.self, forKey: .currency)
-        notes = try? c.decode(String.self, forKey: .notes)
-        vatTreatment = try? c.decode(String.self, forKey: .vatTreatment)
-        deliveryAddress = try? c.decode(FlexibleDeliveryAddress.self, forKey: .deliveryAddress)
-        customFields = try? c.decode(FlexibleCustomFields.self, forKey: .customFields)
-        lineItems = try? c.decode(FlexibleLineItems.self, forKey: .lineItems)
-        // Flexible Int fields
-        netAmount = flexibleDoubleDecode(c, .netAmount)
-        deliveryDate = flexibleIntDecode(c, .deliveryDate)
-        effectiveDate = flexibleIntDecode(c, .effectiveDate)
-        createdAt = flexibleIntDecode(c, .createdAt)
-        updatedAt = flexibleIntDecode(c, .updatedAt)
-    }
 }
 
 // MARK: - Form Template (dynamic form configuration from API)
@@ -553,8 +529,8 @@ struct FormTemplateResponse: Codable {
     var template: [FormSection]?
     var createdBy: String?
     var updatedBy: String?
-    var createdAt: String?
-    var updatedAt: String?
+    var createdAt: Int64?
+    var updatedAt: Int64?
 
     enum CodingKeys: String, CodingKey {
         case id, module, template
@@ -564,28 +540,6 @@ struct FormTemplateResponse: Codable {
         case updatedBy = "updated_by"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
-    }
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = try? c.decode(String.self, forKey: .id)
-        userId = try? c.decode(String.self, forKey: .userId)
-        projectId = try? c.decode(String.self, forKey: .projectId)
-        module = try? c.decode(String.self, forKey: .module)
-        createdBy = try? c.decode(String.self, forKey: .createdBy)
-        updatedBy = try? c.decode(String.self, forKey: .updatedBy)
-        createdAt = try? c.decode(String.self, forKey: .createdAt)
-        updatedAt = try? c.decode(String.self, forKey: .updatedAt)
-        // Decode template: handle JSON array or JSON string
-        if let sections = try? c.decode([FormSection].self, forKey: .template) {
-            template = sections
-        } else if let str = try? c.decode(String.self, forKey: .template),
-                  let data = str.data(using: .utf8),
-                  let sections = try? JSONDecoder().decode([FormSection].self, from: data) {
-            template = sections
-        } else {
-            template = nil
-        }
     }
 }
 
@@ -606,29 +560,6 @@ struct FormSection: Codable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case key, label, order, fields, values
         case systemDefault = "system_default"
-    }
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        key = try? c.decode(String.self, forKey: .key)
-        label = try? c.decode(String.self, forKey: .label)
-        order = flexibleIntDecode(c, .order)
-        values = try? c.decode([String].self, forKey: .values)
-        systemDefault = try? c.decode(Bool.self, forKey: .systemDefault)
-        // Decode fields flexibly — skip individual fields that fail
-        if let rawFields = try? c.decode([SafeFormField].self, forKey: .fields) {
-            fields = rawFields.compactMap { $0.field }
-        } else {
-            fields = nil
-        }
-    }
-}
-
-// Wrapper to safely decode individual FormFields without failing the entire array
-private struct SafeFormField: Decodable {
-    let field: FormField?
-    init(from decoder: Decoder) throws {
-        field = try? FormField(from: decoder)
     }
 }
 
@@ -653,17 +584,6 @@ struct FormField: Codable, Identifiable {
         case systemDefault = "system_default"
     }
 
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        name = try? c.decode(String.self, forKey: .name)
-        type = try? c.decode(String.self, forKey: .type)
-        order = flexibleIntDecode(c, .order)
-        hide = try? c.decode(Bool.self, forKey: .hide)
-        label = try? c.decode(String.self, forKey: .label)
-        required = try? c.decode(Bool.self, forKey: .required)
-        selectionType = try? c.decode(String.self, forKey: .selectionType)
-        systemDefault = try? c.decode(Bool.self, forKey: .systemDefault)
-    }
 }
 
 // MARK: - Invoices
@@ -671,7 +591,7 @@ struct FormField: Codable, Identifiable {
 /// Lightweight per-link summary used in the "Linked POs" section of the
 /// invoice detail page. Built from the `linked_pos` array the backend
 /// returns alongside each invoice row.
-struct LinkedPOSummary: Identifiable, Equatable {
+struct LinkedPOSummary: Identifiable, Codable, Equatable {
     var id: String { (poId?.isEmpty == false ? poId : poNumber) ?? "" }
     var poId: String?
     var poNumber: String?
@@ -679,10 +599,46 @@ struct LinkedPOSummary: Identifiable, Equatable {
     var poVendorName: String?   // resolved client-side via vendor lookup
     var poGrossTotal: Double?
     var currency: String?
+
+    enum CodingKeys: String, CodingKey {
+        case poId         = "po_id"
+        case poNumber     = "po_number"
+        case poVendorId   = "po_vendor_id"
+        case poVendorName = "po_vendor_name"
+        case poGrossTotal = "po_gross_total"
+        case currency
+    }
+
+    init(poId: String? = nil, poNumber: String? = nil, poVendorId: String? = nil,
+         poVendorName: String? = nil, poGrossTotal: Double? = nil, currency: String? = nil) {
+        self.poId = poId; self.poNumber = poNumber; self.poVendorId = poVendorId
+        self.poVendorName = poVendorName; self.poGrossTotal = poGrossTotal; self.currency = currency
+    }
+
 }
 
-struct Invoice: Identifiable, Equatable {
-    var id: String = UUID().uuidString
+/// One entry in an Invoice's `attachments` array. The server ships a
+/// real JSON array here (no stringified fallbacks) — each element has
+/// the upload id, canonical/stored filename, original path, size, and
+/// MIME type.
+struct InvoiceAttachment: Codable, Equatable {
+    var path: String?
+    var filename: String?
+    var storedFilename: String?
+    var uploadId: String?
+    var size: Int?
+    var mimeType: String?
+
+    enum CodingKeys: String, CodingKey {
+        case path, filename, size
+        case storedFilename = "stored_filename"
+        case uploadId       = "upload_id"
+        case mimeType       = "mime_type"
+    }
+}
+
+struct Invoice: Identifiable, Codable, Equatable {
+    var id: String?
     var projectId: String?
     var userId: String?
     var invoiceNumber: String?
@@ -699,6 +655,10 @@ struct Invoice: Identifiable, Equatable {
     var payMethod: String?
     var costCentre: String?
     var assignedTo: String?
+    /// Canonical vendor name — decoded from the server's `vendor_name`
+    /// column (the legacy `supplier_name` fallback was dropped in the
+    /// Apr 2026 model refactor). ViewModels enrich this from the
+    /// vendor catalogue once loaded.
     var supplierName: String?
     var reference: String?
     var holdReason: String?
@@ -724,6 +684,11 @@ struct Invoice: Identifiable, Equatable {
     var updatedBy: String?
     var uploadId: String?
     var file: String?
+    /// Raw attachments array the server ships alongside each invoice row.
+    /// The `fileURL` / `effectiveUploadId` computed helpers fall back to
+    /// the first attachment's stored filename / upload id when the flat
+    /// columns aren't populated.
+    var attachments: [InvoiceAttachment]?
     /// New fields populated by the invoices-server list/detail
     /// endpoints (Apr 2026 web parity):
     ///   • `ocrConfidence` — 0.0-1.0 confidence the OCR pass returned
@@ -738,9 +703,20 @@ struct Invoice: Identifiable, Equatable {
     var nominalCode: String?
     var activeRunId: String?
     var previousStatus: String?
+    /// Free-form tag list used for credit/tax-credit filtering in the
+    /// invoice list. Server column is `tax_credit_tags` (text[]).
+    var taxCreditTags: [String]?
+    /// Attachments uploaded for the matching wire transfer (separate
+    /// from the primary invoice `attachments` array).
+    var wireAttachments: [InvoiceAttachment]?
+    /// Days past the invoice's due date. Computed server-side.
+    var daysOutstanding: Int?
+    /// Inline history array returned by list/detail endpoints.
+    /// Decoded but not stored long-term — the ViewModel mirrors it into
+    /// `invoiceHistory[id]` at load time for immediate display.
+    var history: [InvoiceHistoryEntry]?
 
-    // Display fields (resolved, not in DB)
-    var department: String?
+    // Display fields (resolved, not in DB — populated by enrich(vendor:))
     var vendorAddress: String?
     var vendorEmail: String?
     var vendorPhone: String?
@@ -750,6 +726,96 @@ struct Invoice: Identifiable, Equatable {
     static func == (lhs: Invoice, rhs: Invoice) -> Bool { lhs.id == rhs.id }
     var invoiceStatus: InvoiceStatus { InvoiceStatus.fromAPI(status ?? "") }
     var totalAmount: Double { grossAmount ?? 0 }
+
+    /// Department display name — resolved from the DepartmentsData
+    /// singleton each time it's read. Moving this out of `init(from:)`
+    /// decouples decode from the departments catalogue load order.
+    var department: String? {
+        DepartmentsData.all.first {
+            $0.id == (departmentId ?? "") || $0.identifier == (departmentId ?? "")
+        }?.displayName
+    }
+
+    /// Effective file reference for the invoice attachment viewer.
+    /// Prefers the flat `file` column, then falls back to the first
+    /// attachment's `stored_filename` / `filename` / last-path-component
+    /// of `path`.
+    var fileURL: String? {
+        if let f = file, !f.isEmpty { return f }
+        if let a = attachments?.first {
+            if let s = a.storedFilename, !s.isEmpty { return s }
+            if let n = a.filename, !n.isEmpty { return n }
+            if let p = a.path, !p.isEmpty {
+                return (p as NSString).lastPathComponent
+            }
+        }
+        return nil
+    }
+
+    /// Effective upload id — prefers the flat `upload_id` column, then
+    /// falls back to the first attachment's upload id.
+    var effectiveUploadId: String? {
+        if let u = uploadId, !u.isEmpty { return u }
+        return attachments?.first?.uploadId
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, description, currency, status, tags, approvals, attachments, file, history
+        case projectId       = "project_id"
+        case userId          = "user_id"
+        case invoiceNumber   = "invoice_number"
+        case vendorId        = "vendor_id"
+        case departmentId    = "department_id"
+        case grossAmount     = "gross_amount"
+        case approvalStatus  = "approval_status"
+        case payMethod       = "pay_method"
+        case costCentre      = "cost_centre"
+        case assignedTo      = "assigned_to"
+        case supplierName    = "vendor_name"
+        case reference
+        case holdReason      = "hold_reason"
+        case holdNote        = "hold_note"
+        case isOverdue       = "is_overdue"
+        case approvedBy      = "approved_by"
+        case approvedAt      = "approved_at"
+        case poId            = "po_id"
+        case poNumber        = "po_number"
+        case poIds           = "po_ids"
+        case lineItems       = "line_items"
+        case linkedPOs       = "linked_pos"
+        case rejectionReason = "rejection_reason"
+        case rejectedBy      = "rejected_by"
+        case rejectedAt      = "rejected_at"
+        case invoiceDate     = "invoice_date"
+        case dueDate         = "due_date"
+        case effectiveDate   = "effective_date"
+        case createdAt       = "created_at"
+        case updatedAt       = "updated_at"
+        case updatedBy       = "updated_by"
+        case uploadId        = "upload_id"
+        case ocrConfidence   = "ocr_confidence"
+        case nominalCode     = "nominal_code"
+        case activeRunId     = "active_run_id"
+        case previousStatus  = "previous_status"
+        case taxCreditTags   = "tax_credit_tags"
+        case wireAttachments = "wire_attachments"
+        case daysOutstanding = "days_outstanding"
+    }
+
+    /// Enrich vendor display fields from the vendor list.
+    /// Call this after decode when the vendor catalogue is available.
+    mutating func enrich(vendor: Vendor?) {
+        guard let v = vendor else { return }
+        supplierName    = v.name ?? supplierName
+        vendorAddress   = v.address?.formatted ?? ""
+        vendorEmail     = v.email ?? ""
+        let cc  = v.phone?.countryCode ?? ""
+        let num = v.phone?.number ?? ""
+        let full = "\(cc) \(num)".trimmingCharacters(in: .whitespaces)
+        vendorPhone     = full.isEmpty ? nil : full
+        vendorContact   = v.contactPerson ?? ""
+        vendorVatNumber = v.vatNumber
+    }
 }
 
 enum InvoiceStatus: String, CaseIterable {
@@ -793,25 +859,49 @@ enum InvoiceStatus: String, CaseIterable {
 
 // MARK: - Payment Run
 
-struct PaymentRunInvoice: Identifiable, Equatable {
-    var id: String = UUID().uuidString
+struct PaymentRunInvoice: Identifiable, Codable, Equatable {
+    var id: String?
     var invoiceNumber: String?
     var supplierName: String?
     var description: String?
     var dueDate: Int64?
     var amount: Double?
     var currency: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, description, currency
+        case invoiceNumber = "invoice_number"
+        case supplierName  = "supplier_name"
+        case dueDate       = "due_date"
+        case amount        = "gross_amount"
+    }
+
+    init(id: String? = nil, invoiceNumber: String? = nil, supplierName: String? = nil,
+         description: String? = nil, dueDate: Int64? = nil, amount: Double? = nil, currency: String? = nil) {
+        self.id = id; self.invoiceNumber = invoiceNumber; self.supplierName = supplierName
+        self.description = description; self.dueDate = dueDate; self.amount = amount; self.currency = currency
+    }
 }
 
-struct PaymentRunApproval: Identifiable, Equatable {
+struct PaymentRunApproval: Identifiable, Codable, Equatable {
     var id: String { "\(userId ?? "")-\(tierNumber ?? 0)" }
     var userId: String?
     var approvedAt: Int64?
     var tierNumber: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case userId     = "user_id"
+        case approvedAt = "approved_at"
+        case tierNumber = "tier_number"
+    }
+
+    init(userId: String? = nil, approvedAt: Int64? = nil, tierNumber: Int? = nil) {
+        self.userId = userId; self.approvedAt = approvedAt; self.tierNumber = tierNumber
+    }
 }
 
-struct PaymentRun: Identifiable, Equatable {
-    var id: String = UUID().uuidString
+struct PaymentRun: Identifiable, Codable, Equatable {
+    var id: String?
     var projectId: String?
     var name: String?
     var number: String?
@@ -834,6 +924,21 @@ struct PaymentRun: Identifiable, Equatable {
     var isApproved: Bool { (status ?? "").lowercased() == "approved" }
     var isRejected: Bool { (status ?? "").lowercased() == "rejected" }
     var approvedCount: Int { approval?.count ?? 0 }
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, number, status, approval, invoices
+        case projectId       = "project_id"
+        case payMethod       = "pay_method"
+        case totalAmount     = "total_amount"
+        case createdBy       = "created_by"
+        case createdAt       = "created_at"
+        case updatedAt       = "updated_at"
+        case rejectedBy      = "rejected_by"
+        case rejectedAt      = "rejected_at"
+        case rejectionReason = "rejection_reason"
+        case invoiceCount    = "invoice_count"
+        case computedTotal   = "computed_total"
+    }
 }
 
 // MARK: - Non-DB models
@@ -858,31 +963,3 @@ struct Department: Identifiable, Equatable {
     var displayName: String { FormatUtils.formatLabel(departmentName ?? "") }
 }
 
-// Flexible JSON value
-enum AnyCodableValue: Codable, Equatable {
-    case string(String); case int(Int64); case double(Double); case bool(Bool); case null
-    init(from decoder: Decoder) throws {
-        let c = try decoder.singleValueContainer()
-        if let v = try? c.decode(Bool.self) { self = .bool(v); return }
-        if let v = try? c.decode(Int64.self) { self = .int(v); return }
-        if let v = try? c.decode(Double.self) { self = .double(v); return }
-        if let v = try? c.decode(String.self) { self = .string(v); return }
-        self = .null
-    }
-    func encode(to encoder: Encoder) throws {
-        var c = encoder.singleValueContainer()
-        switch self {
-        case .string(let v): try c.encode(v); case .int(let v): try c.encode(v)
-        case .double(let v): try c.encode(v); case .bool(let v): try c.encode(v)
-        case .null: try c.encodeNil()
-        }
-    }
-    var doubleValue: Double {
-        switch self { case .string(let s): return Double(s) ?? 0; case .int(let i): return Double(i)
-        case .double(let d): return d; default: return 0 }
-    }
-    var int64Value: Int64? {
-        switch self { case .int(let i): return i; case .double(let d): return Int64(d)
-        case .string(let s): return Int64(s); default: return nil }
-    }
-}

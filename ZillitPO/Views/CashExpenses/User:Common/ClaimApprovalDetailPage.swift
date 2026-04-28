@@ -69,6 +69,7 @@ struct ClaimApprovalDetailPage: View {
         }
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack(alignment: .bottom) {
             Color.bgSurface.edgesIgnoringSafeArea(.all)
@@ -149,7 +150,7 @@ struct ClaimApprovalDetailPage: View {
     /// batch record. Same rule as ClaimDetailPage.
     private var resolvedBatchId: String {
         if let bid = claim.batchId, !bid.isEmpty { return bid }
-        return claim.id
+        return claim.id ?? ""
     }
 
     private func openHistory() {
@@ -409,7 +410,7 @@ struct ClaimApprovalDetailPage: View {
     private func approveBatch() {
         actioning = true
         appState.approveBatch(
-            id: claim.id,
+            id: claim.id ?? "",
             tierNumber: 1,
             totalTiers: totalApprovalTiers
         ) { success in
@@ -420,7 +421,7 @@ struct ClaimApprovalDetailPage: View {
 
     private func rejectBatch(reason: String) {
         actioning = true
-        appState.rejectBatch(id: claim.id, reason: reason) { success in
+        appState.rejectBatch(id: claim.id ?? "", reason: reason) { success in
             actioning = false
             if success { presentationMode.wrappedValue.dismiss() }
         }
@@ -428,7 +429,7 @@ struct ClaimApprovalDetailPage: View {
 
     private func overrideBatch() {
         actioning = true
-        appState.overrideBatch(id: claim.id) { success in
+        appState.overrideBatch(id: claim.id ?? "") { success in
             actioning = false
             if success { presentationMode.wrappedValue.dismiss() }
         }

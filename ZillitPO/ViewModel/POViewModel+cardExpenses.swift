@@ -16,9 +16,9 @@ extension POViewModel {
             DispatchQueue.main.async {
                 if case .success(let r) = result, let data = r?.data {
                     self?.cardExpenseMeta = data
-                    print("✅ Loaded card expense meta")
+                    debugPrint("✅ Loaded card expense meta")
                 } else if case .failure(let e) = result {
-                    print("❌ Card expense meta failed: \(e)")
+                    debugPrint("❌ Card expense meta failed: \(e)")
                 }
             }
         }.urlDataTask?.resume()
@@ -30,13 +30,13 @@ extension POViewModel {
             DispatchQueue.main.async {
                 self?.isLoadingReceipts = false
                 if case .success(let r) = result {
-                    self?.cardReceipts = (r?.data ?? []).map { $0.toCardTransaction() }
-                } else if case .failure(let e) = result { print("❌ All card receipts failed: \(e)") }
+                    self?.cardReceipts = r?.data ?? []
+                } else if case .failure(let e) = result { debugPrint("❌ All card receipts failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
 
-    /// Load Receipt Inbox — calls the /receipts endpoint directly with the correct ReceiptRaw type.
+    /// Load Receipt Inbox — calls the /receipts endpoint, decoding directly into Receipt.
     func loadInboxReceipts() {
         isLoadingInboxReceipts = true
         CardExpenseCodableTask.fetchAllReceipts { [weak self] result in
@@ -44,10 +44,10 @@ extension POViewModel {
                 self?.isLoadingInboxReceipts = false
                 switch result {
                 case .success(let response):
-                    self?.inboxReceipts = (response?.data ?? []).map { $0.toReceipt() }
-                    print("✅ Loaded inbox receipts: \(self?.inboxReceipts.count ?? 0)")
+                    self?.inboxReceipts = response?.data ?? []
+                    debugPrint("✅ Loaded inbox receipts: \(self?.inboxReceipts.count ?? 0)")
                 case .failure(let error):
-                    print("❌ Inbox receipts failed: \(error)")
+                    debugPrint("❌ Inbox receipts failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -61,9 +61,9 @@ extension POViewModel {
                 self?.isLoadingReceiptDetail = false
                 switch result {
                 case .success(let response):
-                    if let raw = response?.data { self?.currentReceiptDetail = raw.toReceipt() }
+                    self?.currentReceiptDetail = response?.data
                 case .failure(let error):
-                    print("❌ Receipt detail failed: \(error)")
+                    debugPrint("❌ Receipt detail failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -75,8 +75,8 @@ extension POViewModel {
             DispatchQueue.main.async {
                 self?.isLoadingReceipts = false
                 if case .success(let r) = result {
-                    self?.myCardReceipts = (r?.data ?? []).map { $0.toCardTransaction() }
-                } else if case .failure(let e) = result { print("❌ My card receipts failed: \(e)") }
+                    self?.myCardReceipts = r?.data ?? []
+                } else if case .failure(let e) = result { debugPrint("❌ My card receipts failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
@@ -88,9 +88,9 @@ extension POViewModel {
                 self?.isLoadingCardTxns = false
                 switch result {
                 case .success(let response):
-                    self?.cardTransactions = (response?.data ?? []).map { $0.toCardTransaction() }
+                    self?.cardTransactions = response?.data ?? []
                 case .failure(let error):
-                    print("❌ Fetch card transactions failed: \(error)")
+                    debugPrint("❌ Fetch card transactions failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -102,11 +102,11 @@ extension POViewModel {
             DispatchQueue.main.async {
                 self?.isLoadingTopUps = false
                 if case .success(let r) = result {
-                    let all = (r?.data ?? []).map { $0.toTopUpItem() }
+                    let all = r?.data ?? []
                     self?.topUpQueue = all.filter { $0.entityType?.lowercased() == "card" }
                     // Also populate the cash queue for reuse across modules
                     self?.cashTopUpQueue = all.filter { $0.entityType?.lowercased() == "cash" }
-                } else if case .failure(let e) = result { print("❌ Top-ups failed: \(e)") }
+                } else if case .failure(let e) = result { debugPrint("❌ Top-ups failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
@@ -117,8 +117,8 @@ extension POViewModel {
             DispatchQueue.main.async {
                 self?.isLoadingSmartAlerts = false
                 if case .success(let r) = result {
-                    self?.smartAlerts = (r?.data ?? []).map { $0.toSmartAlert() }
-                } else if case .failure(let e) = result { print("❌ Smart alerts failed: \(e)") }
+                    self?.smartAlerts = r?.data ?? []
+                } else if case .failure(let e) = result { debugPrint("❌ Smart alerts failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
@@ -137,8 +137,8 @@ extension POViewModel {
         if !trimmed.isEmpty { body["note"] = trimmed }
         CardExpenseCodableTask.resolveAlert(id, body) { result in
             DispatchQueue.main.async {
-                if case .success = result { print("✅ Smart alert resolved: \(id)") }
-                else if case .failure(let e) = result { print("❌ Resolve alert failed: \(e)") }
+                if case .success = result { debugPrint("✅ Smart alert resolved: \(id)") }
+                else if case .failure(let e) = result { debugPrint("❌ Resolve alert failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
@@ -149,8 +149,8 @@ extension POViewModel {
         // Persist to backend
         CardExpenseCodableTask.dismissAlert(id) { result in
             DispatchQueue.main.async {
-                if case .success = result { print("✅ Smart alert dismissed: \(id)") }
-                else if case .failure(let e) = result { print("❌ Dismiss alert failed: \(e)") }
+                if case .success = result { debugPrint("✅ Smart alert dismissed: \(id)") }
+                else if case .failure(let e) = result { debugPrint("❌ Dismiss alert failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
@@ -160,7 +160,7 @@ extension POViewModel {
         var a = smartAlerts[idx]
         a.status = "under_investigation"
         smartAlerts[idx] = a
-        print("✅ Smart alert under investigation: \(id)")
+        debugPrint("✅ Smart alert under investigation: \(id)")
     }
 
     func revertSmartAlert(_ id: String) {
@@ -168,7 +168,7 @@ extension POViewModel {
         var a = smartAlerts[idx]
         a.status = "active"
         smartAlerts[idx] = a
-        print("✅ Smart alert reverted to active: \(id)")
+        debugPrint("✅ Smart alert reverted to active: \(id)")
     }
 
     // MARK: - Manual Receipt Matching
@@ -179,12 +179,12 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Receipt matched: \(receiptId) → txn \(transactionId)")
+                    debugPrint("✅ Receipt matched: \(receiptId) → txn \(transactionId)")
                     self?.loadInboxReceipts()
                     self?.loadCardExpenseMeta()
                     completion(true)
                 case .failure(let e):
-                    print("❌ Match receipt failed: \(e)")
+                    debugPrint("❌ Match receipt failed: \(e)")
                     completion(false)
                 }
             }
@@ -204,10 +204,10 @@ extension POViewModel {
                 case .success:
                     self?.topUpQueue.removeAll { $0.id == id }
                     self?.loadCardExpenseMeta()
-                    print("✅ Top-up marked completed: \(id)")
+                    debugPrint("✅ Top-up marked completed: \(id)")
                     completion?(true)
                 case .failure(let e):
-                    print("❌ Mark top-up failed: \(e)")
+                    debugPrint("❌ Mark top-up failed: \(e)")
                     completion?(false)
                 }
             }
@@ -221,10 +221,10 @@ extension POViewModel {
                 case .success:
                     self?.topUpQueue.removeAll { $0.id == id }
                     self?.loadCardExpenseMeta()
-                    print("✅ Top-up skipped: \(id)")
+                    debugPrint("✅ Top-up skipped: \(id)")
                     completion?(true)
                 case .failure(let e):
-                    print("❌ Skip top-up failed: \(e)")
+                    debugPrint("❌ Skip top-up failed: \(e)")
                     completion?(false)
                 }
             }
@@ -245,10 +245,10 @@ extension POViewModel {
                 case .success:
                     self?.topUpQueue.removeAll { $0.id == id }
                     self?.loadCardExpenseMeta()
-                    print("✅ Partial top-up recorded: \(id)")
+                    debugPrint("✅ Partial top-up recorded: \(id)")
                     completion?(true)
                 case .failure(let e):
-                    print("❌ Partial top-up failed: \(e)")
+                    debugPrint("❌ Partial top-up failed: \(e)")
                     completion?(false)
                 }
             }
@@ -262,10 +262,10 @@ extension POViewModel {
                 switch result {
                 case .success:
                     self?.cardApprovalQueueItems.removeAll { $0.id == id }
-                    print("✅ Approval overridden: \(id)")
+                    debugPrint("✅ Approval overridden: \(id)")
                     completion(true)
                 case .failure(let e):
-                    print("❌ Override approval failed: \(e)")
+                    debugPrint("❌ Override approval failed: \(e)")
                     completion(false)
                 }
             }
@@ -278,8 +278,8 @@ extension POViewModel {
             DispatchQueue.main.async {
                 self?.isLoadingCardApprovals = false
                 if case .success(let r) = result {
-                    self?.cardApprovalQueueItems = (r?.data ?? []).map { $0.toCardTransaction() }
-                } else if case .failure(let e) = result { print("❌ Approval queue failed: \(e)") }
+                    self?.cardApprovalQueueItems = r?.data ?? []
+                } else if case .failure(let e) = result { debugPrint("❌ Approval queue failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
@@ -290,8 +290,8 @@ extension POViewModel {
             DispatchQueue.main.async {
                 self?.isLoadingPendingCoding = false
                 if case .success(let r) = result {
-                    self?.pendingCodingItems = (r?.data ?? []).map { $0.toPendingCodingItem() }
-                } else if case .failure(let e) = result { print("❌ Pending coding failed: \(e)") }
+                    self?.pendingCodingItems = r?.data ?? []
+                } else if case .failure(let e) = result { debugPrint("❌ Pending coding failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
@@ -300,14 +300,13 @@ extension POViewModel {
         CardExpenseCodableTask.fetchPendingCodingItem(id) { [weak self] result in
             DispatchQueue.main.async {
                 guard let self = self else { return }
-                if case .success(let r) = result, let raw = r?.data {
-                    let updated = raw.toPendingCodingItem()
+                if case .success(let r) = result, let updated = r?.data {
                     if let idx = self.pendingCodingItems.firstIndex(where: { $0.id == id }) {
                         self.pendingCodingItems[idx] = updated
                     }
-                    print("✅ Loaded pending coding item detail \(id)")
+                    debugPrint("✅ Loaded pending coding item detail \(id)")
                 } else if case .failure(let e) = result {
-                    print("❌ Fetch pending coding item failed: \(e)")
+                    debugPrint("❌ Fetch pending coding item failed: \(e)")
                 }
             }
         }.urlDataTask?.resume()
@@ -319,8 +318,8 @@ extension POViewModel {
             DispatchQueue.main.async {
                 self?.isLoadingCardHistory = false
                 if case .success(let r) = result {
-                    self?.cardHistory = (r?.data ?? []).map { $0.toCardTransaction() }
-                } else if case .failure(let e) = result { print("❌ Card history failed: \(e)") }
+                    self?.cardHistory = r?.data ?? []
+                } else if case .failure(let e) = result { debugPrint("❌ Card history failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
@@ -334,7 +333,7 @@ extension POViewModel {
         t.nominalCode = nominalCode
         t.notes = notes
         cardTransactions[idx] = t
-        print("✅ Card transaction \(id) updated locally")
+        debugPrint("✅ Card transaction \(id) updated locally")
 
         // Best-effort backend update
         let body: [String: Any] = [
@@ -346,8 +345,8 @@ extension POViewModel {
         guard let req = CardExpenseRequest.updateTransaction(id, body).urlRequest else { return }
         APIClient.shared.dataResultTask(with: req) { result in
             DispatchQueue.main.async {
-                if case .failure(let e) = result { print("❌ Update transaction backend failed: \(e)") }
-                else { print("✅ Update transaction backend succeeded") }
+                if case .failure(let e) = result { debugPrint("❌ Update transaction backend failed: \(e)") }
+                else { debugPrint("✅ Update transaction backend succeeded") }
             }
         }.resume()
     }
@@ -359,9 +358,9 @@ extension POViewModel {
                 self?.isLoadingReceipts = false
                 switch result {
                 case .success(let response):
-                    self?.receipts = (response?.data ?? []).map { $0.toReceipt() }
+                    self?.receipts = response?.data ?? []
                 case .failure(let error):
-                    print("❌ Fetch receipts failed: \(error)")
+                    debugPrint("❌ Fetch receipts failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -375,19 +374,19 @@ extension POViewModel {
         r.dateDetected = date.isEmpty ? nil : date
         r.nominalCode = nominalCode.isEmpty ? nil : nominalCode
         receipts[idx] = r
-        print("✅ Receipt \(id) details updated locally")
+        debugPrint("✅ Receipt \(id) details updated locally")
     }
 
     func confirmReceipt(_ receipt: Receipt) {
-        CardExpenseCodableTask.confirmReceipt(receipt.id) { [weak self] result in
+        CardExpenseCodableTask.confirmReceipt(receipt.id ?? "") { [weak self] result in
             DispatchQueue.main.async {
                 if case .success = result {
-                    print("✅ Receipt confirmed")
+                    debugPrint("✅ Receipt confirmed")
                     self?.loadCardExpenseReceipts()
                     self?.loadInboxReceipts()
                     self?.loadCardExpenseMeta()
                 }
-                else if case .failure(let e) = result { print("❌ Confirm receipt failed: \(e)") }
+                else if case .failure(let e) = result { debugPrint("❌ Confirm receipt failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
@@ -397,53 +396,53 @@ extension POViewModel {
         CardExpenseCodableTask.confirmReceipt(id) { [weak self] result in
             DispatchQueue.main.async {
                 if case .success = result {
-                    print("✅ Inbox receipt attached: \(id)")
+                    debugPrint("✅ Inbox receipt attached: \(id)")
                     self?.loadInboxReceipts()
                     self?.loadCardExpenseMeta()
                 }
-                else if case .failure(let e) = result { print("❌ Attach inbox receipt failed: \(e)") }
+                else if case .failure(let e) = result { debugPrint("❌ Attach inbox receipt failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
 
     func flagReceiptPersonal(_ receipt: Receipt) {
-        CardExpenseCodableTask.flagReceiptPersonal(receipt.id) { [weak self] result in
+        CardExpenseCodableTask.flagReceiptPersonal(receipt.id ?? "") { [weak self] result in
             DispatchQueue.main.async {
                 if case .success = result {
-                    print("✅ Flagged personal")
+                    debugPrint("✅ Flagged personal")
                     self?.loadCardExpenseReceipts()
                     self?.loadInboxReceipts()
                     self?.loadCardExpenseMeta()
                 }
-                else if case .failure(let e) = result { print("❌ Flag failed: \(e)") }
+                else if case .failure(let e) = result { debugPrint("❌ Flag failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
 
     func submitReceiptCoding(_ receipt: Receipt, nominalCode: String, lineItems: [[String: Any]], completion: @escaping (Bool) -> Void) {
         let body: [String: Any] = ["nominal_code": nominalCode, "line_items": lineItems]
-        CardExpenseCodableTask.submitCoding(receipt.id, body) { [weak self] result in
+        CardExpenseCodableTask.submitCoding(receipt.id ?? "", body) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Coding saved"); self?.loadCardExpenseReceipts(); completion(true)
+                    debugPrint("✅ Coding saved"); self?.loadCardExpenseReceipts(); completion(true)
                 case .failure(let e):
-                    print("❌ Submit coding failed: \(e)"); completion(false)
+                    debugPrint("❌ Submit coding failed: \(e)"); completion(false)
                 }
             }
         }.urlDataTask?.resume()
     }
 
     func deleteReceipt(_ receipt: Receipt) {
-        CardExpenseCodableTask.deleteReceipt(receipt.id) { [weak self] result in
+        CardExpenseCodableTask.deleteReceipt(receipt.id ?? "") { [weak self] result in
             DispatchQueue.main.async {
                 if case .success = result {
-                    print("✅ Receipt deleted")
+                    debugPrint("✅ Receipt deleted")
                     self?.loadCardExpenseReceipts()
                     self?.loadInboxReceipts()
                     self?.loadCardExpenseMeta()
                 }
-                else if case .failure(let e) = result { print("❌ Delete receipt failed: \(e)") }
+                else if case .failure(let e) = result { debugPrint("❌ Delete receipt failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
@@ -455,15 +454,14 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
-                    if let raw = response?.data {
-                        let card = raw.toCard()
-                        print("✅ Loaded card \(id): holder=\(card.holderFullName) status=\(card.status ?? "") limit=\(card.monthlyLimit ?? 0) balance=\(card.currentBalance ?? 0) dept=\(card.department ?? "") bank=\(card.bankName)")
+                    if let card = response?.data {
+                        debugPrint("✅ Loaded card \(id): holder=\(card.holderFullName) status=\(card.status ?? "") limit=\(card.monthlyLimit ?? 0) balance=\(card.currentBalance ?? 0) dept=\(card.department ?? "") bank=\(card.bankName)")
                         completion(card)
                     } else {
-                        print("⚠️ Load card \(id): empty response body")
+                        debugPrint("⚠️ Load card \(id): empty response body")
                     }
                 case .failure(let error):
-                    print("❌ Load card \(id) failed: \(error)")
+                    debugPrint("❌ Load card \(id) failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -478,9 +476,9 @@ extension POViewModel {
             DispatchQueue.main.async {
                 if case .success(let r) = result, let rows = r?.data, !rows.isEmpty {
                     self?.cardTierConfigRows = rows
-                    print("✅ Loaded card tier configs: \(rows.count)")
+                    debugPrint("✅ Loaded card tier configs: \(rows.count)")
                 } else if case .failure(let e) = result {
-                    print("❌ Card tier config failed: \(e)")
+                    debugPrint("❌ Card tier config failed: \(e)")
                 }
             }
         }.urlDataTask?.resume()
@@ -496,9 +494,9 @@ extension POViewModel {
                 self?.isLoadingCards = false
                 switch result {
                 case .success(let response):
-                    self?.userCards = (response?.data ?? []).map { $0.toCard() }
+                    self?.userCards = response?.data ?? []
                 case .failure(let error):
-                    print("❌ Fetch user cards failed: \(error)")
+                    debugPrint("❌ Fetch user cards failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -511,10 +509,10 @@ extension POViewModel {
                 self?.isLoadingCards = false
                 switch result {
                 case .success(let response):
-                    self?.allCards = (response?.data ?? []).map { $0.toCard() }
+                    self?.allCards = response?.data ?? []
                     self?.updateCardApproverStatus()
                 case .failure(let error):
-                    print("❌ Fetch cards for approval failed: \(error)")
+                    debugPrint("❌ Fetch cards for approval failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -553,16 +551,16 @@ extension POViewModel {
             return
         }
         let body: [String: Any] = ["tier_number": next, "total_tiers": ApprovalHelpers.getTotalTiers(cfg), "user_id": userId]
-        CardExpenseCodableTask.approveCard(card.id, body) { [weak self] result in
+        CardExpenseCodableTask.approveCard(card.id ?? "", body) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Card approved")
+                    debugPrint("✅ Card approved")
                     self?.loadAllRequestedCards()
                     self?.loadUserCards()
                     completion?(true, nil)
                 case .failure(let e):
-                    print("❌ Approve card failed: \(e)")
+                    debugPrint("❌ Approve card failed: \(e)")
                     completion?(false, e.localizedDescription)
                 }
             }
@@ -576,16 +574,16 @@ extension POViewModel {
                     reason: String,
                     completion: ((Bool, String?) -> Void)? = nil) {
         let body: [String: Any] = ["rejection_reason": reason, "user_id": userId]
-        CardExpenseCodableTask.rejectCard(card.id, body) { [weak self] result in
+        CardExpenseCodableTask.rejectCard(card.id ?? "", body) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Card rejected")
+                    debugPrint("✅ Card rejected")
                     self?.loadAllRequestedCards()
                     self?.loadUserCards()
                     completion?(true, nil)
                 case .failure(let e):
-                    print("❌ Reject card failed: \(e)")
+                    debugPrint("❌ Reject card failed: \(e)")
                     completion?(false, e.localizedDescription)
                 }
             }
@@ -605,16 +603,16 @@ extension POViewModel {
             "user_id": userId,
             "reason":  trimmed.isEmpty ? "Overridden by accountant" : trimmed
         ]
-        CardExpenseCodableTask.overrideCard(card.id, body) { [weak self] result in
+        CardExpenseCodableTask.overrideCard(card.id ?? "", body) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Card overridden")
+                    debugPrint("✅ Card overridden")
                     self?.loadAllRequestedCards()
                     self?.loadUserCards()
                     completion?(true, nil)
                 case .failure(let e):
-                    print("❌ Override card failed: \(e)")
+                    debugPrint("❌ Override card failed: \(e)")
                     completion?(false, e.localizedDescription)
                 }
             }
@@ -643,11 +641,11 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Card request created")
+                    debugPrint("✅ Card request created")
                     self?.loadUserCards()
                     completion?(true, nil)
                 case .failure(let e):
-                    print("❌ Request card failed: \(e)")
+                    debugPrint("❌ Request card failed: \(e)")
                     completion?(false, e.localizedDescription)
                 }
             }
@@ -659,10 +657,9 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success(let r):
-                    let entries = (r?.data ?? []).map { $0.toEntry() }
-                    completion(entries)
+                    completion(r?.data ?? [])
                 case .failure(let e):
-                    print("❌ Fetch card history failed: \(e)")
+                    debugPrint("❌ Fetch card history failed: \(e)")
                     completion([])
                 }
             }
@@ -676,10 +673,9 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success(let r):
-                    let entries = (r?.data ?? []).map { $0.toEntry() }
-                    completion(entries)
+                    completion(r?.data ?? [])
                 case .failure(let e):
-                    print("❌ Fetch receipt history failed: \(e)")
+                    debugPrint("❌ Fetch receipt history failed: \(e)")
                     completion([])
                 }
             }
@@ -698,12 +694,12 @@ extension POViewModel {
                 case .success(let response):
                     if let thread = response?.data {
                         self?.receiptQueries[receiptId] = thread
-                        print("✅ Loaded receipt query thread for \(receiptId): \((thread.messages ?? []).count) messages")
+                        debugPrint("✅ Loaded receipt query thread for \(receiptId): \((thread.messages ?? []).count) messages")
                     } else {
                         self?.receiptQueries.removeValue(forKey: receiptId)
                     }
                 case .failure(let error):
-                    print("❌ Fetch receipt queries failed: \(error)")
+                    debugPrint("❌ Fetch receipt queries failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -722,11 +718,11 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Card suspended: \(id)")
+                    debugPrint("✅ Card suspended: \(id)")
                     self?.objectWillChange.send()
                     completion(true)
                 case .failure(let e):
-                    print("❌ Suspend card failed: \(e)")
+                    debugPrint("❌ Suspend card failed: \(e)")
                     completion(false)
                 }
             }
@@ -783,11 +779,11 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Card activated (\(cardType.rawValue)): \(id)")
+                    debugPrint("✅ Card activated (\(cardType.rawValue)): \(id)")
                     self?.objectWillChange.send()
                     completion(true, nil)
                 case .failure(let e):
-                    print("❌ Activate card failed: \(e)")
+                    debugPrint("❌ Activate card failed: \(e)")
                     // Roll back the optimistic status + card-number
                     // patch so the list doesn't falsely show the card
                     // as activated. Surface the server error message
@@ -836,11 +832,11 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Card reactivated: \(id)")
+                    debugPrint("✅ Card reactivated: \(id)")
                     self?.objectWillChange.send()
                     completion(true)
                 case .failure(let e):
-                    print("❌ Reactivate card failed: \(e)")
+                    debugPrint("❌ Reactivate card failed: \(e)")
                     completion(false)
                 }
             }
@@ -869,13 +865,13 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Card request deleted: \(id)")
+                    debugPrint("✅ Card request deleted: \(id)")
                     self?.userCards.removeAll { $0.id == id }
                     self?.allCards.removeAll { $0.id == id }
                     self?.loadUserCards()
                     completion(true)
                 case .failure(let e):
-                    print("❌ Delete card request failed: \(e)")
+                    debugPrint("❌ Delete card request failed: \(e)")
                     completion(false)
                 }
             }
@@ -935,7 +931,7 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Card resubmitted: \(id)")
+                    debugPrint("✅ Card resubmitted: \(id)")
                     // Re-fetch the specific card so local state matches the
                     // authoritative server truth (server-side fields like
                     // updated_at, cleared approvals, etc. come through).
@@ -951,7 +947,7 @@ extension POViewModel {
                     }
                     completion(true)
                 case .failure(let e):
-                    print("❌ Resubmit card failed: \(e)")
+                    debugPrint("❌ Resubmit card failed: \(e)")
                     completion(false)
                 }
             }
@@ -962,7 +958,7 @@ extension POViewModel {
         CardExpenseCodableTask.fetchBankAccounts { [weak self] result in
             DispatchQueue.main.async {
                 if case .success(let r) = result {
-                    self?.bankAccounts = (r?.data ?? []).map { $0.toProductionBankAccount() }
+                    self?.bankAccounts = r?.data ?? []
                 }
             }
         }.urlDataTask?.resume()

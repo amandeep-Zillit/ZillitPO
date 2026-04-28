@@ -57,122 +57,21 @@ struct CardTransactionDetailPage: View {
         return ts > 0 ? FormatUtils.formatTimestamp(ts) : "—"
     }
 
+    /// Shortcut for the "—" fallback pattern on Optional strings — used
+    /// in SwiftUI view builders where inlining the ternary chain was
+    /// tripping the type-check timeout.
+    private func dashIfEmpty(_ s: String?) -> String {
+        let v = s ?? ""
+        return v.isEmpty ? "—" : v
+    }
+
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack(alignment: .bottom) {
             Color.bgBase.edgesIgnoringSafeArea(.all)
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    // ── Summary card (everything inside a single card) ──
-                    VStack(alignment: .leading, spacing: 0) {
-                        // Header: title + status + urgent
-                        HStack(spacing: 8) {
-                            Text("Receipt Details").font(.system(size: 15, weight: .bold))
-                            Spacer()
-                            if live.isUrgent ?? false {
-                                HStack(spacing: 3) {
-                                    Image(systemName: "flame.fill").font(.system(size: 9))
-                                    Text("Urgent").font(.system(size: 10, weight: .bold))
-                                }
-                                .foregroundColor(.red)
-                                .padding(.horizontal, 7).padding(.vertical, 4)
-                                .background(Color.red.opacity(0.1)).cornerRadius(4)
-                            }
-                            let (fg, bg) = statusColors
-                            Text(live.statusDisplay).font(.system(size: 10, weight: .bold)).foregroundColor(fg)
-                                .padding(.horizontal, 8).padding(.vertical, 4).background(bg).cornerRadius(4)
-                        }
-                        .padding(14)
-
-                        Divider()
-
-                        // Receipt preview
-                        VStack(spacing: 10) {
-                            Image(systemName: "doc.text").font(.system(size: 30)).foregroundColor(.gray.opacity(0.4))
-                            Text((live.hasReceipt ?? false) ? "Receipt attached" : "No receipt uploaded")
-                                .font(.system(size: 11)).foregroundColor(.gray)
-                        }
-                        .frame(maxWidth: .infinity).padding(.vertical, 28)
-                        .overlay(Rectangle().strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [5])).foregroundColor(Color.borderColor))
-                        .padding(14)
-
-                        Divider()
-
-                        // Info section
-                        VStack(alignment: .leading, spacing: 14) {
-                            HStack(alignment: .top, spacing: 14) {
-                                infoCell(label: "MERCHANT", value: (live.merchant ?? "").isEmpty ? "—" : (live.merchant ?? ""))
-                                infoCell(label: "AMOUNT", value: FormatUtils.formatGBP(live.amount ?? 0), valueColor: .goldDark, mono: true)
-                            }
-                            HStack(alignment: .top, spacing: 14) {
-                                infoCell(label: "DATE", value: dateText)
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("CARD HOLDER").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
-                                    Text((live.holderName ?? "").isEmpty ? "—" : (live.holderName ?? "")).font(.system(size: 13))
-                                    if let u = UsersData.byId[live.holderId ?? ""], !u.displayDesignation.isEmpty {
-                                        Text(u.displayDesignation).font(.system(size: 11)).foregroundColor(.secondary)
-                                    }
-                                }.frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                        }
-                        .padding(14)
-
-                        Divider()
-
-                        // Description / Cost Code / Episode
-                        HStack(alignment: .top, spacing: 14) {
-                            infoCell(label: "DESCRIPTION", value: (live.codeDescription ?? "").isEmpty ? "—" : (live.codeDescription ?? ""))
-                            infoCell(label: "COST CODE",
-                                     value: costCodeLabel(live.nominalCode ?? ""),
-                                     valueColor: .goldDark, mono: true)
-                            infoCell(label: "EPISODE", value: (live.episode ?? "").isEmpty ? "—" : (live.episode ?? ""))
-                        }
-                        .padding(14)
-
-                        // Approval progress (always shown)
-                        Divider()
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("APPROVAL PROGRESS").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
-                            if !(live.approvals ?? []).isEmpty {
-                                ForEach(Array((live.approvals ?? []).enumerated()), id: \.offset) { _, a in
-                                    approverRow(userId: a.userId ?? "", tierNumber: a.tierNumber ?? 0, override: a.override ?? false)
-                                }
-                            } else if !(live.approvedBy ?? "").isEmpty {
-                                approverRow(userId: live.approvedBy ?? "", tierNumber: 1, override: false)
-                            } else {
-                                Text("No approvals yet").font(.system(size: 11)).foregroundColor(.gray)
-                            }
-                        }.padding(14)
-
-                        Divider()
-
-                        // Submitted (always shown)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("SUBMITTED").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
-                            Text((live.createdAt ?? 0) > 0 ? FormatUtils.formatTimestamp(live.createdAt ?? 0) : "—").font(.system(size: 13))
-                        }.padding(14)
-
-                        // Line items (always shown — falls back to amount)
-                        Divider()
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("LINE ITEMS").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
-                            VStack(spacing: 0) {
-                                lineItemHeader
-                                Divider()
-                                let net = (live.netAmount ?? 0) > 0 ? (live.netAmount ?? 0) : (live.amount ?? 0)
-                                let tax = live.taxAmount ?? 0
-                                let gross = (live.grossAmount ?? 0) > 0 ? (live.grossAmount ?? 0) : (live.amount ?? 0)
-                                lineItemRow(
-                                    code: (live.nominalCode ?? "").isEmpty ? "—" : (live.nominalCode ?? "").uppercased(),
-                                    description: (live.merchant ?? "").isEmpty ? ((live.codeDescription ?? "").isEmpty ? "—" : (live.codeDescription ?? "")) : (live.merchant ?? ""),
-                                    net: net, tax: tax, gross: gross, isDeduction: false
-                                )
-                            }
-                            .background(Color.bgRaised).cornerRadius(6)
-                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
-                        }.padding(14)
-                    }
-                    .background(Color.bgSurface).cornerRadius(12)
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
+                    summaryCard
                 }
                 .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 90)
             }
@@ -281,10 +180,16 @@ struct CardTransactionDetailPage: View {
                     // Item summary
                     HStack {
                         VStack(alignment: .leading, spacing: 3) {
-                            Text((live.merchant ?? "").isEmpty ? (live.description ?? "") : (live.merchant ?? ""))
-                                .font(.system(size: 14, weight: .semibold))
-                            Text((live.holderName ?? "").isEmpty ? "—" : (live.holderName ?? ""))
-                                .font(.system(size: 12)).foregroundColor(.secondary)
+                            let merchantText: String = {
+                                let m = live.merchant ?? ""
+                                return m.isEmpty ? (live.description ?? "") : m
+                            }()
+                            let holderText: String = {
+                                let h = live.holderName ?? ""
+                                return h.isEmpty ? "—" : h
+                            }()
+                            Text(merchantText).font(.system(size: 14, weight: .semibold))
+                            Text(holderText).font(.system(size: 12)).foregroundColor(.secondary)
                         }
                         Spacer()
                         Text(FormatUtils.formatGBP(live.amount ?? 0))
@@ -307,7 +212,7 @@ struct CardTransactionDetailPage: View {
                     Button(action: {
                         guard !overrideReason.trimmingCharacters(in: .whitespaces).isEmpty else { return }
                         isOverriding = true
-                        appState.overrideApprovalItem(live.id, reason: overrideReason) { success in
+                        appState.overrideApprovalItem(live.id ?? "", reason: overrideReason) { success in
                             isOverriding = false
                             if success { showOverrideSheet = false; presentationMode.wrappedValue.dismiss() }
                         }
@@ -418,7 +323,157 @@ struct CardTransactionDetailPage: View {
     /// fall back to `id` otherwise.
     private var resolvedReceiptId: String {
         if let linked = live.receiptId, !linked.isEmpty { return linked }
-        return live.id
+        return live.id ?? ""
+    }
+
+    /// Extracted summary card — the whole block between the ScrollView
+    /// and the bottom action bar. Split into sub-sections below because
+    /// inlining the full layout hit SwiftUI's type-check timeout.
+    @ViewBuilder
+    private var summaryCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            headerSection
+            Divider()
+            receiptPreviewSection
+            Divider()
+            infoSection
+            Divider()
+            descriptionSection
+            Divider()
+            approvalProgressSection.padding(14)
+            Divider()
+            submittedSection
+            Divider()
+            lineItemsSection
+        }
+        .background(Color.bgSurface).cornerRadius(12)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.borderColor, lineWidth: 1))
+    }
+
+    @ViewBuilder
+    private var headerSection: some View {
+        HStack(spacing: 8) {
+            Text("Receipt Details").font(.system(size: 15, weight: .bold))
+            Spacer()
+            if live.isUrgent ?? false {
+                HStack(spacing: 3) {
+                    Image(systemName: "flame.fill").font(.system(size: 9))
+                    Text("Urgent").font(.system(size: 10, weight: .bold))
+                }
+                .foregroundColor(.red)
+                .padding(.horizontal, 7).padding(.vertical, 4)
+                .background(Color.red.opacity(0.1)).cornerRadius(4)
+            }
+            let (fg, bg) = statusColors
+            Text(live.statusDisplay).font(.system(size: 10, weight: .bold)).foregroundColor(fg)
+                .padding(.horizontal, 8).padding(.vertical, 4).background(bg).cornerRadius(4)
+        }
+        .padding(14)
+    }
+
+    @ViewBuilder
+    private var receiptPreviewSection: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "doc.text").font(.system(size: 30)).foregroundColor(.gray.opacity(0.4))
+            Text(live.hasReceipt ? "Receipt attached" : "No receipt uploaded")
+                .font(.system(size: 11)).foregroundColor(.gray)
+        }
+        .frame(maxWidth: .infinity).padding(.vertical, 28)
+        .overlay(Rectangle().strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [5])).foregroundColor(Color.borderColor))
+        .padding(14)
+    }
+
+    @ViewBuilder
+    private var infoSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 14) {
+                infoCell(label: "MERCHANT", value: dashIfEmpty(live.merchant))
+                infoCell(label: "AMOUNT", value: FormatUtils.formatGBP(live.amount ?? 0), valueColor: .goldDark, mono: true)
+            }
+            HStack(alignment: .top, spacing: 14) {
+                infoCell(label: "DATE", value: dateText)
+                cardHolderCell
+            }
+        }
+        .padding(14)
+    }
+
+    @ViewBuilder
+    private var cardHolderCell: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("CARD HOLDER").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
+            Text(dashIfEmpty(live.holderName)).font(.system(size: 13))
+            if let u = UsersData.byId[live.holderId ?? ""], !u.displayDesignation.isEmpty {
+                Text(u.displayDesignation).font(.system(size: 11)).foregroundColor(.secondary)
+            }
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var descriptionSection: some View {
+        HStack(alignment: .top, spacing: 14) {
+            infoCell(label: "DESCRIPTION", value: dashIfEmpty(live.codeDescription))
+            infoCell(label: "COST CODE",
+                     value: costCodeLabel(live.nominalCode ?? ""),
+                     valueColor: .goldDark, mono: true)
+            infoCell(label: "EPISODE", value: dashIfEmpty(live.episode))
+        }
+        .padding(14)
+    }
+
+    @ViewBuilder
+    private var submittedSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("SUBMITTED").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
+            let ts = live.createdAt ?? 0
+            Text(ts > 0 ? FormatUtils.formatTimestamp(ts) : "—").font(.system(size: 13))
+        }.padding(14)
+    }
+
+    @ViewBuilder
+    private var lineItemsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("LINE ITEMS").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
+            VStack(spacing: 0) {
+                lineItemHeader
+                Divider()
+                let amount = live.amount ?? 0
+                let net   = (live.netAmount ?? 0) > 0 ? (live.netAmount ?? 0) : amount
+                let tax   = live.taxAmount ?? 0
+                let gross = (live.grossAmount ?? 0) > 0 ? (live.grossAmount ?? 0) : amount
+                let code: String = {
+                    let n = (live.nominalCode ?? "")
+                    return n.isEmpty ? "—" : n.uppercased()
+                }()
+                let desc: String = {
+                    let m = live.merchant ?? ""
+                    return m.isEmpty ? dashIfEmpty(live.codeDescription) : m
+                }()
+                lineItemRow(code: code, description: desc, net: net, tax: tax, gross: gross, isDeduction: false)
+            }
+            .background(Color.bgRaised).cornerRadius(6)
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
+        }.padding(14)
+    }
+
+    /// Extracted approval-progress block. Inlining this into the parent
+    /// VStack tripped SwiftUI's "unable to type-check" timeout because
+    /// of the nested `if / else-if / else` + ForEach branches.
+    @ViewBuilder
+    private var approvalProgressSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("APPROVAL PROGRESS").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.4)
+            let approvals = live.approvals ?? []
+            if !approvals.isEmpty {
+                ForEach(Array(approvals.enumerated()), id: \.offset) { _, a in
+                    approverRow(userId: a.userId ?? "", tierNumber: a.tierNumber ?? 0, override: a.isOverride ?? false)
+                }
+            } else if let by = live.approvedBy, !by.isEmpty {
+                approverRow(userId: by, tierNumber: 1, override: false)
+            } else {
+                Text("No approvals yet").font(.system(size: 11)).foregroundColor(.gray)
+            }
+        }
     }
 
     /// Short label used in the header of the pushed Query / History pages.
@@ -497,6 +552,7 @@ private struct TransactionHistoryPage: View {
         return "Transaction"
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack {
             Color.bgBase.edgesIgnoringSafeArea(.all)
@@ -776,6 +832,7 @@ private struct TransactionQueriesPage: View {
         return list.sorted { ($0.timestamp ?? 0) < ($1.timestamp ?? 0) }
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         VStack(spacing: 0) {
             // Header — merchant / description as a centered title
@@ -899,7 +956,7 @@ private struct TransactionQueriesPage: View {
             isLocal: true
         ))
         draft = ""
-        print("⚠️ sendReceiptQueryMessage: no POST endpoint wired yet. Message added locally.")
+        debugPrint("⚠️ sendReceiptQueryMessage: no POST endpoint wired yet. Message added locally.")
     }
 }
 

@@ -17,6 +17,7 @@ struct CodingQueueListView: View {
         }
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {

@@ -1,5 +1,5 @@
 //
-//  CardExpensesModuleView.swift
+//  CardExpenseView.swift
 //  ZillitPO
 //
 
@@ -28,9 +28,9 @@ enum ReceiptFilter: String, CaseIterable {
     case posted = "Posted"
 }
 
-// MARK: - Card Expenses Module
+// MARK: - Card Expense View (entry point from ContentView)
 
-struct CardExpensesModuleView: View {
+struct CardExpenseView: View {
     @EnvironmentObject var appState: POViewModel
     @State private var activeTab: CardExpenseTab = .receipts
 

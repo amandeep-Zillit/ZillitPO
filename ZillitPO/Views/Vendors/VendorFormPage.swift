@@ -454,7 +454,7 @@ struct VendorFormView: View {
         }
 
         if let editing = existingVendor {
-            appState.updateVendor(id: editing.id, body: body) { ok in
+            appState.updateVendor(id: editing.id ?? "", body: body) { ok in
                 if ok {
                     onBack()
                 } else {
@@ -466,11 +466,11 @@ struct VendorFormView: View {
                 DispatchQueue.main.async {
                     switch result {
                     case .success:
-                        print("✅ Vendor created successfully")
+                        debugPrint("✅ Vendor created successfully")
                         appState.loadVendors()
                         onBack()
                     case .failure(let error):
-                        print("❌ Create vendor failed: \(error)")
+                        debugPrint("❌ Create vendor failed: \(error)")
                         isSubmitting = false
                     }
                 }

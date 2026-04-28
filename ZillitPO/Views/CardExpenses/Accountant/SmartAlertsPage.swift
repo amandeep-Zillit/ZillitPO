@@ -63,6 +63,7 @@ struct SmartAlertsPage: View {
         }
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:tag:selection:label:)")
     var body: some View {
         Group {
             if appState.isLoadingSmartAlerts && alerts.isEmpty {
@@ -115,7 +116,7 @@ struct SmartAlertsPage: View {
         .onAppear { appState.loadSmartAlerts() }
         .sheet(item: $resolveTarget) { alert in
             ResolveAlertSheet(alert: alert) { note in
-                appState.resolveSmartAlert(alert.id, note: note)
+                appState.resolveSmartAlert(alert.id ?? "", note: note)
             }
             .environmentObject(appState)
         }
@@ -203,6 +204,7 @@ struct SmartAlertsPage: View {
             || t.contains("top_up") || t.contains("topup") || t.contains("top-up")
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:tag:selection:label:)")
     private func alertCard(_ alert: SmartAlert) -> some View {
         let lowerStatus = (alert.status ?? "").lowercased()
         let isActive = lowerStatus == "active" || lowerStatus == "under_investigation" || lowerStatus == "investigating"
@@ -360,13 +362,13 @@ struct SmartAlertsPage: View {
                     HStack(spacing: 0) {
                         NavigationLink(
                             destination: SmartAlertDetailPage(alert: alert).environmentObject(appState),
-                            tag: alert.id,
+                            tag: alert.id ?? "",
                             selection: $navigateToAlertId
                         ) { EmptyView() }.frame(width: 0, height: 0).hidden()
 
                         if isInvestigating {
                             // Under Investigation — tap to revert back to active
-                            Button(action: { appState.revertSmartAlert(alert.id) }) {
+                            Button(action: { appState.revertSmartAlert(alert.id ?? "") }) {
                                 HStack(spacing: 4) {
                                     Image(systemName: "eye.fill").font(.system(size: 11, weight: .medium))
                                     Text("Under Investigation").font(.system(size: 12, weight: .bold))
@@ -377,7 +379,7 @@ struct SmartAlertsPage: View {
                             }.buttonStyle(BorderlessButtonStyle())
                         } else {
                             // Active state — show Investigate, Resolve, Dismiss
-                            Button(action: { appState.investigateSmartAlert(alert.id) }) {
+                            Button(action: { appState.investigateSmartAlert(alert.id ?? "") }) {
                                 HStack(spacing: 4) {
                                     Image(systemName: "magnifyingglass").font(.system(size: 11, weight: .medium))
                                     Text("Investigate").font(.system(size: 12, weight: .semibold))
@@ -403,7 +405,7 @@ struct SmartAlertsPage: View {
 
                             Spacer().frame(width: 12)
 
-                            Button(action: { appState.dismissSmartAlert(alert.id) }) {
+                            Button(action: { appState.dismissSmartAlert(alert.id ?? "") }) {
                                 Text("Dismiss")
                                     .font(.system(size: 12))
                                     .foregroundColor(.secondary)
@@ -661,7 +663,7 @@ struct SmartAlertDetailPage: View {
                 if !isResolved {
                     HStack(spacing: 10) {
                         Button(action: {
-                            appState.resolveSmartAlert(live.id)
+                            appState.resolveSmartAlert(live.id ?? "")
                             presentationMode.wrappedValue.dismiss()
                         }) {
                             HStack(spacing: 4) {
@@ -674,7 +676,7 @@ struct SmartAlertDetailPage: View {
                             .background(Color(red: 0.0, green: 0.6, blue: 0.5)).cornerRadius(8)
                         }.buttonStyle(BorderlessButtonStyle())
                         Button(action: {
-                            appState.dismissSmartAlert(live.id)
+                            appState.dismissSmartAlert(live.id ?? "")
                             presentationMode.wrappedValue.dismiss()
                         }) {
                             Text("Dismiss").font(.system(size: 13, weight: .bold)).foregroundColor(.gray)

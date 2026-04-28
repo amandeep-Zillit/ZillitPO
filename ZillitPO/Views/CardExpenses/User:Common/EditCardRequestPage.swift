@@ -92,7 +92,7 @@ struct EditCardRequestPage: View {
                             .selectionActionSheet(
                                 title: "Select Bank Account",
                                 isPresented: $showBankSheet,
-                                options: appState.bankAccounts.map { $0.id },
+                                options: appState.bankAccounts.compactMap { $0.id },
                                 isSelected: { id in
                                     appState.bankAccounts.first { $0.id == id }?.name == selectedBankName
                                 },
@@ -180,7 +180,7 @@ struct EditCardRequestPage: View {
         guard let amt = Double(proposedLimit), amt > 0 else { return }
         submitting = true
         appState.updateCardRequest(
-            id: card.id,
+            id: card.id ?? "",
             holderId: card.holderId ?? "",
             proposedLimit: amt,
             bsControlCode: isAccountant ? bsControlCode : (card.bsControlCode ?? ""),

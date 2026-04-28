@@ -59,6 +59,10 @@ class POViewModel: ObservableObject {
     /// sometimes omits the attachments, so we refresh per-detail to
     /// resolve the document URL.
     @Published var isRefreshingInvoice = false
+    /// Flips `true` while `refreshPO(id:)` is in flight so the PO
+    /// detail page can show a loader while it fetches the freshest
+    /// record from `GET /api/v2/purchase-orders/{id}`.
+    @Published var isRefreshingPO = false
     /// Per-tab loaders for the Drafts / Templates screen — drive the
     /// spinner that shows on first fetch and every tab switch there.
     @Published var isLoadingDrafts = false

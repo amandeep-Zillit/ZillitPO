@@ -41,7 +41,7 @@ struct CardTransactionRow: View {
 
     private var showUploadButton: Bool {
         let s = (transaction.status ?? "").lowercased()
-        return (s == "pending" || s == "pending_receipt") && !(transaction.hasReceipt ?? false)
+        return (s == "pending" || s == "pending_receipt") && !transaction.hasReceipt
     }
 
     private var titleText: String {

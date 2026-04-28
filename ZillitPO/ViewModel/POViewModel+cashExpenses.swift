@@ -12,10 +12,10 @@ extension POViewModel {
             DispatchQueue.main.async {
                 if case .success(let r) = result {
                     self?.cashMeta = r?.data
-                    print("✅ Cash metadata: approver=\(self?.cashMeta?.isApprover ?? false) coord=\(self?.cashMeta?.isCoordinator ?? false)")
+                    debugPrint("✅ Cash metadata: approver=\(self?.cashMeta?.isApprover ?? false) coord=\(self?.cashMeta?.isCoordinator ?? false)")
                     // Load role-specific data after metadata is available
                     self?.loadRoleSpecificCashData()
-                } else if case .failure(let e) = result { print("❌ Cash metadata failed: \(e)") }
+                } else if case .failure(let e) = result { debugPrint("❌ Cash metadata failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
@@ -32,10 +32,10 @@ extension POViewModel {
                 switch result {
                 case .success(let r):
                     let entries = r?.data ?? []
-                    print("✅ Float history loaded: \(id) — \(entries.count) entries")
+                    debugPrint("✅ Float history loaded: \(id) — \(entries.count) entries")
                     completion(entries)
                 case .failure(let e):
-                    print("❌ Float history failed: \(e)")
+                    debugPrint("❌ Float history failed: \(e)")
                     completion([])
                 }
             }
@@ -53,10 +53,10 @@ extension POViewModel {
                 case .success(let r):
                     let entries = r?.data ?? []
                     self?.claimHistory[batchId] = entries
-                    print("✅ Claim history loaded: \(batchId) — \(entries.count) entries")
+                    debugPrint("✅ Claim history loaded: \(batchId) — \(entries.count) entries")
                     completion(entries)
                 case .failure(let e):
-                    print("❌ Claim history failed: \(e)")
+                    debugPrint("❌ Claim history failed: \(e)")
                     completion([])
                 }
             }
@@ -79,12 +79,12 @@ extension POViewModel {
                 case .success(let response):
                     if let thread = response?.data {
                         self?.claimQueries[batchId] = thread
-                        print("✅ Loaded claim query thread for \(batchId): \((thread.messages ?? []).count) messages")
+                        debugPrint("✅ Loaded claim query thread for \(batchId): \((thread.messages ?? []).count) messages")
                     } else {
                         self?.claimQueries.removeValue(forKey: batchId)
                     }
                 case .failure(let error):
-                    print("❌ Fetch claim queries failed: \(error)")
+                    debugPrint("❌ Fetch claim queries failed: \(error)")
                 }
             }
         }.urlDataTask?.resume()
@@ -98,14 +98,14 @@ extension POViewModel {
                 switch result {
                 case .success(let r):
                     if let d = r?.data {
-                        print("✅ Float details loaded: \(id) — \((d.batches ?? []).count) batches, \((d.topups ?? []).count) topups, \((d.returns ?? []).count) returns")
+                        debugPrint("✅ Float details loaded: \(id) — \((d.batches ?? []).count) batches, \((d.topups ?? []).count) topups, \((d.returns ?? []).count) returns")
                         completion(d)
                     } else {
-                        print("⚠️ Float details empty for: \(id)")
+                        debugPrint("⚠️ Float details empty for: \(id)")
                         completion(nil)
                     }
                 case .failure(let e):
-                    print("❌ Float details failed: \(e)")
+                    debugPrint("❌ Float details failed: \(e)")
                     completion(nil)
                 }
             }
@@ -118,11 +118,11 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Float approved: \(id) (tier \(tierNumber)/\(totalTiers))")
+                    debugPrint("✅ Float approved: \(id) (tier \(tierNumber)/\(totalTiers))")
                     self?.loadApprovalQueueFloats()
                     completion(true)
                 case .failure(let e):
-                    print("❌ Approve float failed: \(e)")
+                    debugPrint("❌ Approve float failed: \(e)")
                     completion(false)
                 }
             }
@@ -141,11 +141,11 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Float overridden: \(id)")
+                    debugPrint("✅ Float overridden: \(id)")
                     self?.loadApprovalQueueFloats()
                     completion(true)
                 case .failure(let e):
-                    print("❌ Override float failed: \(e)")
+                    debugPrint("❌ Override float failed: \(e)")
                     completion(false)
                 }
             }
@@ -180,7 +180,7 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Cash return recorded for float \(id): £\(amount) — \(reason)")
+                    debugPrint("✅ Cash return recorded for float \(id): £\(amount) — \(reason)")
                     self?.loadActiveFloats()
                     completion(true, nil)
                 case .failure(let e):
@@ -189,7 +189,7 @@ extension POViewModel {
                     // of the `<pre>…</pre>` block so the UI doesn't show the
                     // entire page source as the error.
                     let cleaned = Self.cleanServerErrorBody(raw)
-                    print("❌ Record cash return failed: \(cleaned)")
+                    debugPrint("❌ Record cash return failed: \(cleaned)")
                     completion(false, cleaned)
                 }
             }
@@ -228,11 +228,11 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Float rejected: \(id)")
+                    debugPrint("✅ Float rejected: \(id)")
                     self?.loadApprovalQueueFloats()
                     completion(true)
                 case .failure(let e):
-                    print("❌ Reject float failed: \(e)")
+                    debugPrint("❌ Reject float failed: \(e)")
                     completion(false)
                 }
             }
@@ -260,11 +260,11 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Batch approved: \(id)")
+                    debugPrint("✅ Batch approved: \(id)")
                     self?.loadApprovalQueueClaims()
                     completion(true)
                 case .failure(let e):
-                    print("❌ Approve batch failed: \(e)")
+                    debugPrint("❌ Approve batch failed: \(e)")
                     completion(false)
                 }
             }
@@ -287,11 +287,11 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Batch rejected: \(id)")
+                    debugPrint("✅ Batch rejected: \(id)")
                     self?.loadApprovalQueueClaims()
                     completion(true)
                 case .failure(let e):
-                    print("❌ Reject batch failed: \(e)")
+                    debugPrint("❌ Reject batch failed: \(e)")
                     completion(false)
                 }
             }
@@ -305,11 +305,11 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Batch overridden: \(id)")
+                    debugPrint("✅ Batch overridden: \(id)")
                     self?.loadApprovalQueueClaims()
                     completion(true)
                 case .failure(let e):
-                    print("❌ Override batch failed: \(e)")
+                    debugPrint("❌ Override batch failed: \(e)")
                     completion(false)
                 }
             }
@@ -321,8 +321,8 @@ extension POViewModel {
         CashExpenseCodableTask.fetchMyFloats { [weak self] result in
             DispatchQueue.main.async {
                 self?.isLoadingMyFloats = false
-                if case .success(let r) = result { self?.myFloats = (r?.data ?? []).map { $0.toFloatRequest() } }
-                else if case .failure(let e) = result { print("❌ My floats failed: \(e)") }
+                if case .success(let r) = result { self?.myFloats = r?.data ?? [] }
+                else if case .failure(let e) = result { debugPrint("❌ My floats failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
@@ -332,8 +332,8 @@ extension POViewModel {
         CashExpenseCodableTask.fetchAllFloats { [weak self] result in
             DispatchQueue.main.async {
                 self?.isLoadingAllFloats = false
-                if case .success(let r) = result { self?.allFloats = (r?.data ?? []).map { $0.toFloatRequest() } }
-                else if case .failure(let e) = result { print("❌ All floats failed: \(e)") }
+                if case .success(let r) = result { self?.allFloats = r?.data ?? [] }
+                else if case .failure(let e) = result { debugPrint("❌ All floats failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
@@ -343,8 +343,8 @@ extension POViewModel {
         CashExpenseCodableTask.fetchActiveFloats { [weak self] result in
             DispatchQueue.main.async {
                 self?.isLoadingActiveFloats = false
-                if case .success(let r) = result { self?.activeFloats = (r?.data ?? []).map { $0.toFloatRequest() } }
-                else if case .failure(let e) = result { print("❌ Active floats failed: \(e)") }
+                if case .success(let r) = result { self?.activeFloats = r?.data ?? [] }
+                else if case .failure(let e) = result { debugPrint("❌ Active floats failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
@@ -354,8 +354,8 @@ extension POViewModel {
         CashExpenseCodableTask.fetchApprovalQueue { [weak self] result in
             DispatchQueue.main.async {
                 self?.isLoadingApprovalFloats = false
-                if case .success(let r) = result { self?.approvalQueueFloats = (r?.data ?? []).map { $0.toFloatRequest() } }
-                else if case .failure(let e) = result { print("❌ Approval queue failed: \(e)") }
+                if case .success(let r) = result { self?.approvalQueueFloats = r?.data ?? [] }
+                else if case .failure(let e) = result { debugPrint("❌ Approval queue failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
@@ -365,8 +365,8 @@ extension POViewModel {
         CashExpenseCodableTask.fetchMyClaims { [weak self] result in
             DispatchQueue.main.async {
                 self?.isLoadingMyClaims = false
-                if case .success(let r) = result { self?.myClaims = (r?.data ?? []).map { $0.toClaimBatch() } }
-                else if case .failure(let e) = result { print("❌ My claims failed: \(e)") }
+                if case .success(let r) = result { self?.myClaims = r?.data ?? [] }
+                else if case .failure(let e) = result { debugPrint("❌ My claims failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
@@ -381,11 +381,11 @@ extension POViewModel {
             DispatchQueue.main.async {
                 self?.isLoadingMyBatches = false
                 if case .success(let r) = result {
-                    self?.myBatches = (r?.data ?? []).map { $0.toClaimBatch() }
+                    self?.myBatches = r?.data ?? []
                     if let id = floatRequestId {
-                        print("✅ My batches loaded for float \(id): \(self?.myBatches.count ?? 0)")
+                        debugPrint("✅ My batches loaded for float \(id): \(self?.myBatches.count ?? 0)")
                     }
-                } else if case .failure(let e) = result { print("❌ My batches failed: \(e)") }
+                } else if case .failure(let e) = result { debugPrint("❌ My batches failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
@@ -395,8 +395,8 @@ extension POViewModel {
         CashExpenseCodableTask.fetchAllClaims { [weak self] result in
             DispatchQueue.main.async {
                 self?.isLoadingAllClaims = false
-                if case .success(let r) = result { self?.allClaims = (r?.data ?? []).map { $0.toClaimBatch() } }
-                else if case .failure(let e) = result { print("❌ All claims failed: \(e)") }
+                if case .success(let r) = result { self?.allClaims = r?.data ?? [] }
+                else if case .failure(let e) = result { debugPrint("❌ All claims failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
@@ -406,8 +406,8 @@ extension POViewModel {
         CashExpenseCodableTask.fetchCodingQueue { [weak self] result in
             DispatchQueue.main.async {
                 self?.isLoadingCodingQueue = false
-                if case .success(let r) = result { self?.codingQueue = (r?.data ?? []).map { $0.toClaimBatch() } }
-                else if case .failure(let e) = result { print("❌ Coding queue failed: \(e)") }
+                if case .success(let r) = result { self?.codingQueue = r?.data ?? [] }
+                else if case .failure(let e) = result { debugPrint("❌ Coding queue failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
@@ -417,8 +417,8 @@ extension POViewModel {
         CashExpenseCodableTask.fetchAuditQueue { [weak self] result in
             DispatchQueue.main.async {
                 self?.isLoadingAuditQueue = false
-                if case .success(let r) = result { self?.auditQueue = (r?.data ?? []).map { $0.toClaimBatch() } }
-                else if case .failure(let e) = result { print("❌ Audit queue failed: \(e)") }
+                if case .success(let r) = result { self?.auditQueue = r?.data ?? [] }
+                else if case .failure(let e) = result { debugPrint("❌ Audit queue failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
@@ -428,8 +428,8 @@ extension POViewModel {
         CashExpenseCodableTask.fetchApprovalQueueClaims { [weak self] result in
             DispatchQueue.main.async {
                 self?.isLoadingApprovalClaims = false
-                if case .success(let r) = result { self?.approvalQueueClaims = (r?.data ?? []).map { $0.toClaimBatch() } }
-                else if case .failure(let e) = result { print("❌ Approval queue claims failed: \(e)") }
+                if case .success(let r) = result { self?.approvalQueueClaims = r?.data ?? [] }
+                else if case .failure(let e) = result { debugPrint("❌ Approval queue claims failed: \(e)") }
             }
         }.urlDataTask?.resume()
     }
@@ -439,12 +439,12 @@ extension POViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Float request submitted")
+                    debugPrint("✅ Float request submitted")
                     self?.loadMyFloats()
                     self?.loadActiveFloats()
                     completion(true, nil)
                 case .failure(let e):
-                    print("❌ Float request failed: \(e)")
+                    debugPrint("❌ Float request failed: \(e)")
                     completion(false, e.localizedDescription)
                 }
             }
@@ -458,9 +458,9 @@ extension POViewModel {
                 self?.isLoadingPaymentRouting = false
                 if case .success(let r) = result, let data = r?.data {
                     self?.paymentRouting = data
-                    print("✅ Payment routing: \((data.bacsBatches ?? []).count) BACS, \((data.payrollBatches ?? []).count) payroll")
+                    debugPrint("✅ Payment routing: \((data.bacsBatches ?? []).count) BACS, \((data.payrollBatches ?? []).count) payroll")
                 } else if case .failure(let e) = result {
-                    print("❌ Payment routing failed: \(e)")
+                    debugPrint("❌ Payment routing failed: \(e)")
                 }
             }
         }.urlDataTask?.resume()

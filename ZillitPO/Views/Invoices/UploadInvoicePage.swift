@@ -32,6 +32,7 @@ struct UploadInvoicePage: View {
 
     private var hasFile: Bool { selectedImage != nil || selectedFileName != nil }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack {
             Color.bgBase.edgesIgnoringSafeArea(.all)
@@ -331,7 +332,7 @@ struct UploadInvoicePage: View {
             uploadError = "Failed to build request"; isUploading = false; return
         }
 
-        let task: URLSessionDataTask = APIClient.shared.codableResultTask(with: req) { (result: Result<APIResponse<InvoiceExtraction>?, Error>) in
+        let task: URLSessionDataTask? = FCURLSession.sharedInstance.session?.codableResultTask(with: req) { (result: Result<ZLGenericResponse<InvoiceExtraction>?, Error>) in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
@@ -342,7 +343,7 @@ struct UploadInvoicePage: View {
                 self.isUploading = false
             }
         }
-        task.resume()
+        task?.resume()
     }
 
     private func submitInvoice() {

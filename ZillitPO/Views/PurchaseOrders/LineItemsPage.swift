@@ -28,12 +28,12 @@ struct LineItemsPage: View {
         var grossTotal = 0.0
         for item in lineItems {
             let itemNet = (item.quantity ?? 0) * (item.unitPrice ?? 0)
-            let treatment = lineItemCustomValues[item.id]?["vat"] ?? "pending"
+            let treatment = lineItemCustomValues[item.id ?? ""]?["vat"] ?? "pending"
             let result = VATHelpers.calcVat(itemNet, treatment: treatment)
             totalVat += result.vatAmount
             grossTotal += result.gross
         }
-        let hasVat = lineItems.contains { (lineItemCustomValues[$0.id]?["vat"] ?? "pending") != "pending" }
+        let hasVat = lineItems.contains { (lineItemCustomValues[$0.id ?? ""]?["vat"] ?? "pending") != "pending" }
         return (totalVat, grossTotal, hasVat)
     }
 
@@ -142,7 +142,7 @@ struct LineItemsPage: View {
             // Dynamic fields from form template
             if !formFields.isEmpty {
                 ForEach(formFields, id: \.id) { field in
-                    self.liFieldView(field, itemId: item.id, item: item)
+                    self.liFieldView(field, itemId: item.id ?? "", item: item)
                 }
                 // Amount row always shown after dynamic fields
                 liAmountRow(item)
@@ -211,7 +211,7 @@ struct LineItemsPage: View {
     // Amount row — always shown at the bottom of every line item card
     private func liAmountRow(_ item: LineItem) -> some View {
         let itemNet = (item.quantity ?? 0) * (item.unitPrice ?? 0)
-        let treatment = lineItemCustomValues[item.id]?["vat"] ?? "pending"
+        let treatment = lineItemCustomValues[item.id ?? ""]?["vat"] ?? "pending"
         let vatResult = VATHelpers.calcVat(itemNet, treatment: treatment)
         return VStack(spacing: 4) {
             HStack {
@@ -247,28 +247,28 @@ struct LineItemsPage: View {
 
     @ViewBuilder
     private func liFallbackFields(item: LineItem) -> some View {
-        FieldGroup(label: "DESCRIPTION") { InputField(text: liBindDesc(item.id), placeholder: "Item description") }
+        FieldGroup(label: "DESCRIPTION") { InputField(text: liBindDesc(item.id ?? ""), placeholder: "Item description") }
         HStack(spacing: 10) {
             FieldGroup(label: "QTY") {
-                TextField("1", text: liBindQty(item.id))
+                TextField("1", text: liBindQty(item.id ?? ""))
                     .font(.system(size: 14)).keyboardType(.numberPad).padding(10).background(Color.bgSurface).cornerRadius(6)
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
             }
             FieldGroup(label: "UNIT PRICE") {
-                TextField("0.00", text: liBindPrice(item.id))
+                TextField("0.00", text: liBindPrice(item.id ?? ""))
                     .font(.system(size: 14, design: .monospaced)).keyboardType(.decimalPad).padding(10).background(Color.bgSurface).cornerRadius(6)
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.borderColor, lineWidth: 1))
             }
         }
         FieldGroup(label: "ACCOUNT CODE", optional: true) {
-            InputField(text: liBindAccount(item.id), placeholder: "e.g. 2100")
+            InputField(text: liBindAccount(item.id ?? ""), placeholder: "e.g. 2100")
         }
         FieldGroup(label: "DEPARTMENT", optional: true) {
-            PickerField(selection: liBindDept(item.id), placeholder: "Select department...",
+            PickerField(selection: liBindDept(item.id ?? ""), placeholder: "Select department...",
                 options: DepartmentsData.sorted.map { DropdownOption($0.identifier ?? "", $0.displayName) })
         }
         FieldGroup(label: "EXPENDITURE TYPE", optional: true) {
-            PickerField(selection: liBindExpType(item.id), placeholder: "Select type...",
+            PickerField(selection: liBindExpType(item.id ?? ""), placeholder: "Select type...",
                 options: expenditureTypes.map { DropdownOption($0, $0) })
         }
         liAmountRow(item)

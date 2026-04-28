@@ -6,7 +6,7 @@
 import Foundation
 
 enum DeptTab: String, CaseIterable, Identifiable {
-    case all = "All POs", my = "My POs", department = "My Dept"
+    case all = "All POs", my = "My POs", department = "My Department POs"
     case vendors = "Vendors"
     var id: String { rawValue }
 }

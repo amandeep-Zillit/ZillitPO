@@ -58,6 +58,7 @@ struct ClaimDetailPage: View {
         return c.uppercased()
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
@@ -215,7 +216,7 @@ struct ClaimDetailPage: View {
     /// History/query endpoints operate on the parent batch — prefer `batchId`
     /// when populated, fall back to `id` (already-batch rows).
     private var resolvedBatchId: String {
-        (claim.batchId ?? "").isEmpty ? claim.id : claim.batchId!
+        (claim.batchId ?? "").isEmpty ? (claim.id ?? "") : claim.batchId!
     }
 
     private func openHistory() {
@@ -293,6 +294,7 @@ struct ClaimHistoryPage: View {
     let entries: [FloatHistoryEntry]
     let isLoading: Bool
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack {
             Color.bgBase.edgesIgnoringSafeArea(.all)
@@ -513,6 +515,7 @@ struct ClaimQueriesPage: View {
         return list.sorted { ($0.timestamp ?? 0) < ($1.timestamp ?? 0) }
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         VStack(spacing: 0) {
             Text(label.isEmpty ? "—" : label)
@@ -633,6 +636,6 @@ struct ClaimQueriesPage: View {
             isLocal: true
         ))
         draft = ""
-        print("⚠️ sendClaimQueryMessage: no POST endpoint wired yet. Message added locally.")
+        debugPrint("⚠️ sendClaimQueryMessage: no POST endpoint wired yet. Message added locally.")
     }
 }

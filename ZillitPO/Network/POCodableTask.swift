@@ -2,54 +2,54 @@
 //  POCodableTask.swift
 //  ZillitPO
 //
-
 import Foundation
 
 enum POCodableTask {
     // MARK: - Vendors (typed responses)
-    case fetchVendors((Result<APIResponse<[Vendor]>?, Error>) -> Void)
+    case fetchVendors((Result<ZLGenericResponse<[Vendor]>?, Error>) -> Void)
     case createVendor([String: Any], (Result<Data?, Error>) -> Void)
     case updateVendor(String, [String: Any], (Result<Data?, Error>) -> Void)
     case deleteVendor(String, (Result<Data?, Error>) -> Void)
     case verifyVendor(String, (Result<Data?, Error>) -> Void)
-    case fetchVendorHistory(String, (Result<APIResponse<[InvoiceHistoryEntry]>?, Error>) -> Void)
+    case fetchVendorHistory(String, (Result<ZLGenericResponse<[InvoiceHistoryEntry]>?, Error>) -> Void)
 
     // MARK: - Approval Tiers (typed response)
-    case fetchApprovalTiers((Result<APIResponse<[ApprovalTierConfig]>?, Error>) -> Void)
+    case fetchApprovalTiers((Result<ZLGenericResponse<[ApprovalTierConfig]>?, Error>) -> Void)
 
     // MARK: - Purchase Orders (typed responses)
-    case fetchPurchaseOrders(String, (Result<APIResponse<[PurchaseOrderRaw]>?, Error>) -> Void)
-    case fetchDrafts((Result<APIResponse<[PurchaseOrderRaw]>?, Error>) -> Void)
+    case fetchPurchaseOrders(String, (Result<ZLGenericResponse<[PurchaseOrder]>?, Error>) -> Void)
+    case fetchPO(String, (Result<ZLGenericResponse<PurchaseOrder>?, Error>) -> Void)
+    case fetchDrafts((Result<ZLGenericResponse<[PurchaseOrder]>?, Error>) -> Void)
     case createPO([String: Any], (Result<Data?, Error>) -> Void)
     case updatePO(String, [String: Any], (Result<Data?, Error>) -> Void)
     case deletePO(String, (Result<Data?, Error>) -> Void)
     case approvePO(String, [String: Any], (Result<Data?, Error>) -> Void)
     case rejectPO(String, [String: Any], (Result<Data?, Error>) -> Void)
     case generatePDF(String, [String: Any], (Result<Data?, Error>) -> Void)
-    case fetchPOHistory(String, (Result<APIResponse<[InvoiceHistoryEntry]>?, Error>) -> Void)
-    case fetchPOQueries(String, (Result<APIResponse<InvoiceQueryThread>?, Error>) -> Void)
+    case fetchPOHistory(String, (Result<ZLGenericResponse<[InvoiceHistoryEntry]>?, Error>) -> Void)
+    case fetchPOQueries(String, (Result<ZLGenericResponse<InvoiceQueryThread>?, Error>) -> Void)
     // New (Apr 2026):
-    case fetchApprovalQueue((Result<APIResponse<[PurchaseOrderRaw]>?, Error>) -> Void)
-    case fetchMyPOs((Result<APIResponse<[PurchaseOrderRaw]>?, Error>) -> Void)
+    case fetchApprovalQueue((Result<ZLGenericResponse<[PurchaseOrder]>?, Error>) -> Void)
+    case fetchMyPOs((Result<ZLGenericResponse<[PurchaseOrder]>?, Error>) -> Void)
     case bulkUpdatePOs([String: Any], (Result<Data?, Error>) -> Void)
     case postPO(String, [String: Any], (Result<Data?, Error>) -> Void)
     case closePO(String, [String: Any], (Result<Data?, Error>) -> Void)
 
     // MARK: - Templates (typed responses)
-    case fetchTemplates((Result<APIResponse<[POTemplate]>?, Error>) -> Void)
+    case fetchTemplates((Result<ZLGenericResponse<[POTemplate]>?, Error>) -> Void)
     case createTemplate([String: Any], (Result<Data?, Error>) -> Void)
     case updateTemplate(String, [String: Any], (Result<Data?, Error>) -> Void)
     case deleteTemplate(String, (Result<Data?, Error>) -> Void)
 
     // MARK: - Form Template (typed response)
-    case fetchFormTemplate((Result<APIResponse<FormTemplateResponse>?, Error>) -> Void)
-    case fetchFloatFormTemplate((Result<APIResponse<FormTemplateResponse>?, Error>) -> Void)
+    case fetchFormTemplate((Result<ZLGenericResponse<FormTemplateResponse>?, Error>) -> Void)
+    case fetchFloatFormTemplate((Result<ZLGenericResponse<FormTemplateResponse>?, Error>) -> Void)
 
     // MARK: - Invoices (typed responses)
-    case fetchInvoices(String, (Result<APIResponse<[InvoiceRaw]>?, Error>) -> Void)
-    case fetchInvoice(String, (Result<APIResponse<InvoiceRaw>?, Error>) -> Void)
-    case fetchApprovalQueueInvoices((Result<APIResponse<[InvoiceRaw]>?, Error>) -> Void)
-    case fetchMyInvoices((Result<APIResponse<[InvoiceRaw]>?, Error>) -> Void)
+    case fetchInvoices(String, (Result<ZLGenericResponse<[Invoice]>?, Error>) -> Void)
+    case fetchInvoice(String, (Result<ZLGenericResponse<Invoice>?, Error>) -> Void)
+    case fetchApprovalQueueInvoices((Result<ZLGenericResponse<[Invoice]>?, Error>) -> Void)
+    case fetchMyInvoices((Result<ZLGenericResponse<[Invoice]>?, Error>) -> Void)
     case createInvoice([String: Any], (Result<Data?, Error>) -> Void)
     case updateInvoice(String, [String: Any], (Result<Data?, Error>) -> Void)
     case deleteInvoice(String, (Result<Data?, Error>) -> Void)
@@ -59,32 +59,32 @@ enum POCodableTask {
     case releaseInvoiceHold(String, (Result<Data?, Error>) -> Void)
     case sendInvoiceToApproval(String, (Result<Data?, Error>) -> Void)
     case postInvoiceToLedger(String, (Result<Data?, Error>) -> Void)
-    case fetchInvoiceHistory(String, (Result<APIResponse<[InvoiceHistoryEntry]>?, Error>) -> Void)
-    case fetchInvoiceQueries(String, (Result<APIResponse<InvoiceQueryThread>?, Error>) -> Void)
+    case fetchInvoiceHistory(String, (Result<ZLGenericResponse<[InvoiceHistoryEntry]>?, Error>) -> Void)
+    case fetchInvoiceQueries(String, (Result<ZLGenericResponse<InvoiceQueryThread>?, Error>) -> Void)
 
     // MARK: - Invoice Approval Tiers (typed response)
-    case fetchInvoiceApprovalTiers((Result<APIResponse<[ApprovalTierConfig]>?, Error>) -> Void)
+    case fetchInvoiceApprovalTiers((Result<ZLGenericResponse<[ApprovalTierConfig]>?, Error>) -> Void)
 
     // MARK: - Invoice Settings
-    case getInvoiceSettings((Result<APIResponse<InvoiceSettingsRaw>?, Error>) -> Void)
+    case getInvoiceSettings((Result<ZLGenericResponse<InvoiceSettings>?, Error>) -> Void)
     case updateInvoiceSettings([String: Any], (Result<Data?, Error>) -> Void)
 
     // MARK: - Payment Runs (typed responses)
-    case fetchPaymentRuns((Result<APIResponse<[PaymentRunRaw]>?, Error>) -> Void)
-    case getPaymentRun(String, (Result<APIResponse<PaymentRunDetailRaw>?, Error>) -> Void)
+    case fetchPaymentRuns((Result<ZLGenericResponse<[PaymentRun]>?, Error>) -> Void)
+    case getPaymentRun(String, (Result<ZLGenericResponse<PaymentRunDetail>?, Error>) -> Void)
     case approvePaymentRun(String, [String: Any], (Result<Data?, Error>) -> Void)
     case rejectPaymentRun(String, [String: Any], (Result<Data?, Error>) -> Void)
 
 }
 
-extension POCodableTask: PODataTaskProtocol {
+extension POCodableTask: FCCodableDataTask {
     var urlDataTask: URLSessionDataTask? {
         switch self {
 
         // MARK: Vendors
         case .fetchVendors(let completion):
             guard let urlRequest = PORequest.fetchVendors.urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: urlRequest, completion: completion)
 
         case .createVendor(let body, let completion):
             guard let urlRequest = PORequest.createVendor(body).urlRequest else { return nil }
@@ -104,21 +104,25 @@ extension POCodableTask: PODataTaskProtocol {
 
         case .fetchVendorHistory(let id, let completion):
             guard let urlRequest = PORequest.fetchVendorHistory(id).urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: urlRequest, completion: completion)
 
         // MARK: Approval Tiers
         case .fetchApprovalTiers(let completion):
             guard let urlRequest = PORequest.fetchApprovalTiers.urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: urlRequest, completion: completion)
 
         // MARK: Purchase Orders
         case .fetchPurchaseOrders(let path, let completion):
             guard let urlRequest = PORequest.fetchPurchaseOrders(path).urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: urlRequest, completion: completion)
+
+        case .fetchPO(let id, let completion):
+            guard let urlRequest = PORequest.fetchPO(id).urlRequest else { return nil }
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: urlRequest, completion: completion)
 
         case .fetchDrafts(let completion):
             guard let urlRequest = PORequest.fetchDrafts.urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: urlRequest, completion: completion)
 
         case .createPO(let body, let completion):
             guard let urlRequest = PORequest.createPO(body).urlRequest else { return nil }
@@ -146,19 +150,19 @@ extension POCodableTask: PODataTaskProtocol {
 
         case .fetchPOHistory(let id, let completion):
             guard let urlRequest = PORequest.fetchPOHistory(id).urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: urlRequest, completion: completion)
 
         case .fetchPOQueries(let id, let completion):
             guard let urlRequest = PORequest.fetchPOQueries(id).urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: urlRequest, completion: completion)
 
         case .fetchApprovalQueue(let completion):
             guard let urlRequest = PORequest.fetchApprovalQueue.urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: urlRequest, completion: completion)
 
         case .fetchMyPOs(let completion):
             guard let urlRequest = PORequest.fetchMyPOs.urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: urlRequest, completion: completion)
 
         case .bulkUpdatePOs(let body, let completion):
             guard let urlRequest = PORequest.bulkUpdatePOs(body).urlRequest else { return nil }
@@ -175,7 +179,7 @@ extension POCodableTask: PODataTaskProtocol {
         // MARK: Templates
         case .fetchTemplates(let completion):
             guard let urlRequest = PORequest.fetchTemplates.urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: urlRequest, completion: completion)
 
         case .createTemplate(let body, let completion):
             guard let urlRequest = PORequest.createTemplate(body).urlRequest else { return nil }
@@ -192,28 +196,28 @@ extension POCodableTask: PODataTaskProtocol {
         // MARK: Form Template
         case .fetchFormTemplate(let completion):
             guard let urlRequest = PORequest.fetchFormTemplate.urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: urlRequest, completion: completion)
 
         case .fetchFloatFormTemplate(let completion):
             guard let urlRequest = PORequest.fetchFloatFormTemplate.urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: urlRequest, completion: completion)
 
         // MARK: Invoices
         case .fetchInvoices(let path, let completion):
             guard let urlRequest = PORequest.fetchInvoices(path).urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: urlRequest, completion: completion)
 
         case .fetchInvoice(let id, let completion):
             guard let urlRequest = PORequest.fetchInvoice(id).urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: urlRequest, completion: completion)
 
         case .fetchApprovalQueueInvoices(let completion):
             guard let urlRequest = PORequest.fetchApprovalQueueInvoices.urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: urlRequest, completion: completion)
 
         case .fetchMyInvoices(let completion):
             guard let urlRequest = PORequest.fetchMyInvoices.urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: urlRequest, completion: completion)
 
         case .createInvoice(let body, let completion):
             guard let urlRequest = PORequest.createInvoice(body).urlRequest else { return nil }
@@ -253,21 +257,21 @@ extension POCodableTask: PODataTaskProtocol {
 
         case .fetchInvoiceHistory(let id, let completion):
             guard let urlRequest = PORequest.fetchInvoiceHistory(id).urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: urlRequest, completion: completion)
 
         case .fetchInvoiceQueries(let id, let completion):
             guard let urlRequest = PORequest.fetchInvoiceQueries(id).urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: urlRequest, completion: completion)
 
         // MARK: Invoice Approval Tiers
         case .fetchInvoiceApprovalTiers(let completion):
             guard let urlRequest = PORequest.fetchInvoiceApprovalTiers.urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: urlRequest, completion: completion)
 
         // MARK: Invoice Settings
         case .getInvoiceSettings(let completion):
             guard let urlRequest = PORequest.getInvoiceSettings.urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: urlRequest, completion: completion)
 
         case .updateInvoiceSettings(let body, let completion):
             guard let urlRequest = PORequest.updateInvoiceSettings(body).urlRequest else { return nil }
@@ -276,11 +280,11 @@ extension POCodableTask: PODataTaskProtocol {
         // MARK: Payment Runs
         case .fetchPaymentRuns(let completion):
             guard let urlRequest = PORequest.fetchPaymentRuns.urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: urlRequest, completion: completion)
 
         case .getPaymentRun(let id, let completion):
             guard let urlRequest = PORequest.getPaymentRun(id).urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: urlRequest, completion: completion)
 
         case .approvePaymentRun(let id, let body, let completion):
             guard let urlRequest = PORequest.approvePaymentRun(id, body).urlRequest else { return nil }

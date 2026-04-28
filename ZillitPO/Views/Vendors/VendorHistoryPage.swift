@@ -91,12 +91,12 @@ struct VendorHistoryPage: View {
     /// Resolve the actor for a history entry — returns both the display
     /// name and (optionally) a designation.
     private func resolvedUser(for entry: InvoiceHistoryEntry) -> (name: String, role: String?) {
-        if let uid = entry.userId, !uid.isEmpty, let u = UsersData.byId[uid] {
+        if let uid = entry.effectiveUserId, !uid.isEmpty, let u = UsersData.byId[uid] {
             let role = u.displayDesignation.isEmpty ? nil : u.displayDesignation
             return (u.fullName ?? "", role)
         }
         if let name = entry.userName, !name.isEmpty { return (name, nil) }
-        if let uid = entry.userId, !uid.isEmpty { return (uid, nil) }
+        if let uid = entry.effectiveUserId, !uid.isEmpty { return (uid, nil) }
         return ("Unknown", nil)
     }
 
@@ -146,7 +146,7 @@ struct VendorHistoryPage: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                if let ts = entry.timestamp, ts > 0 {
+                if let ts = entry.effectiveTimestamp, ts > 0 {
                     HStack(spacing: 4) {
                         Image(systemName: "clock").font(.system(size: 9)).foregroundColor(.gray)
                         Text(FormatUtils.formatHistoryDateTime(ts))

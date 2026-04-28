@@ -15,7 +15,11 @@ struct InvoiceDetailPage: View {
         appState.invoices.first(where: { $0.id == invoice.id }) ?? invoice
     }
 
-    var body: some View {
+    // Marked deprecated so the iOS-13-compat hidden NavigationLinks
+    // (`NavigationLink(destination:isActive:label:)`) don't trip the
+    // iOS-16 deprecation warning. See VendorDetailPage for full notes.
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
+        var body: some View {
         InvoiceDetailContentView(invoice: liveInvoice, onClose: { presentationMode.wrappedValue.dismiss() })
             .environmentObject(appState)
             .navigationBarTitle(Text((liveInvoice.invoiceNumber ?? "").isEmpty ? "Invoice" : liveInvoice.invoiceNumber ?? ""), displayMode: .inline)
@@ -37,11 +41,11 @@ struct InvoiceDetailPage: View {
                 // Hidden NavigationLinks driven by the menu rows.
                 ZStack {
                     NavigationLink(
-                        destination: InvoiceHistoryPage(invoiceId: liveInvoice.id, invoiceLabel: (liveInvoice.invoiceNumber ?? "").isEmpty ? "Invoice" : liveInvoice.invoiceNumber ?? "").environmentObject(appState),
+                        destination: InvoiceHistoryPage(invoiceId: liveInvoice.id ?? "", invoiceLabel: (liveInvoice.invoiceNumber ?? "").isEmpty ? "Invoice" : liveInvoice.invoiceNumber ?? "").environmentObject(appState),
                         isActive: $navigateToHistory
                     ) { EmptyView() }.frame(width: 0, height: 0).hidden()
                     NavigationLink(
-                        destination: InvoiceQueriesPage(invoiceId: liveInvoice.id, invoiceLabel: (liveInvoice.invoiceNumber ?? "").isEmpty ? "Invoice" : liveInvoice.invoiceNumber ?? "").environmentObject(appState),
+                        destination: InvoiceQueriesPage(invoiceId: liveInvoice.id ?? "", invoiceLabel: (liveInvoice.invoiceNumber ?? "").isEmpty ? "Invoice" : liveInvoice.invoiceNumber ?? "").environmentObject(appState),
                         isActive: $navigateToQueries
                     ) { EmptyView() }.frame(width: 0, height: 0).hidden()
                     // iOS 13 dropdown fallback — driven by the legacy
@@ -140,6 +144,7 @@ struct InvoiceDetailContentView: View {
     }
     private var totalTiers: Int { ApprovalHelpers.getTotalTiers(resolvedTierConfig) }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack(alignment: .bottom) {
             Color.bgSurface.edgesIgnoringSafeArea(.all)
@@ -308,14 +313,14 @@ struct InvoiceDetailContentView: View {
             // The refresh also drives the loader via
             // `isRefreshingInvoice`, so users see a spinner the
             // moment they tap a row.
-            appState.refreshInvoice(invoice.id)
+            appState.refreshInvoice(invoice.id ?? "")
         }
     }
 
     // MARK: - History (kept private — used by InvoiceHistoryPage)
 
     private var historySection: some View {
-        let entries = appState.invoiceHistory[invoice.id] ?? []
+        let entries = appState.invoiceHistory[invoice.id ?? ""] ?? []
         return VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("HISTORY").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).tracking(0.6)
@@ -342,11 +347,11 @@ struct InvoiceDetailContentView: View {
                         return replaced.prefix(1).uppercased() + replaced.dropFirst()
                     }()
                     let resolved: (name: String, role: String?) = {
-                        if let uid = entry.userId, !uid.isEmpty, let u = UsersData.byId[uid] {
+                        if let uid = entry.effectiveUserId, !uid.isEmpty, let u = UsersData.byId[uid] {
                             return (u.fullName ?? "", u.displayDesignation.isEmpty ? nil : u.displayDesignation)
                         }
                         if let name = entry.userName, !name.isEmpty { return (name, nil) }
-                        if let uid = entry.userId, !uid.isEmpty { return (uid, nil) }
+                        if let uid = entry.effectiveUserId, !uid.isEmpty { return (uid, nil) }
                         return ("Unknown", nil)
                     }()
                     HStack(alignment: .top, spacing: 10) {
@@ -366,7 +371,7 @@ struct InvoiceDetailContentView: View {
                             )
                             .font(.system(size: 10))
                             .fixedSize(horizontal: false, vertical: true)
-                            if let ts = entry.timestamp, ts > 0 {
+                            if let ts = entry.effectiveTimestamp, ts > 0 {
                                 Text(FormatUtils.formatHistoryDateTime(ts))
                                     .font(.system(size: 9, design: .monospaced)).foregroundColor(.gray)
                             }
@@ -385,7 +390,7 @@ struct InvoiceDetailContentView: View {
     ///
     /// The canonical path is `<base>/uploads/<stored_filename>` — the
     /// filename (not upload_id) that the server wrote to its uploads
-    /// directory. The `InvoiceRaw` decoder resolves `stored_filename`
+    /// directory. The `Invoice` decoder resolves `stored_filename`
     /// (or `filename`) out of the `attachments` array into
     /// `invoice.file`; the list endpoint sometimes skips the
     /// attachments array entirely. When that happens the detail page
@@ -399,12 +404,12 @@ struct InvoiceDetailContentView: View {
     /// when no filename is known, so the sheet's empty-state kicks
     /// in instead of a doomed network request.
     private var invoiceDocumentURL: URL? {
-        guard let fileName = invoice.file, !fileName.isEmpty else { return nil }
+        guard let fileName = invoice.fileURL, !fileName.isEmpty else { return nil }
         // `/uploads/<file>` is served by the invoices microservice
         // (same host that handles every other `/api/v2/invoices/*`
         // route) — use its dedicated base URL so local dev works
         // out of the box.
-        let base = PORequest.baseURL
+      
         if fileName.hasPrefix("http://") || fileName.hasPrefix("https://") {
             return URL(string: fileName)
         }
@@ -412,9 +417,9 @@ struct InvoiceDetailContentView: View {
         // Server sometimes returns "uploads/xyz.png" already-prefixed
         // — respect it instead of double-prefixing.
         if trimmed.hasPrefix("uploads/") {
-            return URL(string: "\(base)/\(trimmed)")
+            return URL(string: "\(trimmed)")
         }
-        return URL(string: "\(base)/uploads/\(trimmed)")
+        return URL(string: "/uploads/\(trimmed)")
     }
 
     /// Whether there's any uploaded document we can try to show.

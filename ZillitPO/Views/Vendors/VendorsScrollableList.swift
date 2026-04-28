@@ -38,7 +38,11 @@ struct VendorsScrollableList: View {
         return result
     }
 
-    var body: some View {
+    // Marked deprecated so the iOS-13-compat hidden NavigationLinks
+    // (`NavigationLink(destination:isActive:label:)`) don't trip the
+    // iOS-16 deprecation warning. See VendorDetailPage for full notes.
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
+        var body: some View {
         ZStack {
             VStack(alignment: .leading, spacing: 12) {
                 if appState.isLoadingVendors && appState.vendors.isEmpty {

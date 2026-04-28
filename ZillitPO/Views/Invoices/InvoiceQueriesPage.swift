@@ -181,6 +181,6 @@ struct InvoiceQueriesPage: View {
             isLocal: true
         ))
         draft = ""
-        print("⚠️ sendQueryMessage: no POST endpoint wired yet. Message added locally.")
+        debugPrint("⚠️ sendQueryMessage: no POST endpoint wired yet. Message added locally.")
     }
 }

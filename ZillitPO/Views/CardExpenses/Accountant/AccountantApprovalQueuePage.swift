@@ -160,7 +160,7 @@ struct AccountantApprovalQueuePage: View {
                     }
                 }
                 Spacer()
-                if tx.hasReceipt ?? false {
+                if tx.hasReceipt {
                     Image(systemName: "paperclip").font(.system(size: 10)).foregroundColor(.green)
                 }
                 Text("\(ageDays)d").font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary)
@@ -235,7 +235,7 @@ struct AccountantApprovalQueuePage: View {
     private func submitOverride() {
         guard let tx = overrideTarget, !overrideReason.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         isOverriding = true
-        appState.overrideApprovalItem(tx.id, reason: overrideReason) { success in
+        appState.overrideApprovalItem(tx.id ?? "", reason: overrideReason) { success in
             isOverriding = false
             if success { showOverrideSheet = false }
         }

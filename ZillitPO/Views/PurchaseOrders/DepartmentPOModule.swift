@@ -7,7 +7,7 @@ enum DeleteAlertType: Identifiable {
     case vendor(String)
     var id: String {
         switch self {
-        case .po(let p): return "po-\(p.id)"
+        case .po(let p): return "po-\(p.id ?? "")"
         case .template(let id): return "tpl-\(id)"
         case .draft(let id): return "dft-\(id)"
         case .vendor(let id): return "vnd-\(id)"
@@ -21,6 +21,7 @@ struct DepartmentPOModule: View {
     @State private var navigateToDraftsTemplates = false
     @State private var activeDeleteAlert: DeleteAlertType?
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             Color.bgBase.edgesIgnoringSafeArea(.all)

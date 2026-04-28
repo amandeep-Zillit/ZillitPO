@@ -57,6 +57,7 @@ struct CardTabView: View {
         return list
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             Color.bgBase.edgesIgnoringSafeArea(.all)

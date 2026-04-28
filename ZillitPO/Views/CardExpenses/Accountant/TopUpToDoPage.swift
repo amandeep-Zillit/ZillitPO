@@ -47,7 +47,7 @@ struct TopUpToDoPage: View {
             let key = !(item.entityId ?? "").isEmpty ? (item.entityId ?? "")
                     : !(item.cardId ?? "").isEmpty   ? (item.cardId ?? "")
                     : !(item.userId ?? "").isEmpty   ? (item.userId ?? "")
-                    : item.id
+                    : (item.id ?? "")
             if var g = map[key] {
                 g.topups.append(item)
                 if item.isUrgent { g.hasUrgent = true }
@@ -88,6 +88,7 @@ struct TopUpToDoPage: View {
         return nil
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         Group {
             if appState.isLoadingTopUps && appState.topUpQueue.isEmpty {
@@ -168,7 +169,7 @@ struct TopUpToDoPage: View {
         }
         markingGroupKey = group.key
         runBatch(group,
-                 action: { item, cb in appState.markTopUpCompleted(item.id, completion: cb) },
+                 action: { item, cb in appState.markTopUpCompleted(item.id ?? "", completion: cb) },
                  done: { allOK in
                     markingGroupKey = nil
                     appState.loadTopUpQueue()
@@ -179,7 +180,7 @@ struct TopUpToDoPage: View {
     private func skipGroup(_ group: TopUpGroup) {
         skippingGroupKey = group.key
         runBatch(group,
-                 action: { item, cb in appState.skipTopUp(item.id, completion: cb) },
+                 action: { item, cb in appState.skipTopUp(item.id ?? "", completion: cb) },
                  done: { allOK in
                     skippingGroupKey = nil
                     appState.loadTopUpQueue()
@@ -200,7 +201,7 @@ struct TopUpToDoPage: View {
         runBatch(group,
                  action: { item, cb in
                     // Hits /topups/{id}/partial; amount=nil tells server to use stored amount
-                    appState.partialTopUp(item.id, amount: amount, note: note, completion: cb)
+                    appState.partialTopUp(item.id ?? "", amount: amount, note: note, completion: cb)
                  },
                  done: { allOK in
                     appState.loadTopUpQueue()
@@ -541,6 +542,7 @@ struct PartialTopUpSheet: View {
     }
     private var canSubmit: Bool { !trimmedNote.isEmpty && !submitting }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         NavigationView {
             VStack(spacing: 16) {

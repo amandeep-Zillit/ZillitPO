@@ -66,11 +66,11 @@ struct VendorDetailPage: View {
     /// Created-at timestamp from the vendor record (ms). Used as the
     /// "added" date when no dedicated field is available.
     private var addedTimestamp: Int64 {
-        Int64(liveVendor.createdAt ?? 0)
+        liveVendor.createdAt ?? 0
     }
 
     private var verifiedTimestamp: Int64 {
-        Int64(liveVendor.verifiedAt ?? 0)
+        liveVendor.verifiedAt ?? 0
     }
 
     private var addedByUser: AppUser? {
@@ -105,7 +105,14 @@ struct VendorDetailPage: View {
         return !b.isEmpty
     }
 
-    var body: some View {
+    // Marked deprecated so the three iOS-13-compat hidden NavigationLinks
+    // (`NavigationLink(destination:isActive:label:)`) don't trip the
+    // iOS-16 deprecation warning. Project deployment target is iOS 13,
+    // so we have to keep using the legacy programmatic-navigation
+    // pattern. When the target is bumped to iOS 16, replace these with
+    // `.navigationDestination(isPresented:)` and remove this attribute.
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
+        var body: some View {
         ZStack {
             Color.bgBase.edgesIgnoringSafeArea(.all)
 
@@ -147,7 +154,7 @@ struct VendorDetailPage: View {
                     if appState.currentUser?.isAccountant == true && !liveVendor.verified {
                         Button(action: {
                             isVerifying = true
-                            appState.verifyVendor(liveVendor.id) { success in
+                            appState.verifyVendor(liveVendor.id ?? "") { success in
                                 isVerifying = false
                                 if !success { showVerifyError = true }
                             }
@@ -218,7 +225,7 @@ struct VendorDetailPage: View {
             // Hidden NavigationLink to push the Vendor History page.
             NavigationLink(
                 destination: VendorHistoryPage(
-                    vendorId: liveVendor.id,
+                    vendorId: liveVendor.id ?? "",
                     vendorLabel: liveVendor.name ?? "Vendor"
                 ).environmentObject(appState),
                 isActive: $navigateToHistory
@@ -247,7 +254,7 @@ struct VendorDetailPage: View {
         .alert(isPresented: $showDeleteAlert) {
             Alert(title: Text("Delete Vendor?"), message: Text("This cannot be undone."),
                   primaryButton: .destructive(Text("Delete")) {
-                      appState.deleteVendor(liveVendor.id)
+                      appState.deleteVendor(liveVendor.id ?? "")
                       presentationMode.wrappedValue.dismiss()
                   },
                   secondaryButton: .cancel())

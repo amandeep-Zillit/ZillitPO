@@ -151,6 +151,7 @@ struct InvoicesModuleView: View {
         }.count
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             Color.bgBase.edgesIgnoringSafeArea(.all)
@@ -450,6 +451,7 @@ struct InvoiceRow: View {
         return "—"
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {

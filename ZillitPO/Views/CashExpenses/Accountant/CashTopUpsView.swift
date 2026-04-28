@@ -240,7 +240,7 @@ struct CashTopUpsView: View {
 
             if isPending {
                 HStack(spacing: 8) {
-                    Button(action: { appState.markTopUpCompleted(item.id, amount: item.amount ?? 0) }) {
+                    Button(action: { appState.markTopUpCompleted(item.id ?? "", amount: item.amount ?? 0) }) {
                         HStack(spacing: 4) {
                             Image(systemName: "checkmark.circle.fill").font(.system(size: 11))
                             Text("Mark Topped Up").font(.system(size: 11, weight: .bold))
@@ -248,7 +248,7 @@ struct CashTopUpsView: View {
                         .foregroundColor(.white).padding(.horizontal, 12).padding(.vertical, 8)
                         .background(Color(red: 0.0, green: 0.6, blue: 0.5)).cornerRadius(6)
                     }.buttonStyle(BorderlessButtonStyle())
-                    Button(action: { appState.skipTopUp(item.id) }) {
+                    Button(action: { appState.skipTopUp(item.id ?? "") }) {
                         Text("Skip").font(.system(size: 11, weight: .semibold)).foregroundColor(.gray)
                             .padding(.horizontal, 12).padding(.vertical, 8)
                             .background(Color.bgSurface)

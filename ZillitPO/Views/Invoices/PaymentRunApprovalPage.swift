@@ -23,6 +23,7 @@ struct PaymentRunApprovalPage: View {
         }.sorted { ($0.createdAt ?? 0) > ($1.createdAt ?? 0) }
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack {
             Color.bgBase.edgesIgnoringSafeArea(.all)
@@ -81,6 +82,7 @@ struct PaymentRunRow: View {
     let run: PaymentRun
     var appState: POViewModel
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
@@ -197,6 +199,7 @@ struct PaymentRunDetailPage: View {
         }
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack(alignment: .bottom) {
             Color.bgBase.edgesIgnoringSafeArea(.all)
@@ -289,17 +292,20 @@ struct PaymentRunDetailPage: View {
             // Fetch run detail to get invoices
             if (liveRun.invoices ?? []).isEmpty {
                 loadingInvoices = true
-                POCodableTask.getPaymentRun(liveRun.id) { result in
+                POCodableTask.getPaymentRun(liveRun.id ?? "") { result in
                     DispatchQueue.main.async {
                         switch result {
                         case .success(let response):
-                            if let raw = response?.data {
+                            if let detail = response?.data {
                                 let v = appState.vendors
-                                let d = DepartmentsData.all
-                                fetchedInvoices = (raw.invoices ?? []).map { $0.toInvoice(vendors: v, departments: d) }
+                                var invoices = detail.invoices ?? []
+                                for i in invoices.indices {
+                                    invoices[i].enrich(vendor: v.first { $0.id == (invoices[i].vendorId ?? "") })
+                                }
+                                fetchedInvoices = invoices
                             }
                         case .failure(let error):
-                            print("❌ Fetch run invoices failed: \(error)")
+                            debugPrint("❌ Fetch run invoices failed: \(error)")
                         }
                         loadingInvoices = false
                     }

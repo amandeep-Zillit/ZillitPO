@@ -176,6 +176,6 @@ struct POQueriesPage: View {
             isLocal: true
         ))
         draft = ""
-        print("⚠️ sendPOQueryMessage: no POST endpoint wired yet. Message added locally.")
+        debugPrint("⚠️ sendPOQueryMessage: no POST endpoint wired yet. Message added locally.")
     }
 }

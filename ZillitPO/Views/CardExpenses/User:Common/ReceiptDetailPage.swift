@@ -104,6 +104,7 @@ struct ReceiptDetailPage: View {
 
     // MARK: - Body
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         let showActionBar = (live.workflowStatus ?? "").lowercased() == "pending_receipt" && appState.currentUser?.isAccountant == true
 
@@ -403,7 +404,7 @@ struct ReceiptDetailPage: View {
                 }.padding(32)
             }
         }
-        .onAppear { appState.loadReceiptDetail(id: receipt.id) }
+        .onAppear { appState.loadReceiptDetail(id: receipt.id ?? "") }
     }
 
     private func stepConnector(isDone: Bool) -> some View {
@@ -433,6 +434,7 @@ struct EditReceiptDetailsSheet: View {
     @State private var date: String = ""
     @State private var nominalCode: String = ""
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         NavigationView {
             Form {
@@ -464,7 +466,7 @@ struct EditReceiptDetailsSheet: View {
                 leading: Button("Cancel") { presentationMode.wrappedValue.dismiss() },
                 trailing: Button("Save") {
                     appState.updateReceiptDetails(
-                        id: receipt.id,
+                        id: receipt.id ?? "",
                         merchant: merchant,
                         amount: amount,
                         date: date,
@@ -488,6 +490,7 @@ struct ReceiptHistoryPage: View {
     @EnvironmentObject var appState: POViewModel
     @Environment(\.presentationMode) var presentationMode
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ScrollView {
             if history.isEmpty {

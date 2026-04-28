@@ -102,13 +102,13 @@ extension POViewModel {
         let lineItemPayloads: [[String: Any]] = fd.lineItems.map { li in
             let deptId = DepartmentsData.all.first(where: { $0.identifier == li.department })?.id ?? li.department ?? ""
             var item: [String: Any] = [
-                "id": li.id, "description": li.description ?? "",
+                "id": li.id ?? "", "description": li.description ?? "",
                 "quantity": li.quantity ?? 0, "unit_price": li.unitPrice ?? 0, "total": li.total ?? 0,
                 "account": li.account ?? "", "department": deptId,
                 "expenditure_type": li.expenditureType ?? "", "vat_treatment": li.vatTreatment ?? ""
             ]
             var cfArr: [[String: String]] = [["name": "vat", "value": li.vatTreatment ?? ""]]
-            if let customVals = fd.lineItemCustomValues[li.id] {
+            if let customVals = fd.lineItemCustomValues[li.id ?? ""] {
                 for (k, v) in customVals where !v.isEmpty && k != "vat" { cfArr.append(["name": k, "value": v]) }
             }
             item["custom_fields"] = cfArr

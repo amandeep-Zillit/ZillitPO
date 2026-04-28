@@ -6,6 +6,7 @@ struct EditTemplatePage: View {
     @Environment(\.presentationMode) var presentationMode
     var template: POTemplate?
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack {
             Color.bgBase.edgesIgnoringSafeArea(.all)
@@ -230,7 +231,7 @@ struct EditTemplateFormView: View {
                     }
                 } else {
                     let key = label.isEmpty ? (field.name ?? "") : label
-                    let val = (lineItemCustomValues[li.id]?[key]) ?? ""
+                    let val = (lineItemCustomValues[li.id ?? ""]?[key]) ?? ""
                     if val.trimmingCharacters(in: .whitespaces).isEmpty {
                         errors.append("Line \(idx + 1): \(field.name ?? "") is required")
                     }
@@ -321,6 +322,7 @@ struct EditTemplateFormView: View {
         }
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack {
             List {
@@ -754,7 +756,7 @@ struct EditTemplateFormView: View {
             if field.selectionType == "vendor" {
                 tplErrorWrappedPicker(label: (field.name ?? "").uppercased(), value: binding.wrappedValue, required: field.isRequired) {
                     PickerField(selection: binding, placeholder: "Select...",
-                        options: appState.vendors.map { DropdownOption($0.id, $0.name ?? "") })
+                        options: appState.vendors.map { DropdownOption($0.id ?? "", $0.name ?? "") })
                 }
             } else if field.selectionType == "department" {
                 tplErrorWrappedPicker(label: (field.name ?? "").uppercased(), value: binding.wrappedValue, required: field.isRequired) {
@@ -935,20 +937,19 @@ struct EditTemplateFormView: View {
         if let ms = tpl.effectiveDate, ms > 0 { effectiveDate = Date(timeIntervalSince1970: Double(ms)/1000); hasEffDate = true }
         if let ms = tpl.deliveryDate, ms > 0 { deliveryDate = Date(timeIntervalSince1970: Double(ms)/1000); hasDelDate = true }
 
-        if let da = tpl.deliveryAddress?.address {
+        if let da = tpl.deliveryAddress {
             daName = da.name ?? ""; daEmail = da.email ?? ""; daPhone = da.phone ?? ""
             daLine1 = da.line1 ?? ""; daLine2 = da.line2 ?? ""; daCity = da.city ?? ""
             daState = da.state ?? ""; daPostal = da.postalCode ?? ""; daCountry = da.country ?? ""
         }
 
-        if let flexItems = tpl.lineItems {
-            let items = flexItems.items.map {
+        if let items = tpl.lineItems, !items.isEmpty {
+            lineItems = items.map {
                 LineItem(id: $0.id ?? UUID().uuidString, description: $0.description ?? "",
-                         quantity: Double($0.quantity ?? 1), unitPrice: Double($0.unit_price ?? 0),
-                         total: Double($0.total ?? 0), account: $0.account ?? "",
-                         department: $0.department ?? "", expenditureType: $0.expenditure_type ?? "Purchase")
+                         quantity: $0.quantity ?? 1, unitPrice: $0.unitPrice ?? 0,
+                         total: $0.total ?? 0, account: $0.account ?? "",
+                         department: $0.department ?? "", expenditureType: $0.expenditureType ?? "Purchase")
             }
-            if !items.isEmpty { lineItems = items }
         }
     }
 
@@ -974,7 +975,7 @@ struct EditTemplateFormView: View {
 
     private func updateTemplate() {
         guard let tpl = template else { return }
-        appState.updateTemplate(tpl.id, buildFormData(), templateName: templateName, onComplete: onBack)
+        appState.updateTemplate(tpl.id ?? "", buildFormData(), templateName: templateName, onComplete: onBack)
     }
 
     private func saveAsNewTemplate() {

@@ -43,6 +43,7 @@ struct SubmitClaimFormView: View {
         receipts.reduce(0) { $0 + (Double($1.amount) ?? 0) }
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -136,10 +137,9 @@ struct SubmitClaimFormView: View {
             // Float + batch data is ONLY needed for Petty Cash. OOP claims
             // are pure reimbursement — they don't touch `myFloats` or
             // `myBatches`, so skipping these loads avoids firing
-            // `my-floats` / `my-batches?float_request_id=<id>` on an OOP
-            // submission where the id would be unrelated to the claim.
+            // `my-batches?float_request_id=<id>` on an OOP submission
+            // where the id would be unrelated to the claim.
             guard expenseType == "pc" else { return }
-            if appState.myFloats.isEmpty { appState.loadMyFloats() }
         }
         .onReceive(appState.$myBatches) { batches in
             // OOP doesn't render pendingBatches — bail out so we don't
@@ -827,7 +827,7 @@ struct SubmitClaimFormView: View {
 
         // Promote first receipt's coding info to batch level so the detail view can display it
         let first = validReceipts.first
-        var body: [String: Any] = [
+        let body: [String: Any] = [
             "expense_type": expenseType,
             "department_id": user.departmentId ?? "",
             "float_request_id": activeFloat?.id ?? NSNull(),
@@ -890,6 +890,7 @@ struct CostCodePickerButton: View {
         return costCodeOptions.first { $0.0 == selectedCode }?.1 ?? selectedCode
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         Button(action: { showSheet = true }) {
             HStack {

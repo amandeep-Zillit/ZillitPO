@@ -54,6 +54,7 @@ struct PettyCashModuleView: View {
     @State private var activeTab = ""
     @State private var navigateToNewFloat = false
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             VStack(spacing: 0) {
@@ -83,7 +84,7 @@ struct PettyCashModuleView: View {
                             .font(.system(size: 13))
                             .foregroundColor(.goldDark)
                             .padding(.top, 1)
-                        Text("You can't create a new float until your previous float is closed or approved.")
+                        Text("You can't create a new float until your previous float is closed, cancelled or approved.")
                             .font(.system(size: 12))
                             .foregroundColor(.primary)
                             .fixedSize(horizontal: false, vertical: true)

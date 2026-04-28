@@ -1,11 +1,11 @@
 //
-//  CashExpensesModuleView.swift
+//  CashExpenseView.swift
 //  ZillitPO
 //
 
 import SwiftUI
 
-// MARK: - File-scope helpers (shared across all views in this file)
+// MARK: - File-scope helpers (shared across all Cash views)
 
 /// Maps a float status string to (foreground, background) colors used for
 /// status badges. Mirrors the backend FloatRequestService state machine:
@@ -36,9 +36,9 @@ func floatStatusColors(_ s: String) -> (Color, Color) {
     }
 }
 
-// MARK: - Cash & Expenses Hub (2 tiles: Petty Cash, Out of Pocket)
+// MARK: - Cash Expense View (entry point from ContentView)
 
-struct CashExpensesHubView: View {
+struct CashExpenseView: View {
     @EnvironmentObject var appState: POViewModel
     @State private var navigateToPettyCash = false
     @State private var navigateToOOP = false
@@ -54,6 +54,7 @@ struct CashExpensesHubView: View {
     private var approvalQueueTotal: Int { appState.approvalQueueFloats.count + appState.approvalQueueClaims.count }
     private var codingClaims: [ClaimBatch] { appState.codingQueue }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack {
             Color.bgBase.edgesIgnoringSafeArea(.all)

@@ -7,26 +7,26 @@ import Foundation
 
 enum CardExpenseCodableTask {
     // Receipts
-    case fetchAllReceipts((Result<APIResponse<[ReceiptRaw]>?, Error>) -> Void)
-    case fetchMyReceipts(String, (Result<APIResponse<[ReceiptRaw]>?, Error>) -> Void)
+    case fetchAllReceipts((Result<ZLGenericResponse<[Receipt]>?, Error>) -> Void)
+    case fetchMyReceipts(String, (Result<ZLGenericResponse<[Receipt]>?, Error>) -> Void)
     case confirmReceipt(String, (Result<Data?, Error>) -> Void)
     case deleteReceipt(String, (Result<Data?, Error>) -> Void)
     case flagReceiptPersonal(String, (Result<Data?, Error>) -> Void)
     case submitCoding(String, [String: Any], (Result<Data?, Error>) -> Void)
 
     // Transactions
-    case fetchTransactions(String, (Result<APIResponse<[CardTransactionRaw]>?, Error>) -> Void)
+    case fetchTransactions(String, (Result<ZLGenericResponse<[CardTransaction]>?, Error>) -> Void)
 
     // Cards
-    case fetchCards(String, (Result<APIResponse<[CardRaw]>?, Error>) -> Void)
-    case fetchAllCards((Result<APIResponse<[CardRaw]>?, Error>) -> Void)
-    case fetchCard(String, (Result<APIResponse<CardRaw>?, Error>) -> Void)
+    case fetchCards(String, (Result<ZLGenericResponse<[ExpenseCard]>?, Error>) -> Void)
+    case fetchAllCards((Result<ZLGenericResponse<[ExpenseCard]>?, Error>) -> Void)
+    case fetchCard(String, (Result<ZLGenericResponse<ExpenseCard>?, Error>) -> Void)
     case createCard([String: Any], (Result<Data?, Error>) -> Void)
     case updateCard(String, [String: Any], (Result<Data?, Error>) -> Void)
     case deleteCard(String, (Result<Data?, Error>) -> Void)
-    case fetchCardHistoryById(String, (Result<APIResponse<[CardHistoryEntryRaw]>?, Error>) -> Void)
-    case fetchReceiptHistory(String, (Result<APIResponse<[CardHistoryEntryRaw]>?, Error>) -> Void)
-    case fetchEntityQueries(String, String, (Result<APIResponse<InvoiceQueryThread>?, Error>) -> Void)
+    case fetchCardHistoryById(String, (Result<ZLGenericResponse<[CardHistoryEntry]>?, Error>) -> Void)
+    case fetchReceiptHistory(String, (Result<ZLGenericResponse<[CardHistoryEntry]>?, Error>) -> Void)
+    case fetchEntityQueries(String, String, (Result<ZLGenericResponse<InvoiceQueryThread>?, Error>) -> Void)
     case suspendCard(String, [String: Any], (Result<Data?, Error>) -> Void)
     case reactivateCard(String, [String: Any], (Result<Data?, Error>) -> Void)
     case activateCard(String, [String: Any], (Result<Data?, Error>) -> Void)
@@ -35,16 +35,16 @@ enum CardExpenseCodableTask {
     case overrideCard(String, [String: Any], (Result<Data?, Error>) -> Void)
 
     // Metadata
-    case fetchMetadata((Result<APIResponse<CardExpenseMeta>?, Error>) -> Void)
+    case fetchMetadata((Result<ZLGenericResponse<CardExpenseMeta>?, Error>) -> Void)
 
     // Accountant Hub queues
-    case fetchTopUps((Result<APIResponse<[TopUpItemRaw]>?, Error>) -> Void)
-    case fetchSmartAlerts((Result<APIResponse<[SmartAlertRaw]>?, Error>) -> Void)
-    case fetchCardHistory((Result<APIResponse<[CardTransactionRaw]>?, Error>) -> Void)
-    case fetchPendingCoding((Result<APIResponse<[PendingCodingItemRaw]>?, Error>) -> Void)
-    case fetchPendingCodingItem(String, (Result<APIResponse<PendingCodingItemRaw>?, Error>) -> Void)
-    case fetchReceiptDetail(String, (Result<APIResponse<ReceiptRaw>?, Error>) -> Void)
-    case fetchApprovalQueue((Result<APIResponse<[CardTransactionRaw]>?, Error>) -> Void)
+    case fetchTopUps((Result<ZLGenericResponse<[TopUpItem]>?, Error>) -> Void)
+    case fetchSmartAlerts((Result<ZLGenericResponse<[SmartAlert]>?, Error>) -> Void)
+    case fetchCardHistory((Result<ZLGenericResponse<[CardTransaction]>?, Error>) -> Void)
+    case fetchPendingCoding((Result<ZLGenericResponse<[PendingCodingItem]>?, Error>) -> Void)
+    case fetchPendingCodingItem(String, (Result<ZLGenericResponse<PendingCodingItem>?, Error>) -> Void)
+    case fetchReceiptDetail(String, (Result<ZLGenericResponse<Receipt>?, Error>) -> Void)
+    case fetchApprovalQueue((Result<ZLGenericResponse<[CardTransaction]>?, Error>) -> Void)
     case overrideApproval(String, [String: Any], (Result<Data?, Error>) -> Void)
 
     // Receipt matching
@@ -62,24 +62,24 @@ enum CardExpenseCodableTask {
     case revertAlert(String, [String: Any], (Result<Data?, Error>) -> Void)
 
     // Bank Accounts
-    case fetchBankAccounts((Result<APIResponse<[ProductionBankAccountRaw]>?, Error>) -> Void)
+    case fetchBankAccounts((Result<ZLGenericResponse<[ProductionBankAccount]>?, Error>) -> Void)
 
     // Approval Tiers (card expenses)
-    case fetchCardApprovalTiers((Result<APIResponse<[ApprovalTierConfig]>?, Error>) -> Void)
+    case fetchCardApprovalTiers((Result<ZLGenericResponse<[ApprovalTierConfig]>?, Error>) -> Void)
 }
 
-extension CardExpenseCodableTask: PODataTaskProtocol {
+extension CardExpenseCodableTask: FCCodableDataTask {
     var urlDataTask: URLSessionDataTask? {
         switch self {
 
         // Receipts
         case .fetchAllReceipts(let completion):
             guard let req = CardExpenseRequest.fetchAllReceipts.urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: req, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: req, completion: completion)
 
-case .fetchMyReceipts(let userId, let completion):
+        case .fetchMyReceipts(let userId, let completion):
             guard let req = CardExpenseRequest.fetchMyReceipts(userId).urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: req, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: req, completion: completion)
 
         case .confirmReceipt(let id, let completion):
             guard let req = CardExpenseRequest.confirmReceipt(id).urlRequest else { return nil }
@@ -97,7 +97,7 @@ case .fetchMyReceipts(let userId, let completion):
             guard let req = CardExpenseRequest.submitCoding(id, body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: req, completion: completion)
 
-        // Transactions — /transactions, or /receipts/my (params == "my"), or /receipts (params == "all")
+        // Transactions
         case .fetchTransactions(let params, let completion):
             let request: CardExpenseRequest = {
                 switch params {
@@ -107,20 +107,20 @@ case .fetchMyReceipts(let userId, let completion):
                 }
             }()
             guard let req = request.urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: req, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: req, completion: completion)
 
         // Cards
         case .fetchCards(let params, let completion):
             guard let req = CardExpenseRequest.fetchCards(params).urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: req, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: req, completion: completion)
 
         case .fetchAllCards(let completion):
             guard let req = CardExpenseRequest.fetchCards("").urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: req, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: req, completion: completion)
 
         case .fetchCard(let id, let completion):
             guard let req = CardExpenseRequest.getCard(id).urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: req, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: req, completion: completion)
 
         case .createCard(let body, let completion):
             guard let req = CardExpenseRequest.createCard(body).urlRequest else { return nil }
@@ -136,15 +136,15 @@ case .fetchMyReceipts(let userId, let completion):
 
         case .fetchCardHistoryById(let id, let completion):
             guard let req = CardExpenseRequest.fetchCardHistoryById(id).urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: req, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: req, completion: completion)
 
         case .fetchReceiptHistory(let id, let completion):
             guard let req = CardExpenseRequest.fetchReceiptHistory(id).urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: req, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: req, completion: completion)
 
         case .fetchEntityQueries(let entityType, let entityId, let completion):
             guard let req = CardExpenseRequest.fetchEntityQueries(entityType, entityId).urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: req, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: req, completion: completion)
 
         case .suspendCard(let id, let body, let completion):
             guard let req = CardExpenseRequest.suspendCardReq(id, body).urlRequest else { return nil }
@@ -173,34 +173,34 @@ case .fetchMyReceipts(let userId, let completion):
         // Metadata
         case .fetchMetadata(let completion):
             guard let req = CardExpenseRequest.fetchMetadata.urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: req, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: req, completion: completion)
 
         // Accountant Hub queues
         case .fetchTopUps(let completion):
             guard let req = CardExpenseRequest.fetchTopUps.urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: req, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: req, completion: completion)
         case .fetchSmartAlerts(let completion):
             guard let req = CardExpenseRequest.fetchSmartAlerts.urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: req, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: req, completion: completion)
         case .fetchCardHistory(let completion):
             guard let req = CardExpenseRequest.fetchCardHistory.urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: req, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: req, completion: completion)
 
         case .fetchPendingCoding(let completion):
             guard let req = CardExpenseRequest.fetchPendingCoding.urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: req, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: req, completion: completion)
 
         case .fetchPendingCodingItem(let id, let completion):
             guard let req = CardExpenseRequest.getReceipt(id).urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: req, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: req, completion: completion)
 
         case .fetchReceiptDetail(let id, let completion):
             guard let req = CardExpenseRequest.fetchReceiptDetail(id).urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: req, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: req, completion: completion)
 
         case .fetchApprovalQueue(let completion):
             guard let req = CardExpenseRequest.fetchApprovalQueue.urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: req, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: req, completion: completion)
 
         case .overrideApproval(let id, let body, let completion):
             guard let req = CardExpenseRequest.overrideApproval(id, body).urlRequest else { return nil }
@@ -243,11 +243,11 @@ case .fetchMyReceipts(let userId, let completion):
 
         case .fetchBankAccounts(let completion):
             guard let req = CardExpenseRequest.fetchBankAccounts.urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: req, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: req, completion: completion)
 
         case .fetchCardApprovalTiers(let completion):
             guard let req = CardExpenseRequest.fetchCardApprovalTiers.urlRequest else { return nil }
-            return APIClient.shared.codableResultTask(with: req, completion: completion)
+            return FCURLSession.sharedInstance.session?.codableResultTask(with: req, completion: completion)
         }
     }
 }

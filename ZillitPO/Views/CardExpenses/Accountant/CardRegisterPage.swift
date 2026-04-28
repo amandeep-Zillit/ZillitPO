@@ -81,6 +81,7 @@ struct CardRegisterPage: View {
         return ApprovalHelpers.getTotalTiers(cfg)
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             VStack(spacing: 0) {
@@ -173,7 +174,7 @@ struct CardRegisterPage: View {
                                 ZStack(alignment: .topLeading) {
                                     NavigationLink(
                                         destination: CardDetailPage(card: card).environmentObject(appState),
-                                        tag: card.id,
+                                        tag: card.id ?? "",
                                         selection: $navigateToCardId
                                     ) { EmptyView() }
                                     .frame(width: 0, height: 0).hidden()
@@ -204,7 +205,7 @@ struct CardRegisterPage: View {
                                         }
                                     )
                                     .contentShape(Rectangle())
-                                    .onTapGesture { navigateToCardId = card.id }
+                                    .onTapGesture { navigateToCardId = card.id ?? "" }
                                 }
                             }
                         }

@@ -22,6 +22,7 @@ struct EditCardTransactionPage: View {
 
     private var hasFile: Bool { fileData != nil && !fileName.isEmpty }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
@@ -162,7 +163,7 @@ struct EditCardTransactionPage: View {
     private func save() {
         isSaving = true
         appState.updateCardTransaction(
-            id: transaction.id,
+            id: transaction.id ?? "",
             merchant: merchant,
             amount: amount,
             nominalCode: costCode,
@@ -215,7 +216,7 @@ struct EditCardTransactionPage: View {
         addField("userId", user.id ?? "")
         addField("uploaderName", user.fullName ?? "")
         addField("uploaderDepartment", user.displayDepartment)
-        addField("transaction_id", transaction.id)
+        addField("transaction_id", transaction.id ?? "")
         addField("amount", amount)
         addField("description", merchant)
         if let d = date {

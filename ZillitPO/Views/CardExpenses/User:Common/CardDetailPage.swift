@@ -38,6 +38,16 @@ struct CardDetailPage: View {
     @State private var activeAlert: ActiveAlert? = nil
 
     private var displayCard: ExpenseCard { liveCard ?? card }
+
+    /// Keeps `liveCard` in sync with whichever card list the VM refreshes.
+    /// Extracted to a helper so the `.onReceive` closures stay simple —
+    /// inlining the full expression tripped SwiftUI's type-check timeout.
+    private func syncLiveCard(from cards: [ExpenseCard]) {
+        let cardId = card.id ?? ""
+        if let updated = cards.first(where: { ($0.id ?? "") == cardId }) {
+            liveCard = updated
+        }
+    }
     private var isAccountant: Bool { appState.currentUser?.isAccountant ?? false }
     /// True only while the card is still awaiting tier approvals.
     /// Approved / override / active / suspended / rejected cards have finished the approval workflow
@@ -147,6 +157,7 @@ struct CardDetailPage: View {
             .background(bg).cornerRadius(5)
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     @ViewBuilder private var cardDetailsGrid: some View {
         let hasHolder  = !displayCard.holderFullName.isEmpty
         let hasDept    = !(displayCard.department ?? "").isEmpty
@@ -278,6 +289,7 @@ struct CardDetailPage: View {
         }
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
@@ -713,7 +725,7 @@ struct CardDetailPage: View {
                            isActive: $navigateToEdit) { EmptyView() }.frame(width: 0, height: 0).hidden()
         )
         .background(
-            NavigationLink(destination: CardHistoryPage(cardId: displayCard.id, cardLabel: displayCard.holderFullName).environmentObject(appState),
+            NavigationLink(destination: CardHistoryPage(cardId: displayCard.id ?? "", cardLabel: displayCard.holderFullName).environmentObject(appState),
                            isActive: $navigateToHistory) { EmptyView() }.frame(width: 0, height: 0).hidden()
         )
         .background(
@@ -728,7 +740,7 @@ struct CardDetailPage: View {
                     message: Text("This will permanently delete your card request. This action cannot be undone."),
                     primaryButton: .destructive(Text("Delete")) {
                         deleting = true
-                        appState.deleteCardRequest(id: displayCard.id) { success in
+                        appState.deleteCardRequest(id: displayCard.id ?? "") { success in
                             deleting = false
                             if success { presentationMode.wrappedValue.dismiss() }
                         }
@@ -756,19 +768,11 @@ struct CardDetailPage: View {
             }
         }
         .onAppear {
-            appState.loadCard(card.id) { fetched in liveCard = fetched }
+            appState.loadCard(card.id ?? "") { fetched in liveCard = fetched }
             if appState.bankAccounts.isEmpty { appState.loadBankAccounts() }
         }
-        .onReceive(appState.$userCards) { cards in
-            if let updated = cards.first(where: { $0.id == card.id }) {
-                liveCard = updated
-            }
-        }
-        .onReceive(appState.$allCards) { cards in
-            if let updated = cards.first(where: { $0.id == card.id }) {
-                liveCard = updated
-            }
-        }
+        .onReceive(appState.$userCards) { cards in syncLiveCard(from: cards) }
+        .onReceive(appState.$allCards)  { cards in syncLiveCard(from: cards) }
         .sheet(isPresented: $showRejectSheet) {
             NavigationView {
                 ZStack {
@@ -826,7 +830,7 @@ struct CardDetailPage: View {
     /// pop back to it. On failure, clear the loader and stay on the page.
     private func performStatusChange(op: StatusOperation) {
         pendingOperation = op
-        let cardId = displayCard.id
+        let cardId = displayCard.id ?? ""
         let done: (Bool) -> Void = { success in
             if success {
                 // Refresh the list the user is going back to so it reflects the new status.
@@ -897,6 +901,7 @@ struct CardHistoryPage: View {
     @State private var entries: [CardHistoryEntry] = []
     @State private var isLoading = true
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack {
             Color.bgBase.edgesIgnoringSafeArea(.all)

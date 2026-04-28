@@ -17,7 +17,7 @@ struct CardListPage: View {
     private var items: [CardTransaction] {
         switch source {
         case .inbox:
-            return appState.cardTransactions.filter { ["pending", "pending_receipt"].contains(($0.status ?? "").lowercased()) && !($0.hasReceipt ?? false) }
+            return appState.cardTransactions.filter { ["pending", "pending_receipt"].contains(($0.status ?? "").lowercased()) && !$0.hasReceipt }
         case .all:
             return appState.cardTransactions
         case .pending:
@@ -45,6 +45,7 @@ struct CardListPage: View {
         }
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             ScrollView {

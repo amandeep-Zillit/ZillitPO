@@ -4,6 +4,7 @@ struct CreateTemplatePage: View {
     @EnvironmentObject var appState: POViewModel
     @Environment(\.presentationMode) var presentationMode
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack {
             Color.bgBase.edgesIgnoringSafeArea(.all)
@@ -133,6 +134,7 @@ struct CreateTemplateFormView: View {
         }
     }
 
+    @available(iOS, deprecated: 16.0, message: "iOS 13 compat — uses legacy NavigationLink(destination:isActive:label:)")
     var body: some View {
         ZStack {
             List {
@@ -532,7 +534,7 @@ struct CreateTemplateFormView: View {
             if field.selectionType == "vendor" {
                 FieldGroup(label: (field.name ?? "").uppercased(), optional: !field.isRequired) {
                     PickerField(selection: binding, placeholder: "Select...",
-                        options: appState.vendors.map { DropdownOption($0.id, $0.name ?? "") })
+                        options: appState.vendors.map { DropdownOption($0.id ?? "", $0.name ?? "") })
                 }
             } else if field.selectionType == "department" {
                 FieldGroup(label: (field.name ?? "").uppercased(), optional: !field.isRequired) {

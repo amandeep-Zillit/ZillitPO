@@ -153,7 +153,7 @@ struct AssignPhysicalCardPage: View {
                             PickerSheetView(
                                 selection: $selectedBankId,
                                 options: appState.bankAccounts.map {
-                                    DropdownOption($0.id, $0.name ?? $0.id)
+                                    DropdownOption($0.id ?? "", $0.name ?? ($0.id ?? ""))
                                 },
                                 isPresented: $showBankSheet
                             )
@@ -287,7 +287,7 @@ struct AssignPhysicalCardPage: View {
         // back its optimistic status/number patch and returns the
         // server error, which we show in the red banner above.
         appState.activateCard(
-            id: card.id,
+            id: card.id ?? "",
             cardNumber: rawDigits,
             cardType: .physical,
             bankAccountId: selectedBankId
