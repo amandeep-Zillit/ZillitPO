@@ -3,7 +3,7 @@ import UIKit
 
 struct FloatDetailView: View {
     let float: FloatRequest
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @State private var selectedBatchId: String?
     /// Rich details from GET /float-requests/{id}/details (batches, top-ups,
     /// returns, totals). Fetched on appear so batches always populate even
@@ -754,7 +754,7 @@ struct FloatDetailView: View {
 struct FloatHistoryPage: View {
     let floatId: String
     let floatLabel: String
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
 
     @State private var entries: [FloatHistoryEntry] = []
     @State private var isLoading: Bool = true

@@ -21,7 +21,7 @@ let vendorListState = VendorListState()
 // MARK: - Legacy VendorsModuleView (kept for backward compatibility)
 
 struct VendorsModuleView: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {

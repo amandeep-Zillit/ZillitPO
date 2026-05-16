@@ -2,7 +2,7 @@ import SwiftUI
 
 struct CodingDetailPage: View {
     let claim: ClaimBatch
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
     @State private var nominalCode = ""
     @State private var vatTreatment = "standard_20"

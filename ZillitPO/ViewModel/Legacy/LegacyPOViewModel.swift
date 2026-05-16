@@ -1,14 +1,14 @@
 //
-//  POViewModel.swift
+//  LegacyPOViewModel.swift
 //  ZillitPO
 //
 
 import SwiftUI
 import Combine
 
-// MARK: - POViewModel (iOS 13 compatible — uses POCodableTask pattern)
+// MARK: - LegacyPOViewModel (iOS 13 compatible — uses POCodableTask pattern)
 
-class POViewModel: ObservableObject {
+class LegacyPOViewModel: ObservableObject {
     @Published var projectId = ProjectData.projectId
     @Published var userId = "mock-u-cat2" // Sophie Turner
     @Published var currentUser: AppUser?

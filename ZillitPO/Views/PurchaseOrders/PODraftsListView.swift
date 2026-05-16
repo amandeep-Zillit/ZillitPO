@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct PODraftsListView: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
 
     var body: some View {
         // Stat cards (Drafts count + Draft Value) removed — the list now

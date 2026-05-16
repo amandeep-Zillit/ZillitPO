@@ -5,7 +5,7 @@ import SwiftUI
 // ═══════════════════════════════════════════════════════════════════
 
 struct CardsForApprovalTabView: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @State private var rejectTarget: ExpenseCard?
     @State private var rejectReason = ""
     @State private var showRejectSheet = false

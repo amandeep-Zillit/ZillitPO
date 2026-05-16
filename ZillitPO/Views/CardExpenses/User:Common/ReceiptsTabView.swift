@@ -5,7 +5,7 @@ import SwiftUI
 // ═══════════════════════════════════════════════════════════════════
 
 struct ReceiptsTabView: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @State private var searchText = ""
     @State private var activeFilter: ReceiptFilter = .all
     @State private var showFilterSheet = false

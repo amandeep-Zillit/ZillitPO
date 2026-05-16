@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct POTemplatesListView: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {

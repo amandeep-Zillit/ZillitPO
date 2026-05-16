@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ReceiptDetailPage: View {
     let receipt: Receipt
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
     @State private var activeSheet: ReceiptDetailSheet?
     @State private var navigateToHistory = false
@@ -16,7 +16,7 @@ struct ReceiptDetailPage: View {
 
     private var receiptDocumentURL: URL? {
         guard !(live.filePath ?? "").isEmpty else { return nil }
-        return URL(string: "\(CardExpenseRequest.baseURL)\(live.filePath ?? "")")
+        return URL(string: "\(ServerRequest.DEMO_BASE_HOST)\(live.filePath ?? "")")
     }
 
     // MARK: - Derived helpers
@@ -425,7 +425,7 @@ enum ReceiptDetailSheet: String, Identifiable {
 
 struct EditReceiptDetailsSheet: View {
     let receipt: Receipt
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
 
     @State private var merchant: String = ""
@@ -485,7 +485,7 @@ struct EditReceiptDetailsSheet: View {
 
 struct ReceiptHistoryPage: View {
     let history: [ReceiptHistoryEntry]
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
 
     var body: some View {

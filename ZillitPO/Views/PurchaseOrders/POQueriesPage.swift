@@ -18,7 +18,7 @@ private struct POQueryMessage: Identifiable {
 }
 
 struct POQueriesPage: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     let poId: String
     let poLabel: String
 

@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 
 struct EditTemplatePage: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
     var template: POTemplate?
 
@@ -33,7 +33,7 @@ struct EditTemplatePage: View {
 // MARK: - Edit Template Form View
 
 struct EditTemplateFormView: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     var template: POTemplate?
     var onBack: () -> Void
 

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct POFormPage: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
 
     private var editingPO: PurchaseOrder? { appState.editingPO }

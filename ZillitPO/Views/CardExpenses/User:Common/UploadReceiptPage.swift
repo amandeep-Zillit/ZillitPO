@@ -3,7 +3,7 @@ import UIKit
 import WebKit
 
 struct UploadReceiptPage: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
 
     @State private var drafts: [ReceiptDraft] = [ReceiptDraft()]
@@ -292,7 +292,7 @@ struct UploadReceiptPage: View {
         }()
 
         let boundary = "Boundary-\(UUID().uuidString)"
-        guard let url = URL(string: "\(CardExpenseRequest.baseURL)/api/v2/card-expenses/receipts/upload") else {
+        guard let url = URL(string: "\(ServerRequest.DEMO_BASE_HOST)/api/v2/card-expenses/receipts/upload") else {
             completion("Invalid URL"); return
         }
         var req = URLRequest(url: url)

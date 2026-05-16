@@ -6,7 +6,7 @@ import UIKit
 
 struct PODetailPage: View {
     let po: PurchaseOrder
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
 
     @State private var navigateToHistory = false
@@ -96,7 +96,7 @@ struct PODetailPage: View {
 struct PODetailContentView: View {
     let po: PurchaseOrder
     var onClose: () -> Void
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @State private var navigateToPDF = false
     @State private var navigateToEdit = false
     @State private var pdfData: Data?
@@ -874,7 +874,7 @@ struct PODetailContentView: View {
             "departmentMap": deptMap
         ]
 
-        let task = POCodableTask.generatePDF(po.id, displayNames) { result in
+        let task = LegacyPOCodableTask.generatePDF(po.id, displayNames) { result in
             DispatchQueue.main.async {
                 self.isLoadingPDF = false
                 switch result {

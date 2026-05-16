@@ -31,7 +31,7 @@ enum ReceiptFilter: String, CaseIterable {
 // MARK: - Card Expenses Module
 
 struct CardExpensesModuleView: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @State private var activeTab: CardExpenseTab = .receipts
 
     private var isCoordinator: Bool { appState.cardExpenseMeta.isCoordinator ?? false }

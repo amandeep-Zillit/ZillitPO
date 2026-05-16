@@ -1,11 +1,11 @@
 //
-//  PORequest.swift
+//  LegacyPORequest.swift
 //  ZillitPO
 //
 
 import Foundation
 
-enum PORequest {
+enum LegacyPORequest {
     // MARK: - Vendors
     case fetchVendors
     case createVendor([String: Any])
@@ -61,7 +61,7 @@ enum PORequest {
 
 }
 
-extension PORequest: POURLRequestProtocol {
+extension LegacyPORequest: POURLRequestProtocol {
     var urlRequest: URLRequest? {
         switch self {
 

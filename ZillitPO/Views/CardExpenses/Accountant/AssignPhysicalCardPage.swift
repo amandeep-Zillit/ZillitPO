@@ -6,7 +6,7 @@ import SwiftUI
 
 struct AssignPhysicalCardPage: View {
     let card: ExpenseCard
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
 
     @State private var rawDigits: String = ""

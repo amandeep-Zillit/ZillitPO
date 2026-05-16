@@ -3,7 +3,7 @@ import UIKit
 
 struct FloatsListView: View {
     let floats: [FloatRequest]
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
 
     @State private var searchText: String = ""
     @State private var showRecordReturn: Bool = false

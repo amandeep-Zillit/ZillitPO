@@ -6,7 +6,7 @@ import UIKit
 // ═══════════════════════════════════════════════════════════════════
 
 struct CardRegisterPage: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @State private var navigateToCardId: String? = nil
     @State private var navigateToRequestCard = false
     @State private var cardToAssign: ExpenseCard? = nil

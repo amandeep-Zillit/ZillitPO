@@ -16,7 +16,7 @@ enum DeleteAlertType: Identifiable {
 }
 
 struct DepartmentPOModule: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @State private var navigateToForm = false
     @State private var navigateToDraftsTemplates = false
     @State private var activeDeleteAlert: DeleteAlertType?

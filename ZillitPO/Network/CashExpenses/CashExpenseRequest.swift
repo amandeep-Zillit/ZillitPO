@@ -2,16 +2,19 @@
 //  CashExpenseRequest.swift
 //  ZillitPO
 //
+//  Mirrors live's per-domain Request pattern — each case binds a local
+//  `let endPoint = "\(ServerRequest.CASH_BASE_URL)..."` and returns
+//  `FCURLRequest(urlPath:type:body:).requestObject`. Account-hub
+//  cross-service calls (queries) compose against
+//  `ServerRequest.ACC_HUB_BASE_URL` instead.
+//
 
 import Foundation
 
 enum CashExpenseRequest {
-    static let baseURL = "http://192.168.29.92:3006" 
-    /// Account-hub service runs on a separate local port. The `/queries`
-    /// endpoint lives there, not on the card-expenses server.
-    static let accountHubBaseURL = "http://192.168.29.92:3003"
     // Metadata (roles, settings)
     case fetchMetadata
+
     // Float Requests
     case fetchMyFloats
     case fetchAllFloats
@@ -24,13 +27,12 @@ enum CashExpenseRequest {
     case rejectFloat(String, [String: Any])       // id, body → /float-requests/{id}/reject
     case recordFloatReturn(String, [String: Any]) // id, body → /float-requests/{id}/record-return
     case fetchFloatHistory(String)                // id → /float-requests/{id}/history
+
     // Claims
     case fetchMyClaims
     /// `GET /claims/my-batches[?float_request_id=<uuid>]`. The optional
     /// parameter is the web client's server-side filter — when supplied,
-    /// the backend returns only batches submitted against that float. We
-    /// pass it from the submit-receipt flow so the "pending batches"
-    /// subtraction reflects the correct float without a client-side scan.
+    /// the backend returns only batches submitted against that float.
     case fetchMyBatches(String?)
     case fetchAllClaims
     case fetchClaimHistory(String)                // batchId → /claims/{id}/history
@@ -42,101 +44,154 @@ enum CashExpenseRequest {
     case fetchClaimsByStatus(String)
     case createClaimBatch([String: Any])
     case getClaim(String)
-    case saveClaims(String, [String: Any])       // batchId, body
+    case saveClaims(String, [String: Any])        // batchId, body
     case saveAndSubmit(String, [String: Any])     // batchId, body (forward to accounts)
-    case batchApproval(String, [String: Any])    // batchId, body → /claims/{id}/batch-approval
-    case overrideBatch(String)                   // batchId → /claims/{id}/override
+    case batchApproval(String, [String: Any])     // batchId, body → /claims/{id}/batch-approval
+    case overrideBatch(String)                    // batchId → /claims/{id}/override
+
     // Overview
     case fetchPaymentRouting
+
     // Settings
     case fetchSettings
 }
 
-extension CashExpenseRequest: POURLRequestProtocol {
-    private func buildLocal(_ method: HTTPMethodType, _ path: String, body: Any? = nil) -> URLRequest? {
-        let urlString = "\(CashExpenseRequest.baseURL)\(path)"
-        guard let url = URL(string: urlString) else { return nil }
-        var req = URLRequest(url: url)
-        req.httpMethod = method.rawValue
-        req.timeoutInterval = 30
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue(APIClient.shared.projectId, forHTTPHeaderField: "x-project-id")
-        req.setValue(APIClient.shared.userId, forHTTPHeaderField: "x-user-id")
-        req.setValue(String(APIClient.shared.isAccountant), forHTTPHeaderField: "x-is-accountant")
-        if let body = body, let data = try? JSONSerialization.data(withJSONObject: body) { req.httpBody = data }
-        return req
-    }
-
+extension CashExpenseRequest: FCURLRequestProtocol {
     var urlRequest: URLRequest? {
         switch self {
-        case .fetchMetadata:         return buildLocal(.get, "/api/v2/cash-expenses/metadata")
-        case .fetchMyFloats:         return buildLocal(.get, "/api/v2/cash-expenses/float-requests/my-floats")
-        case .fetchAllFloats:        return buildLocal(.get, "/api/v2/cash-expenses/float-requests")
-        case .fetchActiveFloats:     return buildLocal(.get, "/api/v2/cash-expenses/float-requests/active-floats")
-        case .fetchApprovalQueue:    return buildLocal(.get, "/api/v2/cash-expenses/float-requests/approval-queue")
+
+        // MARK: Metadata
+        case .fetchMetadata:
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/metadata"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
+
+        // MARK: Float Requests
+        case .fetchMyFloats:
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/float-requests/my-floats"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
+
+        case .fetchAllFloats:
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/float-requests"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
+
+        case .fetchActiveFloats:
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/float-requests/active-floats"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
+
+        case .fetchApprovalQueue:
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/float-requests/approval-queue"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
+
         case .createFloatRequest(let body):
-            return buildLocal(.post, "/api/v2/cash-expenses/float-requests", body: body)
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/float-requests"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: body).requestObject
+
         case .fetchFloatDetails(let id):
-            return buildLocal(.get, "/api/v2/cash-expenses/float-requests/\(id)/details")
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/float-requests/\(id)/details"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
+
         case .getFloat(let id):
-            return buildLocal(.get, "/api/v2/cash-expenses/float-requests/\(id)")
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/float-requests/\(id)"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
+
         case .approveFloat(let id, let body):
-            return buildLocal(.post, "/api/v2/cash-expenses/float-requests/\(id)/approve", body: body)
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/float-requests/\(id)/approve"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: body).requestObject
+
         case .rejectFloat(let id, let body):
-            return buildLocal(.post, "/api/v2/cash-expenses/float-requests/\(id)/reject", body: body)
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/float-requests/\(id)/reject"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: body).requestObject
+
         case .recordFloatReturn(let id, let body):
-            return buildLocal(.post, "/api/v2/cash-expenses/float-requests/\(id)/record-return", body: body)
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/float-requests/\(id)/record-return"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: body).requestObject
+
         case .fetchFloatHistory(let id):
-            return buildLocal(.get, "/api/v2/cash-expenses/float-requests/\(id)/history")
-        case .fetchMyClaims:         return buildLocal(.get, "/api/v2/cash-expenses/claims/my-claims")
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/float-requests/\(id)/history"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
+
+        // MARK: Claims
+        case .fetchMyClaims:
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/claims/my-claims"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
+
         case .fetchMyBatches(let floatId):
-            // Append ?float_request_id=<uuid> when caller supplied an id.
-            // URL-encode as a safety net — UUIDs don't need it but a
-            // future caller passing a raw string shouldn't break.
-            let base = "/api/v2/cash-expenses/claims/my-batches"
+            let base = "\(ServerRequest.CASH_BASE_URL)cash-expenses/claims/my-batches"
             guard let id = floatId, !id.isEmpty else {
-                return buildLocal(.get, base)
+                return FCURLRequest(urlPath: base, type: .get).requestObject
             }
             let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? id
-            return buildLocal(.get, "\(base)?float_request_id=\(encoded)")
-        case .fetchAllClaims:        return buildLocal(.get, "/api/v2/cash-expenses/claims")
-        case .fetchCodingQueue:      return buildLocal(.get, "/api/v2/cash-expenses/claims/coding-queue")
-        case .fetchAuditQueue:       return buildLocal(.get, "/api/v2/cash-expenses/claims/audit-queue")
-        case .fetchApprovalQueueClaims: return buildLocal(.get, "/api/v2/cash-expenses/claims/approval-queue")
-        case .fetchReconciliations:  return buildLocal(.get, "/api/v2/cash-expenses/reconciliations")
-        case .fetchClaimsByStatus(let s): return buildLocal(.get, "/api/v2/cash-expenses/claims?status=\(s)")
-        case .createClaimBatch(let body): return buildLocal(.post, "/api/v2/cash-expenses/claims", body: body)
-        case .getClaim(let id):      return buildLocal(.get, "/api/v2/cash-expenses/claims/\(id)")
+            let endPoint = "\(base)?float_request_id=\(encoded)"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
+
+        case .fetchAllClaims:
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/claims"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
+
+        case .fetchCodingQueue:
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/claims/coding-queue"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
+
+        case .fetchAuditQueue:
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/claims/audit-queue"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
+
+        case .fetchApprovalQueueClaims:
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/claims/approval-queue"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
+
+        case .fetchReconciliations:
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/reconciliations"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
+
+        case .fetchClaimsByStatus(let s):
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/claims?status=\(s)"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
+
+        case .createClaimBatch(let body):
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/claims"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: body).requestObject
+
+        case .getClaim(let id):
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/claims/\(id)"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
 
         case .batchApproval(let id, let body):
-            // Unified approve/reject endpoint. Body: { action: "approve"|"reject",
-            // claim_ids: [String]?, tier_number: Int?, total_tiers: Int?, reason: String? }
-            return buildLocal(.post, "/api/v2/cash-expenses/claims/\(id)/batch-approval", body: body)
+            // Unified approve/reject endpoint.
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/claims/\(id)/batch-approval"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: body).requestObject
 
         case .overrideBatch(let id):
-            return buildLocal(.post, "/api/v2/cash-expenses/claims/\(id)/override")
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/claims/\(id)/override"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: [:]).requestObject
 
         case .fetchClaimHistory(let batchId):
-            return buildLocal(.get, "/api/v2/cash-expenses/claims/\(batchId)/history")
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/claims/\(batchId)/history"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
 
         case .fetchEntityQueries(let entityType, let entityId):
-            // Generic queries — account-hub service (port 3003), separate from
-            // the cash-expenses server. Build manually with card-expenses-style
-            // headers so the request carries x-project-id / x-user-id.
-            let path = "/api/v2/account-hub/queries/entity/\(entityType)/\(entityId)"
-            guard let url = URL(string: "\(CashExpenseRequest.accountHubBaseURL)\(path)") else { return nil }
-            var req = URLRequest(url: url)
-            req.httpMethod = "GET"
-            req.timeoutInterval = 30
-            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            req.setValue(APIClient.shared.projectId, forHTTPHeaderField: "x-project-id")
-            req.setValue(APIClient.shared.userId, forHTTPHeaderField: "x-user-id")
-            req.setValue(String(APIClient.shared.isAccountant), forHTTPHeaderField: "x-is-accountant")
-            return req
-        case .saveClaims(let id, let body): return buildLocal(.post, "/api/v2/cash-expenses/claims/\(id)/save-claims", body: body)
-        case .saveAndSubmit(let id, let body): return buildLocal(.post, "/api/v2/cash-expenses/claims/\(id)/save-and-submit", body: body)
-        case .fetchPaymentRouting:   return buildLocal(.get, "/api/v2/cash-expenses/claims/overview/payment-routing")
-        case .fetchSettings:         return buildLocal(.get, "/api/v2/cash-expenses/settings")
+            // Generic queries live on the AccountHub service, not the
+            // cash-expenses one.
+            let endPoint = "\(ServerRequest.ACC_HUB_BASE_URL)account-hub/queries/entity/\(entityType)/\(entityId)"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
+
+        case .saveClaims(let id, let body):
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/claims/\(id)/save-claims"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: body).requestObject
+
+        case .saveAndSubmit(let id, let body):
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/claims/\(id)/save-and-submit"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: body).requestObject
+
+        // MARK: Overview
+        case .fetchPaymentRouting:
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/claims/overview/payment-routing"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
+
+        // MARK: Settings
+        case .fetchSettings:
+            let endPoint = "\(ServerRequest.CASH_BASE_URL)cash-expenses/settings"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
         }
     }
 }

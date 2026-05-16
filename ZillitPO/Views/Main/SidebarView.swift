@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct SidebarView: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
 
     var body: some View {

@@ -1,11 +1,11 @@
 //
-//  POCodableTask.swift
+//  LegacyPOCodableTask.swift
 //  ZillitPO
 //
 
 import Foundation
 
-enum POCodableTask {
+enum LegacyPOCodableTask {
     // MARK: - Vendors (typed responses)
     case fetchVendors((Result<APIResponse<[Vendor]>?, Error>) -> Void)
     case createVendor([String: Any], (Result<Data?, Error>) -> Void)
@@ -61,157 +61,157 @@ enum POCodableTask {
 
 }
 
-extension POCodableTask: PODataTaskProtocol {
+extension LegacyPOCodableTask: PODataTaskProtocol {
     var urlDataTask: URLSessionDataTask? {
         switch self {
 
         // MARK: Vendors
         case .fetchVendors(let completion):
-            guard let urlRequest = PORequest.fetchVendors.urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.fetchVendors.urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
 
         case .createVendor(let body, let completion):
-            guard let urlRequest = PORequest.createVendor(body).urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.createVendor(body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
 
         case .deleteVendor(let id, let completion):
-            guard let urlRequest = PORequest.deleteVendor(id).urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.deleteVendor(id).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
 
         // MARK: Approval Tiers
         case .fetchApprovalTiers(let completion):
-            guard let urlRequest = PORequest.fetchApprovalTiers.urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.fetchApprovalTiers.urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
 
         // MARK: Purchase Orders
         case .fetchPurchaseOrders(let path, let completion):
-            guard let urlRequest = PORequest.fetchPurchaseOrders(path).urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.fetchPurchaseOrders(path).urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
 
         case .fetchDrafts(let completion):
-            guard let urlRequest = PORequest.fetchDrafts.urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.fetchDrafts.urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
 
         case .createPO(let body, let completion):
-            guard let urlRequest = PORequest.createPO(body).urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.createPO(body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
 
         case .updatePO(let id, let body, let completion):
-            guard let urlRequest = PORequest.updatePO(id, body).urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.updatePO(id, body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
 
         case .deletePO(let id, let completion):
-            guard let urlRequest = PORequest.deletePO(id).urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.deletePO(id).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
 
         case .approvePO(let id, let body, let completion):
-            guard let urlRequest = PORequest.approvePO(id, body).urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.approvePO(id, body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
 
         case .rejectPO(let id, let body, let completion):
-            guard let urlRequest = PORequest.rejectPO(id, body).urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.rejectPO(id, body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
 
         case .generatePDF(let id, let body, let completion):
-            guard let urlRequest = PORequest.generatePDF(id, body).urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.generatePDF(id, body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
 
         case .fetchPOHistory(let id, let completion):
-            guard let urlRequest = PORequest.fetchPOHistory(id).urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.fetchPOHistory(id).urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
 
         case .fetchPOQueries(let id, let completion):
-            guard let urlRequest = PORequest.fetchPOQueries(id).urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.fetchPOQueries(id).urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
 
         // MARK: Templates
         case .fetchTemplates(let completion):
-            guard let urlRequest = PORequest.fetchTemplates.urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.fetchTemplates.urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
 
         case .createTemplate(let body, let completion):
-            guard let urlRequest = PORequest.createTemplate(body).urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.createTemplate(body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
 
         case .updateTemplate(let id, let body, let completion):
-            guard let urlRequest = PORequest.updateTemplate(id, body).urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.updateTemplate(id, body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
 
         case .deleteTemplate(let id, let completion):
-            guard let urlRequest = PORequest.deleteTemplate(id).urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.deleteTemplate(id).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
 
         // MARK: Form Template
         case .fetchFormTemplate(let completion):
-            guard let urlRequest = PORequest.fetchFormTemplate.urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.fetchFormTemplate.urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
 
         case .fetchFloatFormTemplate(let completion):
-            guard let urlRequest = PORequest.fetchFloatFormTemplate.urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.fetchFloatFormTemplate.urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
 
         // MARK: Invoices
         case .fetchInvoices(let path, let completion):
-            guard let urlRequest = PORequest.fetchInvoices(path).urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.fetchInvoices(path).urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
 
         case .createInvoice(let body, let completion):
-            guard let urlRequest = PORequest.createInvoice(body).urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.createInvoice(body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
 
         case .updateInvoice(let id, let body, let completion):
-            guard let urlRequest = PORequest.updateInvoice(id, body).urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.updateInvoice(id, body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
 
         case .deleteInvoice(let id, let completion):
-            guard let urlRequest = PORequest.deleteInvoice(id).urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.deleteInvoice(id).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
 
         case .approveInvoice(let id, let body, let completion):
-            guard let urlRequest = PORequest.approveInvoice(id, body).urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.approveInvoice(id, body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
 
         case .rejectInvoice(let id, let body, let completion):
-            guard let urlRequest = PORequest.rejectInvoice(id, body).urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.rejectInvoice(id, body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
 
         case .fetchInvoiceHistory(let id, let completion):
-            guard let urlRequest = PORequest.fetchInvoiceHistory(id).urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.fetchInvoiceHistory(id).urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
 
         case .fetchInvoiceQueries(let id, let completion):
-            guard let urlRequest = PORequest.fetchInvoiceQueries(id).urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.fetchInvoiceQueries(id).urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
 
         // MARK: Invoice Approval Tiers
         case .fetchInvoiceApprovalTiers(let completion):
-            guard let urlRequest = PORequest.fetchInvoiceApprovalTiers.urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.fetchInvoiceApprovalTiers.urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
 
         // MARK: Invoice Settings
         case .getInvoiceSettings(let completion):
-            guard let urlRequest = PORequest.getInvoiceSettings.urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.getInvoiceSettings.urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
 
         case .updateInvoiceSettings(let body, let completion):
-            guard let urlRequest = PORequest.updateInvoiceSettings(body).urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.updateInvoiceSettings(body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
 
         // MARK: Payment Runs
         case .fetchPaymentRuns(let completion):
-            guard let urlRequest = PORequest.fetchPaymentRuns.urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.fetchPaymentRuns.urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
 
         case .getPaymentRun(let id, let completion):
-            guard let urlRequest = PORequest.getPaymentRun(id).urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.getPaymentRun(id).urlRequest else { return nil }
             return APIClient.shared.codableResultTask(with: urlRequest, completion: completion)
 
         case .approvePaymentRun(let id, let body, let completion):
-            guard let urlRequest = PORequest.approvePaymentRun(id, body).urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.approvePaymentRun(id, body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
 
         case .rejectPaymentRun(let id, let body, let completion):
-            guard let urlRequest = PORequest.rejectPaymentRun(id, body).urlRequest else { return nil }
+            guard let urlRequest = LegacyPORequest.rejectPaymentRun(id, body).urlRequest else { return nil }
             return APIClient.shared.dataResultTask(with: urlRequest, completion: completion)
         }
     }

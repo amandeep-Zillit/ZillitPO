@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct PaymentRoutingView: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @State private var bacsGenerated = false
     @State private var activeSection = "bacs"   // "bacs" | "payroll"
 

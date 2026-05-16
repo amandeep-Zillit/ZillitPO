@@ -1,17 +1,17 @@
 //
-//  POViewModel+apis.swift
+//  LegacyPOViewModel+apis.swift
 //  ZillitPO
 //
 
 import Foundation
 
-extension POViewModel {
+extension LegacyPOViewModel {
 
     // MARK: - Data Loading
 
     func loadVendors() {
         isLoadingVendors = true
-        POCodableTask.fetchVendors { [weak self] result in
+        LegacyPOCodableTask.fetchVendors { [weak self] result in
             DispatchQueue.main.async {
                 self?.isLoadingVendors = false
                 switch result {
@@ -65,7 +65,7 @@ extension POViewModel {
     }
 
     func loadApprovalTiers() {
-        POCodableTask.fetchApprovalTiers { [weak self] result in
+        LegacyPOCodableTask.fetchApprovalTiers { [weak self] result in
             DispatchQueue.main.async {
                 if case .success(let r) = result { self?.tierConfigRows = r?.data ?? [] }
             }
@@ -73,7 +73,7 @@ extension POViewModel {
     }
 
     func loadInvoiceApprovalTiers() {
-        POCodableTask.fetchInvoiceApprovalTiers { [weak self] result in
+        LegacyPOCodableTask.fetchInvoiceApprovalTiers { [weak self] result in
             DispatchQueue.main.async {
                 if case .success(let r) = result {
                     self?.invoiceTierConfigRows = r?.data ?? []
@@ -89,7 +89,7 @@ extension POViewModel {
 
         // Fetch vendors
         group.enter()
-        let vendorsTask = POCodableTask.fetchVendors { [weak self] result in
+        let vendorsTask = LegacyPOCodableTask.fetchVendors { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
@@ -105,7 +105,7 @@ extension POViewModel {
 
         // Fetch tier configs
         group.enter()
-        let tiersTask = POCodableTask.fetchApprovalTiers { [weak self] result in
+        let tiersTask = LegacyPOCodableTask.fetchApprovalTiers { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
@@ -125,7 +125,7 @@ extension POViewModel {
 
         // Fetch invoice tier configs
         group.enter()
-        let invoiceTiersTask = POCodableTask.fetchInvoiceApprovalTiers { [weak self] result in
+        let invoiceTiersTask = LegacyPOCodableTask.fetchInvoiceApprovalTiers { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
@@ -155,7 +155,7 @@ extension POViewModel {
     }
 
     func loadFloatFormTemplate() {
-        POCodableTask.fetchFloatFormTemplate { [weak self] result in
+        LegacyPOCodableTask.fetchFloatFormTemplate { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
@@ -176,7 +176,7 @@ extension POViewModel {
     }
 
     func loadFormTemplate() {
-        POCodableTask.fetchFormTemplate { [weak self] result in
+        LegacyPOCodableTask.fetchFormTemplate { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
@@ -215,7 +215,7 @@ extension POViewModel {
         var path = "/api/v2/purchase-orders"
         if !params.isEmpty { path += "?" + params.map { "\($0.key)=\($0.value)" }.joined(separator: "&") }
 
-        POCodableTask.fetchPurchaseOrders(path) { [weak self] result in
+        LegacyPOCodableTask.fetchPurchaseOrders(path) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
@@ -238,7 +238,7 @@ extension POViewModel {
     }
 
     func loadDrafts() {
-        POCodableTask.fetchDrafts { [weak self] result in
+        LegacyPOCodableTask.fetchDrafts { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
@@ -255,7 +255,7 @@ extension POViewModel {
     }
 
     func loadTemplates() {
-        POCodableTask.fetchTemplates { [weak self] result in
+        LegacyPOCodableTask.fetchTemplates { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
@@ -274,7 +274,7 @@ extension POViewModel {
     func loadInvoices() {
         isLoadingInvoices = true
         let path = "/api/v2/invoices?perPage=200"
-        POCodableTask.fetchInvoices(path) { [weak self] result in
+        LegacyPOCodableTask.fetchInvoices(path) { [weak self] result in
             DispatchQueue.main.async {
                 self?.isLoadingInvoices = false
                 switch result {
@@ -313,7 +313,7 @@ extension POViewModel {
     /// (`GET /api/v2/purchase-orders/{id}/history?perPage=200`).
     func loadPOHistory(_ poId: String) {
         poHistoryLoading = true
-        POCodableTask.fetchPOHistory(poId) { [weak self] result in
+        LegacyPOCodableTask.fetchPOHistory(poId) { [weak self] result in
             DispatchQueue.main.async {
                 self?.poHistoryLoading = false
                 switch result {
@@ -332,7 +332,7 @@ extension POViewModel {
     /// Backend returns a single thread object with a `queries` array.
     func loadPOQueries(_ poId: String) {
         poQueriesLoading = true
-        POCodableTask.fetchPOQueries(poId) { [weak self] result in
+        LegacyPOCodableTask.fetchPOQueries(poId) { [weak self] result in
             DispatchQueue.main.async {
                 self?.poQueriesLoading = false
                 switch result {
@@ -354,7 +354,7 @@ extension POViewModel {
 
     func loadInvoiceHistory(_ invoiceId: String) {
         invoiceHistoryLoading = true
-        POCodableTask.fetchInvoiceHistory(invoiceId) { [weak self] result in
+        LegacyPOCodableTask.fetchInvoiceHistory(invoiceId) { [weak self] result in
             DispatchQueue.main.async {
                 self?.invoiceHistoryLoading = false
                 switch result {
@@ -373,7 +373,7 @@ extension POViewModel {
     /// returns a single thread object with a `queries` array of messages.
     func loadInvoiceQueries(_ invoiceId: String) {
         invoiceQueriesLoading = true
-        POCodableTask.fetchInvoiceQueries(invoiceId) { [weak self] result in
+        LegacyPOCodableTask.fetchInvoiceQueries(invoiceId) { [weak self] result in
             DispatchQueue.main.async {
                 self?.invoiceQueriesLoading = false
                 switch result {
@@ -401,7 +401,7 @@ extension POViewModel {
         let vis = ApprovalHelpers.getVisibility(po: po, config: cfg, userId: u.id ?? "")
         guard vis.canApprove, let next = vis.nextTier else { return }
         let body: [String: Any] = ["tier_number": next, "total_tiers": ApprovalHelpers.getTotalTiers(cfg)]
-        POCodableTask.approvePO(po.id, body) { [weak self] result in
+        LegacyPOCodableTask.approvePO(po.id, body) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
@@ -416,7 +416,7 @@ extension POViewModel {
     func rejectPO() {
         guard let t = rejectTarget, !rejectReason.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         let body: [String: Any] = ["rejection_reason": rejectReason.trimmingCharacters(in: .whitespaces)]
-        POCodableTask.rejectPO(t.id, body) { [weak self] result in
+        LegacyPOCodableTask.rejectPO(t.id, body) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
@@ -429,7 +429,7 @@ extension POViewModel {
     }
 
     func deletePO(_ po: PurchaseOrder) {
-        POCodableTask.deletePO(po.id) { [weak self] result in
+        LegacyPOCodableTask.deletePO(po.id) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
@@ -505,9 +505,9 @@ extension POViewModel {
         }
 
         if let eid = fd.existingDraftId {
-            POCodableTask.updatePO(eid, p, completion).urlDataTask?.resume()
+            LegacyPOCodableTask.updatePO(eid, p, completion).urlDataTask?.resume()
         } else {
-            POCodableTask.createPO(p, completion).urlDataTask?.resume()
+            LegacyPOCodableTask.createPO(p, completion).urlDataTask?.resume()
         }
     }
 
@@ -578,9 +578,9 @@ extension POViewModel {
         }
 
         if let eid = fd.existingDraftId {
-            POCodableTask.updatePO(eid, p, completion).urlDataTask?.resume()
+            LegacyPOCodableTask.updatePO(eid, p, completion).urlDataTask?.resume()
         } else {
-            POCodableTask.createPO(p, completion).urlDataTask?.resume()
+            LegacyPOCodableTask.createPO(p, completion).urlDataTask?.resume()
         }
     }
 
@@ -588,7 +588,7 @@ extension POViewModel {
         let body = buildTemplateBody(fd, templateName: templateName)
         if body.isEmpty { return }
         formSaving = true
-        POCodableTask.createTemplate(body) { [weak self] result in
+        LegacyPOCodableTask.createTemplate(body) { [weak self] result in
             DispatchQueue.main.async {
                 self?.formSaving = false
                 switch result {
@@ -605,7 +605,7 @@ extension POViewModel {
         let body = buildTemplateBody(fd, templateName: templateName)
         if body.isEmpty { return }
         formSaving = true
-        POCodableTask.updateTemplate(id, body) { [weak self] result in
+        LegacyPOCodableTask.updateTemplate(id, body) { [weak self] result in
             DispatchQueue.main.async {
                 self?.formSaving = false
                 switch result {
@@ -619,7 +619,7 @@ extension POViewModel {
     }
 
     func deleteTemplate(_ id: String) {
-        POCodableTask.deleteTemplate(id) { [weak self] result in
+        LegacyPOCodableTask.deleteTemplate(id) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
@@ -632,7 +632,7 @@ extension POViewModel {
     }
 
     func deleteDraft(_ id: String) {
-        POCodableTask.deletePO(id) { [weak self] result in
+        LegacyPOCodableTask.deletePO(id) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
@@ -645,7 +645,7 @@ extension POViewModel {
     }
 
     func deleteVendor(_ id: String) {
-        POCodableTask.deleteVendor(id) { [weak self] result in
+        LegacyPOCodableTask.deleteVendor(id) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
@@ -674,7 +674,7 @@ extension POViewModel {
         let vis = invoiceApprovalVisibility(for: inv)
         guard vis.canApprove, let next = vis.nextTier else { return }
         let body: [String: Any] = ["tier_number": next, "total_tiers": ApprovalHelpers.getTotalTiers(cfg)]
-        POCodableTask.approveInvoice(inv.id, body) { [weak self] result in
+        LegacyPOCodableTask.approveInvoice(inv.id, body) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
@@ -689,7 +689,7 @@ extension POViewModel {
     func rejectInvoice() {
         guard let t = rejectInvoiceTarget, !rejectInvoiceReason.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         let body: [String: Any] = ["rejection_reason": rejectInvoiceReason.trimmingCharacters(in: .whitespaces)]
-        POCodableTask.rejectInvoice(t.id, body) { [weak self] result in
+        LegacyPOCodableTask.rejectInvoice(t.id, body) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
@@ -709,7 +709,7 @@ extension POViewModel {
         let terminalStates: [InvoiceStatus] = [.approved, .paid, .rejected, .voided, .override_]
         let isTerminal = terminalStates.contains(inv.invoiceStatus)
         guard isOwner, hasNoApprovals, !isTerminal else { return }
-        POCodableTask.deleteInvoice(inv.id) { [weak self] result in
+        LegacyPOCodableTask.deleteInvoice(inv.id) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
@@ -724,7 +724,7 @@ extension POViewModel {
     }
 
     func submitInvoice(_ body: [String: Any], completion: @escaping (Bool, String?) -> Void) {
-        POCodableTask.createInvoice(body) { [weak self] result in
+        LegacyPOCodableTask.createInvoice(body) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
@@ -743,7 +743,7 @@ extension POViewModel {
     func processInvoice(_ inv: Invoice) {
         guard currentUser?.isAccountant == true else { return }
         let body: [String: Any] = ["status": "approval"]
-        POCodableTask.updateInvoice(inv.id, body) { [weak self] result in
+        LegacyPOCodableTask.updateInvoice(inv.id, body) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
@@ -820,7 +820,7 @@ extension POViewModel {
 
     func loadPaymentRuns() {
         isLoadingPaymentRuns = true
-        POCodableTask.fetchPaymentRuns { [weak self] result in
+        LegacyPOCodableTask.fetchPaymentRuns { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
@@ -883,7 +883,7 @@ extension POViewModel {
         var nextTier = 1
         for t in 1...totalTiers { if !approvedTiers.contains(t) { nextTier = t; break } }
         let body: [String: Any] = ["tier_number": nextTier, "total_tiers": totalTiers]
-        POCodableTask.approvePaymentRun(run.id, body) { [weak self] result in
+        LegacyPOCodableTask.approvePaymentRun(run.id, body) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
@@ -898,7 +898,7 @@ extension POViewModel {
     func rejectPaymentRun() {
         guard let t = rejectPaymentRunTarget, !rejectPaymentRunReason.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         let body: [String: Any] = ["rejection_reason": rejectPaymentRunReason.trimmingCharacters(in: .whitespaces)]
-        POCodableTask.rejectPaymentRun(t.id, body) { [weak self] result in
+        LegacyPOCodableTask.rejectPaymentRun(t.id, body) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
@@ -916,7 +916,7 @@ extension POViewModel {
     // MARK: - Invoice Settings
 
     func loadInvoiceSettings() {
-        POCodableTask.getInvoiceSettings { [weak self] result in
+        LegacyPOCodableTask.getInvoiceSettings { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
@@ -1019,7 +1019,7 @@ extension POViewModel {
             }
         }
 
-        POCodableTask.createInvoice(body) { [weak self] result in
+        LegacyPOCodableTask.createInvoice(body) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
@@ -1048,7 +1048,7 @@ extension POViewModel {
     func openRunDetail(_ runId: String) {
         runDetailLoading = true
         selectedRunDetail = PaymentRunDetail(run: PaymentRun(), invoices: [])
-        POCodableTask.getPaymentRun(runId) { [weak self] result in
+        LegacyPOCodableTask.getPaymentRun(runId) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
@@ -1077,7 +1077,7 @@ extension POViewModel {
         guard let level = nextLevel else { return }
         approvingRunId = run.id
         let body: [String: Any] = ["tier_number": level.tier ?? 0, "total_tiers": sortedAuth.count]
-        POCodableTask.approvePaymentRun(run.id, body) { [weak self] result in
+        LegacyPOCodableTask.approvePaymentRun(run.id, body) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:

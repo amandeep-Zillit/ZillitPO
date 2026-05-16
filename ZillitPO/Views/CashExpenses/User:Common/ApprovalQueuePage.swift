@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ApprovalQueuePage: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @State private var activeSection = "floats" // "floats" or "batches"
     @State private var batchFilter = "All"
     @State private var showBatchFilterSheet = false

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct POStatsCards: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     var body: some View {
         VStack(spacing: 10) {
             HStack(spacing: 10) {

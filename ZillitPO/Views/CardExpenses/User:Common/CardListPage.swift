@@ -11,7 +11,7 @@ enum CardListSource {
 struct CardListPage: View {
     let title: String
     let source: CardListSource
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @State private var navigateToUpload = false
 
     private var items: [CardTransaction] {

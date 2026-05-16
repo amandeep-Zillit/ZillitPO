@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 
 struct LineItemsPage: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
     @Binding var lineItems: [LineItem]
     @Binding var lineItemCustomValues: [String: [String: String]]

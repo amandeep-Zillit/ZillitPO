@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct POFormView: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     var editingPO: PurchaseOrder?
     var resumeDraft: PurchaseOrder?
     var prefilledVendorId: String?

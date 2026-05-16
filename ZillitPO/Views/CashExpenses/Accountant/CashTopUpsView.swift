@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct CashTopUpsView: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
 
     enum TopUpFilter: String, CaseIterable {
         case all = "All", pending = "Pending", completed = "Completed", skipped = "Skipped"

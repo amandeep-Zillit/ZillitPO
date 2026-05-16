@@ -6,7 +6,7 @@ enum DraftsTemplatesTab: String, CaseIterable {
 }
 
 struct DraftsTemplatesPage: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
     @State private var activeTab: DraftsTemplatesTab = .drafts
     @State private var navigateToForm = false

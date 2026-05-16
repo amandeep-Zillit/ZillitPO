@@ -6,7 +6,7 @@ import UIKit
 // ═══════════════════════════════════════════════════════════════════
 
 struct SmartAlertsPage: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @State private var activeFilter: AlertFilter = .all
     @State private var showFilterSheet = false
     @State private var resolveTarget: SmartAlert? = nil
@@ -484,7 +484,7 @@ private struct ResolveAlertSheet: View {
     let alert: SmartAlert
     let onConfirm: (String) -> Void
 
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
     @State private var note: String = ""
 
@@ -563,7 +563,7 @@ private struct ResolveAlertSheet: View {
 
 struct SmartAlertDetailPage: View {
     let alert: SmartAlert
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
 
     private var live: SmartAlert {

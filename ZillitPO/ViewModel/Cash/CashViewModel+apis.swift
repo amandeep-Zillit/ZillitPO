@@ -1,11 +1,11 @@
 //
-//  POViewModel+cashExpenses.swift
+//  CashViewModel+apis.swift
 //  ZillitPO
 //
 
 import Foundation
 
-extension POViewModel {
+extension CashViewModel {
 
     func loadCashExpenseMetadata() {
         CashExpenseCodableTask.fetchMetadata { [weak self] result in
@@ -471,8 +471,5 @@ extension POViewModel {
         loadCashExpenseMetadata()
     }
 
-    var myPettyCashClaims: [ClaimBatch] { myClaims.filter { $0.isPettyCash } }
-    var myOOPClaims: [ClaimBatch] { myClaims.filter { $0.isOutOfPocket } }
-    var allPettyCashClaims: [ClaimBatch] { allClaims.filter { $0.isPettyCash } }
-    var allOOPClaims: [ClaimBatch] { allClaims.filter { $0.isOutOfPocket } }
+    // Claim filter computed properties live in CashViewModel+funcs.swift.
 }

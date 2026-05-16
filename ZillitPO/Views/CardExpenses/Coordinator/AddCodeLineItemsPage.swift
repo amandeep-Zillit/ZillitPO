@@ -6,7 +6,7 @@ import SwiftUI
 
 struct AddCodeLineItemsPage: View {
     let receipt: Receipt
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
 
     @State private var nominalCode: String = ""

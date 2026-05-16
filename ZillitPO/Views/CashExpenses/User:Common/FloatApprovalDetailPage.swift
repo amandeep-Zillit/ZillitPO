@@ -2,7 +2,7 @@ import SwiftUI
 
 struct FloatApprovalDetailPage: View {
     let float: FloatRequest
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
 
     @State private var details: FloatDetailsResponse? = nil

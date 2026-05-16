@@ -75,7 +75,7 @@ struct InvoiceHistoryEntry: Decodable, Identifiable {
 ///   ],
 ///   "created_at": "…", "updated_at": "…"
 /// }
-struct InvoiceQueryThread: Decodable, Identifiable {
+struct InvoiceQueryThread: Codable, Identifiable {
     var id: String
     var entityType: String?
     var entityId: String?
@@ -113,11 +113,44 @@ struct InvoiceQueryThread: Decodable, Identifiable {
         createdAt = flexTs(.createdAt)
         updatedAt = flexTs(.updatedAt)
     }
+
+    /// Memberwise init used by `AccountHubViewModel.sendQueryMessage`
+    /// when seeding a fresh thread client-side before the server returns.
+    init(id: String = UUID().uuidString,
+         entityType: String? = nil, entityId: String? = nil,
+         raisedBy: String? = nil, raisedAt: Int64? = nil,
+         createdAt: Int64? = nil, updatedAt: Int64? = nil,
+         messages: [InvoiceQueryMessage]? = nil,
+         query: String? = nil) {
+        self.id = id
+        self.entityType = entityType
+        self.entityId = entityId
+        self.raisedBy = raisedBy
+        self.raisedAt = raisedAt
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.messages = messages
+        // `query` only used in some live call sites for initial-message seed;
+        // ignored in demo (the server fills the messages array on POST).
+        _ = query
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encodeIfPresent(entityType, forKey: .entityType)
+        try c.encodeIfPresent(entityId, forKey: .entityId)
+        try c.encodeIfPresent(raisedBy, forKey: .raisedBy)
+        try c.encodeIfPresent(raisedAt, forKey: .raisedAt)
+        try c.encodeIfPresent(createdAt, forKey: .createdAt)
+        try c.encodeIfPresent(updatedAt, forKey: .updatedAt)
+        try c.encodeIfPresent(messages, forKey: .queries)
+    }
 }
 
 /// One message inside an InvoiceQueryThread's `queries` array.
 /// Each entry is shaped `{ query, queried_at, queried_by }`.
-struct InvoiceQueryMessage: Decodable, Identifiable {
+struct InvoiceQueryMessage: Codable, Identifiable {
     /// Composite id derived from user + timestamp — the backend doesn't
     /// send a per-message id.
     var id: String { "\(queriedBy ?? "unknown")-\(queriedAt ?? 0)" }
@@ -139,6 +172,20 @@ struct InvoiceQueryMessage: Decodable, Identifiable {
         else if let v = try? c.decode(Double.self, forKey: .queriedAt) { queriedAt = Int64(v) }
         else if let s = try? c.decode(String.self, forKey: .queriedAt), let v = Int64(s) { queriedAt = v }
         else { queriedAt = nil }
+    }
+
+    /// Memberwise init for outgoing payloads.
+    init(query: String?, queriedAt: Int64?, queriedBy: String?) {
+        self.query = query
+        self.queriedAt = queriedAt
+        self.queriedBy = queriedBy
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(query, forKey: .query)
+        try c.encodeIfPresent(queriedAt, forKey: .queriedAt)
+        try c.encodeIfPresent(queriedBy, forKey: .queriedBy)
     }
 }
 

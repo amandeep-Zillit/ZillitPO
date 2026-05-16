@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct QuickFiltersBar: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     var onDraftsTemplatesTap: (() -> Void)? = nil
     @State private var showFilterSheet = false
     @State private var showSortSheet = false

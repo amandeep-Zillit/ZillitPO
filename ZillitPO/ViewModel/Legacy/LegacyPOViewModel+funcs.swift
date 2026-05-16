@@ -1,11 +1,11 @@
 //
-//  POViewModel+funcs.swift
+//  LegacyPOViewModel+funcs.swift
 //  ZillitPO
 //
 
 import Foundation
 
-extension POViewModel {
+extension LegacyPOViewModel {
 
     // MARK: - Filtered POs
 

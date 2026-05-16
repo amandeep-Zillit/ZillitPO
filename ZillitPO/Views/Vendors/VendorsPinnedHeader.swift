@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - Vendors Pinned Header (filter buttons + search bar — stays above ScrollView)
 
 struct VendorsPinnedHeader: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @ObservedObject private var state = vendorListState
 
     var body: some View {

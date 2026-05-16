@@ -4,7 +4,7 @@ import UIKit
 // MARK: - Upload Invoice Page
 
 struct UploadInvoicePage: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
 
     // Step tracking: 1 = pick file, 2 = preview + extract, 3 = type select

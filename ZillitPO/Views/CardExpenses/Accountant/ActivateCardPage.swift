@@ -5,11 +5,11 @@ import SwiftUI
 // ═══════════════════════════════════════════════════════════════════
 
 struct ActivateCardPage: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
     let card: ExpenseCard
 
-    @State private var selectedType: POViewModel.CardType? = .digital
+    @State private var selectedType: LegacyPOViewModel.CardType? = .digital
     @State private var cardNumber: String = ""
     @State private var submitting = false
     @State private var showSuccess = false
@@ -110,7 +110,7 @@ struct ActivateCardPage: View {
     }
 
     @ViewBuilder
-    private func cardTypeOption(type: POViewModel.CardType, label: String) -> some View {
+    private func cardTypeOption(type: LegacyPOViewModel.CardType, label: String) -> some View {
         let isSelected = selectedType == type
         Button(action: { selectedType = type }) {
             VStack(spacing: 6) {

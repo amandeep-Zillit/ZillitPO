@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 
 struct RequestCardPage: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
 
     private var isAccountant: Bool { appState.currentUser?.isAccountant == true }

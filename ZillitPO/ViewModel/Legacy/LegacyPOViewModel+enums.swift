@@ -1,5 +1,5 @@
 //
-//  POViewModel+enums.swift
+//  LegacyPOViewModel+enums.swift
 //  ZillitPO
 //
 

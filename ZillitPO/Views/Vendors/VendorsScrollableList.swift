@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - Vendors Scrollable List (vendor cards — scrolls below pinned header)
 
 struct VendorsScrollableList: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @ObservedObject private var state = vendorListState
 
     /// A vendor can be deleted only by the accountant or by its creator

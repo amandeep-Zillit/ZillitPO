@@ -5,7 +5,7 @@ import SwiftUI
 // ═══════════════════════════════════════════════════════════════════
 
 struct CardCodingQueuePage: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
 
     private var items: [PendingCodingItem] {
         let all = appState.pendingCodingItems

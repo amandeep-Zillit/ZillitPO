@@ -6,7 +6,7 @@ import UIKit
 // ═══════════════════════════════════════════════════════════════════
 
 struct TopUpToDoPage: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @State private var pendingExpanded = true
     @State private var historyExpanded = true
     @State private var partialGroup: TopUpGroup? = nil
@@ -491,7 +491,7 @@ struct PartialTopUpSheet: View {
     /// The sheet will only dismiss when that completion returns `true`.
     let onConfirm: (Double?, String, @escaping (Bool) -> Void) -> Void
 
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
     @State private var amount: String = ""
     @State private var note: String = ""

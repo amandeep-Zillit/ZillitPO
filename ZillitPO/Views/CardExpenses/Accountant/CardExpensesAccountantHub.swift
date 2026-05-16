@@ -5,7 +5,7 @@ import SwiftUI
 // ═══════════════════════════════════════════════════════════════════
 
 struct CardExpensesAccountantHub: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
 
     private var meta: CardExpenseMeta { appState.cardExpenseMeta }
 

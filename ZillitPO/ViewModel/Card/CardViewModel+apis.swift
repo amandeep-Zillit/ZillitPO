@@ -1,11 +1,11 @@
 //
-//  POViewModel+cardExpenses.swift
+//  CardViewModel+apis.swift
 //  ZillitPO
 //
 
 import Foundation
 
-extension POViewModel {
+extension CardViewModel {
 
     // MARK: - Load Receipts
 
@@ -652,7 +652,7 @@ extension POViewModel {
         }.urlDataTask?.resume()
     }
 
-    enum CardType: String { case digital, physical }
+    // `CardType` enum lives in CardViewModel+enums.swift (live convention).
 
     func activateCard(id: String, cardNumber: String = "", cardType: CardType = .physical, completion: @escaping (Bool) -> Void) {
         var body: [String: Any] = ["user_id": userId, "card_type": cardType.rawValue]

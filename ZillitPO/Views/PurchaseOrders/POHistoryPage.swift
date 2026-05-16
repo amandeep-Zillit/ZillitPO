@@ -8,7 +8,7 @@ import SwiftUI
 // ═══════════════════════════════════════════════════════════════════
 
 struct POHistoryPage: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     let poId: String
     let poLabel: String
 

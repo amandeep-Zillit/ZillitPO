@@ -5,7 +5,7 @@ import SwiftUI
 // ═══════════════════════════════════════════════════════════════════
 
 struct ReceiptInboxPage: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @State private var systemMatchedExpanded = true
     @State private var noMatchExpanded = true
     @State private var duplicateExpanded = true
@@ -437,7 +437,7 @@ struct ReceiptInboxPage: View {
 // ═══════════════════════════════════════════════════════════════════
 
 struct ManualMatchSheet: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     let receiptId: String
     @Binding var isPresented: Bool
     @State private var searchText = ""

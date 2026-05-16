@@ -7,7 +7,7 @@ import UIKit
 
 struct CardDetailPage: View {
     let card: ExpenseCard
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
 
     @State private var liveCard: ExpenseCard? = nil
@@ -769,7 +769,7 @@ struct CardDetailPage: View {
 }
 
 struct CardHistoryPage: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     let cardId: String
     let cardLabel: String
 

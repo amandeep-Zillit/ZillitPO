@@ -2,14 +2,16 @@
 //  CardExpenseRequest.swift
 //  ZillitPO
 //
+//  Mirrors live's `Controller/AccountHub/Network/CardExpenses/CardExpenseRequest.swift`
+//  pattern — each case binds a local `let endPoint = "\(ServerRequest.CARD_BASE_URL)..."`
+//  and returns `FCURLRequest(urlPath:type:body:).requestObject`. Account-hub
+//  cross-service calls (queries, bank accounts) compose against
+//  `ServerRequest.ACC_HUB_BASE_URL` instead.
+//
 
 import Foundation
 
 enum CardExpenseRequest {
-    static let baseURL = "http://192.168.29.92:3005"
-    /// Account-hub service runs on a separate local port. The `/queries`
-    /// endpoint lives there, not on the card-expenses server.
-    static let accountHubBaseURL = "http://192.168.29.92:3003"
 
     // MARK: - Receipts
     case fetchAllReceipts
@@ -31,7 +33,7 @@ enum CardExpenseRequest {
     case postTransaction(String)                       // id
 
     // MARK: - Cards
-    case fetchCards(String)                             // query params
+    case fetchCards(String)                            // query params
     case getCard(String)                               // id
     case createCard([String: Any])
     case updateCardReq(String, [String: Any])          // id, body → PATCH /cards/{id}
@@ -40,7 +42,7 @@ enum CardExpenseRequest {
     case fetchReceiptHistory(String)                   // receiptId → GET /receipts/{id}/history
 
     // MARK: - Queries (account-hub generic queries endpoint)
-    case fetchEntityQueries(String, String)            // entityType, entityId → GET /api/v2/account-hub/queries/entity/{type}/{id}
+    case fetchEntityQueries(String, String)            // entityType, entityId → GET /account-hub/queries/entity/{type}/{id}
     case suspendCardReq(String, [String: Any])         // id, body → POST /cards/{id}/suspend
     case reactivateCardReq(String, [String: Any])      // id, body → POST /cards/{id}/reactivate
     case activateCardReq(String, [String: Any])        // id, body → POST /cards/{id}/activate
@@ -61,7 +63,7 @@ enum CardExpenseRequest {
     case getReceipt(String)                                // id
     case fetchReceiptDetail(String)                        // id → /receipts/{id}/detail
 
-    // MARK: - Bank Accounts
+    // MARK: - Bank Accounts (lives on AccountHub service)
     case fetchBankAccounts
 
     // MARK: - Top-Up Actions
@@ -80,56 +82,52 @@ enum CardExpenseRequest {
     case updateSettings([String: Any])
 }
 
-extension CardExpenseRequest: POURLRequestProtocol {
-    private func buildLocal(_ method: HTTPMethodType, _ path: String, body: Any? = nil) -> URLRequest? {
-        let urlString = "\(CardExpenseRequest.baseURL)\(path)"
-        guard let url = URL(string: urlString) else { return nil }
-        var req = URLRequest(url: url)
-        req.httpMethod = method.rawValue
-        req.timeoutInterval = 30
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue(APIClient.shared.projectId, forHTTPHeaderField: "x-project-id")
-        req.setValue(APIClient.shared.userId, forHTTPHeaderField: "x-user-id")
-        req.setValue(String(APIClient.shared.isAccountant), forHTTPHeaderField: "x-is-accountant")
-        if let body = body, let data = try? JSONSerialization.data(withJSONObject: body) {
-            req.httpBody = data
-        }
-        return req
-    }
-
+extension CardExpenseRequest: FCURLRequestProtocol {
     var urlRequest: URLRequest? {
         switch self {
 
         // MARK: Receipts
         case .fetchAllReceipts:
-            return buildLocal(.get, "/api/v2/card-expenses/receipts")
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/receipts"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
 
-case .fetchMyReceipts:
-            return buildLocal(.get, "/api/v2/card-expenses/receipts/my")
+        case .fetchMyReceipts:
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/receipts/my"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
 
         case .confirmReceipt(let id):
-            return buildLocal(.post, "/api/v2/card-expenses/receipts/\(id)/confirm")
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/receipts/\(id)/confirm"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: [:]).requestObject
 
         case .confirmAllReceipts:
-            return buildLocal(.post, "/api/v2/card-expenses/receipts/confirm-all")
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/receipts/confirm-all"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: [:]).requestObject
 
         case .matchReceipt(let id, let body):
-            return buildLocal(.post, "/api/v2/card-expenses/receipts/\(id)/match", body: body)
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/receipts/\(id)/match"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: body).requestObject
 
         case .unmatchReceipt(let id):
-            return buildLocal(.post, "/api/v2/card-expenses/receipts/\(id)/unmatch")
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/receipts/\(id)/unmatch"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: [:]).requestObject
 
         case .deleteReceipt(let id):
-            return buildLocal(.delete, "/api/v2/card-expenses/receipts/\(id)")
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/receipts/\(id)"
+            return FCURLRequest(urlPath: endPoint, type: .delete).requestObject
 
         case .flagReceiptPersonal(let id):
-            return buildLocal(.post, "/api/v2/card-expenses/receipts/\(id)/flag-personal")
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/receipts/\(id)/flag-personal"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: [:]).requestObject
 
         case .submitCoding(let id, let body):
-            return buildLocal(.post, "/api/v2/card-expenses/receipts/\(id)/submit-coding", body: body)
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/receipts/\(id)/submit-coding"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: body).requestObject
 
         case .uploadReceipt(let fileData, let fileName, let mimeType):
-            let urlString = "\(CardExpenseRequest.baseURL)/api/v2/card-expenses/receipts/upload"
+            // Multipart form upload — FCURLRequest doesn't model multipart,
+            // so we build the request manually but compose the URL from
+            // `ServerRequest.CARD_BASE_URL` to keep the host source-of-truth.
+            let urlString = "\(ServerRequest.CARD_BASE_URL)card-expenses/receipts/upload"
             guard let url = URL(string: urlString) else { return nil }
             let boundary = "Boundary-\(UUID().uuidString)"
             var req = URLRequest(url: url)
@@ -153,151 +151,167 @@ case .fetchMyReceipts:
 
         // MARK: Transactions
         case .fetchTransactions(let params):
-            let path = params.isEmpty ? "/api/v2/card-expenses/transactions" : "/api/v2/card-expenses/transactions?\(params)"
-            return buildLocal(.get, path)
+            let path = params.isEmpty ? "card-expenses/transactions" : "card-expenses/transactions?\(params)"
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)\(path)"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
 
         case .getTransaction(let id):
-            return buildLocal(.get, "/api/v2/card-expenses/transactions/\(id)")
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/transactions/\(id)"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
 
         case .updateTransaction(let id, let body):
-            return buildLocal(.patch, "/api/v2/card-expenses/transactions/\(id)", body: body)
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/transactions/\(id)"
+            return FCURLRequest(urlPath: endPoint, type: .patch, body: body).requestObject
 
         case .submitTransaction(let id, let body):
-            return buildLocal(.post, "/api/v2/card-expenses/transactions/\(id)/submit", body: body)
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/transactions/\(id)/submit"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: body).requestObject
 
         case .postTransaction(let id):
-            return buildLocal(.post, "/api/v2/card-expenses/transactions/\(id)/post")
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/transactions/\(id)/post"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: [:]).requestObject
 
         // MARK: Cards
         case .fetchCards(let params):
-            let path = params.isEmpty ? "/api/v2/card-expenses/cards" : "/api/v2/card-expenses/cards?\(params)"
-            return buildLocal(.get, path)
+            let path = params.isEmpty ? "card-expenses/cards" : "card-expenses/cards?\(params)"
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)\(path)"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
 
         case .getCard(let id):
-            return buildLocal(.get, "/api/v2/card-expenses/cards/\(id)")
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/cards/\(id)"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
 
         case .createCard(let body):
-            return buildLocal(.post, "/api/v2/card-expenses/cards", body: body)
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/cards"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: body).requestObject
 
         case .updateCardReq(let id, let body):
-            return buildLocal(.patch, "/api/v2/card-expenses/cards/\(id)", body: body)
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/cards/\(id)"
+            return FCURLRequest(urlPath: endPoint, type: .patch, body: body).requestObject
 
         case .deleteCardReq(let id):
-            return buildLocal(.delete, "/api/v2/card-expenses/cards/\(id)")
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/cards/\(id)"
+            return FCURLRequest(urlPath: endPoint, type: .delete).requestObject
 
         case .fetchCardHistoryById(let id):
-            return buildLocal(.get, "/api/v2/card-expenses/cards/\(id)/history")
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/cards/\(id)/history"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
 
         case .fetchReceiptHistory(let id):
-            return buildLocal(.get, "/api/v2/card-expenses/receipts/\(id)/history")
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/receipts/\(id)/history"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
 
         case .fetchEntityQueries(let entityType, let entityId):
-            // Account-hub queries live on a separate local service (port 3003),
-            // not the card-expenses server (3005). Build the request manually so
-            // the host is correct but the standard card-expenses headers apply.
-            let path = "/api/v2/account-hub/queries/entity/\(entityType)/\(entityId)"
-            guard let url = URL(string: "\(CardExpenseRequest.accountHubBaseURL)\(path)") else { return nil }
-            var req = URLRequest(url: url)
-            req.httpMethod = "GET"
-            req.timeoutInterval = 30
-            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            req.setValue(APIClient.shared.projectId, forHTTPHeaderField: "x-project-id")
-            req.setValue(APIClient.shared.userId, forHTTPHeaderField: "x-user-id")
-            req.setValue(String(APIClient.shared.isAccountant), forHTTPHeaderField: "x-is-accountant")
-            return req
+            // Account-hub queries live on the AccountHub service, not the
+            // card-expenses one. Compose against ACC_HUB_BASE_URL.
+            let endPoint = "\(ServerRequest.ACC_HUB_BASE_URL)account-hub/queries/entity/\(entityType)/\(entityId)"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
 
         case .suspendCardReq(let id, let body):
-            return buildLocal(.post, "/api/v2/card-expenses/cards/\(id)/suspend", body: body)
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/cards/\(id)/suspend"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: body).requestObject
 
         case .reactivateCardReq(let id, let body):
-            return buildLocal(.post, "/api/v2/card-expenses/cards/\(id)/reactivate", body: body)
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/cards/\(id)/reactivate"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: body).requestObject
 
         case .activateCardReq(let id, let body):
-            return buildLocal(.post, "/api/v2/card-expenses/cards/\(id)/activate", body: body)
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/cards/\(id)/activate"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: body).requestObject
 
         case .approveCardReq(let id, let body):
-            return buildLocal(.post, "/api/v2/card-expenses/cards/\(id)/approve", body: body)
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/cards/\(id)/approve"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: body).requestObject
 
         case .rejectCardReq(let id, let body):
-            return buildLocal(.post, "/api/v2/card-expenses/cards/\(id)/reject", body: body)
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/cards/\(id)/reject"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: body).requestObject
 
         case .overrideCardReq(let id, let body):
-            return buildLocal(.post, "/api/v2/card-expenses/cards/\(id)/override", body: body)
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/cards/\(id)/override"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: body).requestObject
 
         // MARK: Metadata
         case .fetchMetadata:
-            return buildLocal(.get, "/api/v2/card-expenses/metadata")
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/metadata"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
 
         // MARK: Accountant Hub queues
         case .fetchTopUps:
-            return buildLocal(.get, "/api/v2/card-expenses/topups")
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/topups"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
+
         case .fetchSmartAlerts:
-            return buildLocal(.get, "/api/v2/card-expenses/alerts")
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/alerts"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
+
         case .fetchCardHistory:
-            return buildLocal(.get, "/api/v2/card-expenses/receipts/posted-history")
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/receipts/posted-history"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
 
         case .fetchPendingCoding:
-            return buildLocal(.get, "/api/v2/card-expenses/receipts/pending-coding")
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/receipts/pending-coding"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
 
         case .fetchApprovalQueue:
-            return buildLocal(.get, "/api/v2/card-expenses/approvals")
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/approvals"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
 
         case .overrideApproval(let id, let body):
-            return buildLocal(.post, "/api/v2/card-expenses/approvals/\(id)/override", body: body)
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/approvals/\(id)/override"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: body).requestObject
 
         case .getReceipt(let id):
-            return buildLocal(.get, "/api/v2/card-expenses/receipts/\(id)")
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/receipts/\(id)"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
 
         case .fetchReceiptDetail(let id):
-            return buildLocal(.get, "/api/v2/card-expenses/receipts/\(id)/detail")
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/receipts/\(id)/detail"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
 
-        // MARK: Bank Accounts
+        // MARK: Bank Accounts (AccountHub service)
         case .fetchBankAccounts:
-            // Account-hub service runs on its own port (3003) separate from
-            // the card-expenses server. Use the shared `accountHubBaseURL`
-            // constant so every account-hub request hits the same host — if
-            // the machine's LAN IP changes, only that one constant needs
-            // updating. (Previously this URL was hardcoded to a stale IP.)
-            let path = "/api/v2/account-hub/bank-accounts?entity_type=production"
-            guard let u = URL(string: "\(CardExpenseRequest.accountHubBaseURL)\(path)") else { return nil }
-            var req = URLRequest(url: u)
-            req.httpMethod = "GET"
-            req.timeoutInterval = 30
-            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            req.setValue(APIClient.shared.projectId, forHTTPHeaderField: "x-project-id")
-            req.setValue(APIClient.shared.userId, forHTTPHeaderField: "x-user-id")
-            req.setValue(String(APIClient.shared.isAccountant), forHTTPHeaderField: "x-is-accountant")
-            return req
+            let endPoint = "\(ServerRequest.ACC_HUB_BASE_URL)account-hub/bank-accounts?entity_type=production"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
 
         // MARK: Top-Up Actions
         case .markTopUp(let id, let body):
-            return buildLocal(.patch, "/api/v2/card-expenses/topups/\(id)/complete", body: body)
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/topups/\(id)/complete"
+            return FCURLRequest(urlPath: endPoint, type: .patch, body: body).requestObject
 
         case .skipTopUp(let id):
-            return buildLocal(.patch, "/api/v2/card-expenses/topups/\(id)/skip")
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/topups/\(id)/skip"
+            return FCURLRequest(urlPath: endPoint, type: .patch, body: [:]).requestObject
 
         case .partialTopUp(let id, let body):
-            return buildLocal(.patch, "/api/v2/card-expenses/topups/\(id)/partial", body: body)
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/topups/\(id)/partial"
+            return FCURLRequest(urlPath: endPoint, type: .patch, body: body).requestObject
 
         // MARK: Smart Alert Actions
         case .resolveAlert(let id, let body):
-            return buildLocal(.post, "/api/v2/card-expenses/alerts/\(id)/resolve", body: body)
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/alerts/\(id)/resolve"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: body).requestObject
 
         case .dismissAlert(let id):
-            return buildLocal(.post, "/api/v2/card-expenses/alerts/\(id)/dismiss")
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/alerts/\(id)/dismiss"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: [:]).requestObject
 
         case .investigateAlert(let id, let body):
-            return buildLocal(.post, "/api/v2/card-expenses/alerts/\(id)/investigate", body: body)
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/alerts/\(id)/investigate"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: body).requestObject
 
         case .revertAlert(let id, let body):
-            return buildLocal(.post, "/api/v2/card-expenses/alerts/\(id)/revert", body: body)
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/alerts/\(id)/revert"
+            return FCURLRequest(urlPath: endPoint, type: .post, body: body).requestObject
 
         // MARK: Settings
         case .fetchSettings:
-            return buildLocal(.get, "/api/v2/card-expenses/settings")
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/settings"
+            return FCURLRequest(urlPath: endPoint, type: .get).requestObject
 
         case .updateSettings(let body):
-            return buildLocal(.patch, "/api/v2/card-expenses/settings", body: body)
+            let endPoint = "\(ServerRequest.CARD_BASE_URL)card-expenses/settings"
+            return FCURLRequest(urlPath: endPoint, type: .patch, body: body).requestObject
         }
     }
 }

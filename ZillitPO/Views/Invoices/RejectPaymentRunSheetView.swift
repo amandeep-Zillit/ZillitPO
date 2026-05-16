@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - Reject Payment Run Sheet
 
 struct RejectPaymentRunSheetView: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @State private var showError = false
 
     var body: some View {

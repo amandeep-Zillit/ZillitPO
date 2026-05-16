@@ -6,7 +6,7 @@ struct RecordCashReturnPage: View {
     /// opened from a specific float's detail page so the user doesn't
     /// have to pick again. When nil, the picker starts empty.
     var preselectedFloatId: String? = nil
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
 
     @State private var selectedFloatId: String = ""

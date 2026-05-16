@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - Payment Run Approval Page
 
 struct PaymentRunApprovalPage: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @State private var navigateToDetail = false
     @State private var selectedRun: PaymentRun?
 
@@ -79,7 +79,7 @@ struct PaymentRunApprovalPage: View {
 
 struct PaymentRunRow: View {
     let run: PaymentRun
-    var appState: POViewModel
+    var appState: LegacyPOViewModel
 
     var body: some View {
         HStack(spacing: 10) {
@@ -135,7 +135,7 @@ struct PaymentRunRow: View {
 
 struct PaymentRunDetailPage: View {
     let paymentRun: PaymentRun
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
     @State private var fetchedInvoices: [Invoice] = []
     @State private var loadingInvoices = false
@@ -192,9 +192,18 @@ struct PaymentRunDetailPage: View {
 
     // Pairs of tier items for 2-column layout
     private var tierPairs: [[(tier: Int, users: [AppUser], isApproved: Bool)]] {
-        stride(from: 0, to: tierChain.count, by: 2).map { i in
-            i + 1 < tierChain.count ? [tierChain[i], tierChain[i + 1]] : [tierChain[i]]
+        let chain = tierChain
+        var pairs: [[(tier: Int, users: [AppUser], isApproved: Bool)]] = []
+        var i = 0
+        while i < chain.count {
+            if i + 1 < chain.count {
+                pairs.append([chain[i], chain[i + 1]])
+            } else {
+                pairs.append([chain[i]])
+            }
+            i += 2
         }
+        return pairs
     }
 
     var body: some View {
@@ -289,7 +298,7 @@ struct PaymentRunDetailPage: View {
             // Fetch run detail to get invoices
             if (liveRun.invoices ?? []).isEmpty {
                 loadingInvoices = true
-                POCodableTask.getPaymentRun(liveRun.id) { result in
+                LegacyPOCodableTask.getPaymentRun(liveRun.id) { result in
                     DispatchQueue.main.async {
                         switch result {
                         case .success(let response):

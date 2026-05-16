@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - Reject Invoice Sheet View
 
 struct RejectInvoiceSheetView: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @State private var isSubmitting = false
     @State private var showError = false
 

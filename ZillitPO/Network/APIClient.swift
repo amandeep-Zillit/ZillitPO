@@ -24,7 +24,10 @@ enum HTTPMethodType: String {
 
 class APIClient {
     static let shared = APIClient()
-    var baseURL = "https://accounthub-dev.zillit.com"
+    /// Backend host. Source of truth is `ServerRequest.DEMO_BASE_HOST`
+    /// (in `Network/ServerRequest.swift`) — edit that file to redirect
+    /// every endpoint at once. Kept mutable so tests can override.
+    var baseURL = ServerRequest.DEMO_HOST_ONLY
     var projectId = ""
     var userId = ""
     var isAccountant = false
@@ -49,6 +52,23 @@ class APIClient {
         if let body = body, let data = try? JSONSerialization.data(withJSONObject: body) {
             req.httpBody = data
         }
+        return req
+    }
+
+    // MARK: - Build URLRequest with pre-encoded body (typed Encodable structs)
+
+    /// Variant of `buildRequest` that takes already-serialised JSON bytes
+    /// (typically produced by `JSONEncoder().encode(struct)`). Used by the
+    /// AccountHub `FCURLRequest` shim so request enums can pass Encodable
+    /// bodies through unchanged.
+    func buildRequestRaw(_ method: HTTPMethodType, _ path: String, bodyData: Data) -> URLRequest? {
+        let urlString = path.hasPrefix("http") ? path : "\(baseURL)\(path)"
+        guard let url = URL(string: urlString) else { return nil }
+        var req = URLRequest(url: url)
+        req.httpMethod = method.rawValue
+        req.timeoutInterval = 30
+        for (k, v) in headers() { req.setValue(v, forHTTPHeaderField: k) }
+        req.httpBody = bodyData
         return req
     }
 

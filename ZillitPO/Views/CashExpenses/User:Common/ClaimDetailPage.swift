@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ClaimDetailPage: View {
     let claim: ClaimBatch
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
 
     @State private var showHistory = false
     @State private var showQueries = false
@@ -485,7 +485,7 @@ struct ClaimQueryMessage: Identifiable {
 }
 
 struct ClaimQueriesPage: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     let batchId: String
     let label: String
 

@@ -5,7 +5,7 @@ import SwiftUI
 // ═══════════════════════════════════════════════════════════════════
 
 struct CoordinatorApprovalQueueView: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @State private var section: String = "cards"
     @State private var rejectTarget: ExpenseCard?
     @State private var rejectReason = ""

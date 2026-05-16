@@ -4,7 +4,7 @@ import UIKit
 // MARK: - Vendor Form Page (Navigation destination)
 
 struct VendorFormPage: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
 
     var body: some View {
@@ -29,7 +29,7 @@ struct VendorFormPage: View {
 }
 
 struct VendorFormView: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     var onBack: () -> Void
     @State private var name = ""; @State private var contact = ""; @State private var email = ""
     @State private var phoneCode = "+44"; @State private var phone = ""
@@ -185,7 +185,7 @@ struct VendorFormView: View {
             "address": ["line1": addr1, "line2": addr2, "city": city, "state": state, "postal_code": postal, "country": country],
             "vat_number": vat, "department_id": departmentId
         ]
-        POCodableTask.createVendor(body) { [self] result in
+        LegacyPOCodableTask.createVendor(body) { [self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:

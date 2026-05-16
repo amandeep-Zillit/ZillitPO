@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct CreateTemplatePage: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
 
     var body: some View {
@@ -27,7 +27,7 @@ struct CreateTemplatePage: View {
 // MARK: - Create Template Form View
 
 struct CreateTemplateFormView: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     var onBack: () -> Void
 
     @State private var templateName = ""

@@ -5,7 +5,7 @@ import SwiftUI
 // ═══════════════════════════════════════════════════════════════════
 
 struct AccountantApprovalQueuePage: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
 
     @State private var overrideTarget: CardTransaction? = nil
     @State private var overrideReason: String = ""

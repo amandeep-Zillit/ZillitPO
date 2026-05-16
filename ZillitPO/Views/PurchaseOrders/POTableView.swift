@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct POTableView: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @State private var selectedPO: PurchaseOrder?
     @State private var navigateToDetail = false
 
@@ -50,7 +50,7 @@ struct POTableView: View {
 
 struct PORow: View {
     let po: PurchaseOrder
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     var body: some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {

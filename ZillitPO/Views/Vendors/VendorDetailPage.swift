@@ -4,7 +4,7 @@ import SwiftUI
 
 struct VendorDetailPage: View {
     let vendor: Vendor
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
     @State private var showDeleteAlert = false
     @State private var navigateToCreatePO = false

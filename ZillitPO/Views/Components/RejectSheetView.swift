@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct RejectSheetView: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
     @State private var showError = false
     @State private var isSubmitting = false

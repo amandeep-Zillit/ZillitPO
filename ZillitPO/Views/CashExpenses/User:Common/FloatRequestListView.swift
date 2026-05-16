@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct FloatRequestListView: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
 
     private var floats: [FloatRequest] {
         appState.myFloats.sorted { ($0.createdAt ?? 0) > ($1.createdAt ?? 0) }

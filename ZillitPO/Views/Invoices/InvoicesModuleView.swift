@@ -19,7 +19,7 @@ enum InvoiceFilter: String, CaseIterable {
 // MARK: - Invoices Module View
 
 struct InvoicesModuleView: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @State private var searchText = ""
     @State private var selectedFilter: InvoiceFilter = .all
     @State private var activeTab: InvoiceTab = .all
@@ -335,7 +335,7 @@ struct InvoicesModuleView: View {
 struct InvoiceRow: View {
     let invoice: Invoice
     var showApprovalInfo: Bool = false
-    var appState: POViewModel? = nil
+    var appState: LegacyPOViewModel? = nil
     var onViewFile: (() -> Void)? = nil
 
     /// Display name: use supplier name, fall back to description stripped of "Invoice — " prefix

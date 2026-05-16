@@ -25,6 +25,10 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>ZillitPO needs camera access to capture invoice photos for upload.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>ZillitPO needs photo library access to select invoice images for upload.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -42,10 +46,6 @@
 			</array>
 		</dict>
 	</dict>
-	<key>NSCameraUsageDescription</key>
-	<string>ZillitPO needs camera access to capture invoice photos for upload.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>ZillitPO needs photo library access to select invoice images for upload.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIRequiredDeviceCapabilities</key>

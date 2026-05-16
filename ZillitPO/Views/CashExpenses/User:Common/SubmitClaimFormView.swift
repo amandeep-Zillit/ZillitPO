@@ -3,7 +3,7 @@ import UIKit
 
 struct SubmitClaimFormView: View {
     var expenseType: String = "pc" // "pc" or "oop"
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
 
     @State private var receipts: [ClaimReceiptItem] = [ClaimReceiptItem()]
     // Primary settlement is auto-derived ("reimb" or "reduce") — never user-overridable.

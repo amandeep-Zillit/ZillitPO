@@ -2,7 +2,7 @@ import SwiftUI
 
 struct TopUpDetailPage: View {
     let item: TopUpItem
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
 
     private var statusColors: (Color, Color) {
         let teal = Color(red: 0.0, green: 0.6, blue: 0.5)

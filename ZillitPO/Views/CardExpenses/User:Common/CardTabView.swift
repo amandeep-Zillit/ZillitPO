@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct CardTabView: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @State private var navigateToRequestCard = false
     @State private var selectedCard: ExpenseCard?
     @State private var navigateToCardDetail = false

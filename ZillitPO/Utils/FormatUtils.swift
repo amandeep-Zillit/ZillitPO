@@ -63,4 +63,25 @@ struct FormatUtils {
         let df = DateFormatter(); df.dateFormat = "dd MMM yyyy, HH:mm"; df.locale = Locale(identifier: "en_GB")
         return df.string(from: Date(timeIntervalSince1970: Double(ms) / 1000))
     }
+
+    // MARK: - Role helpers (live parity)
+    //
+    // Live's `FormatUtils` exposes role-classification helpers used across
+    // the split VMs (`AccountHubViewModel`, `POViewModel.canAccessPO`,
+    // every `*BadgeViewModel`, etc.). Same signature in demo so call sites
+    // copy-paste unchanged.
+
+    /// `true` when the user belongs to the accounts department.
+    static func isAccountant(_ departmentIdentifier: String) -> Bool {
+        return departmentIdentifier == "department_accounts"
+    }
+
+    /// `true` for accountant designations with cross-department visibility:
+    /// Production Accountant + Financial Controller. Other accounts roles
+    /// (assistants, cashiers, etc.) only see POs/invoices they own or are
+    /// assigned to.
+    static func isFullAccessAccountant(_ designationName: String?) -> Bool {
+        let s = (designationName ?? "").lowercased()
+        return s.contains("production_accountant") || s.contains("financial_controller")
+    }
 }

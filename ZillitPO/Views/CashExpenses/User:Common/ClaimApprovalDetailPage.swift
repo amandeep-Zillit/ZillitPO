@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ClaimApprovalDetailPage: View {
     let claim: ClaimBatch
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
 
     @State private var actioning = false

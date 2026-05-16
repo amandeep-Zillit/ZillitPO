@@ -3,7 +3,7 @@ import SwiftUI
 struct CodingQueueListView: View {
     let claims: [ClaimBatch]
     var isLoading: Bool = false
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @State private var activeFilter = "All"
     @State private var showFilterSheet = false
     @State private var navigateToDetail = false

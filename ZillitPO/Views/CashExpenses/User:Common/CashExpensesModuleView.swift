@@ -39,7 +39,7 @@ func floatStatusColors(_ s: String) -> (Color, Color) {
 // MARK: - Cash & Expenses Hub (2 tiles: Petty Cash, Out of Pocket)
 
 struct CashExpensesHubView: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @State private var navigateToPettyCash = false
     @State private var navigateToOOP = false
     @State private var navigateToAuditQueue = false

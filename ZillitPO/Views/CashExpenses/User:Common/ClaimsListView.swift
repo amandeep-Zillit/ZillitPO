@@ -10,7 +10,7 @@ struct ClaimsListView: View {
     let claims: [ClaimBatch]
     var title: String = ""
     var isLoading: Bool = false
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @State private var searchText = ""
     @State private var showFilterSheet = false
     @State private var activeFilter = "All"

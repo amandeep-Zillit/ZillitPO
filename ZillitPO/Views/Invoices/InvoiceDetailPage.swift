@@ -5,7 +5,7 @@ import UIKit
 
 struct InvoiceDetailPage: View {
     let invoice: Invoice
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
     @State private var navigateToHistory = false
     @State private var navigateToQueries = false
@@ -107,7 +107,7 @@ struct InvoiceDetailPage: View {
 struct InvoiceDetailContentView: View {
     let invoice: Invoice
     var onClose: () -> Void
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @State private var showDeleteConfirm = false
     /// Approval chain is collapsed by default — users who need to audit
     /// the tier state can expand it on demand.

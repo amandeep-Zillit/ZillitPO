@@ -5,7 +5,7 @@ import SwiftUI
 // ═══════════════════════════════════════════════════════════════════
 
 struct PendingCodingPage: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @State private var expandedHolders: Set<String> = []
 
     private var items: [PendingCodingItem] { appState.pendingCodingItems }
@@ -173,7 +173,7 @@ struct PendingCodingPage: View {
 
 struct PendingCodingDetailPage: View {
     let item: PendingCodingItem
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
 
     private var live: PendingCodingItem {

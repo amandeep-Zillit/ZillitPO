@@ -5,7 +5,7 @@ import SwiftUI
 // ═══════════════════════════════════════════════════════════════════
 
 struct PettyCashModuleView: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
 
     private var isAcct: Bool { appState.currentUser?.isAccountant == true }
     private var isCoord: Bool { appState.cashMeta?.isCoordinator == true }

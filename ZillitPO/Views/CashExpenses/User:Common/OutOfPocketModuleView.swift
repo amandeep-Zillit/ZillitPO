@@ -5,7 +5,7 @@ import SwiftUI
 // ═══════════════════════════════════════════════════════════════════
 
 struct OutOfPocketModuleView: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
 
     private var isAcct: Bool { appState.currentUser?.isAccountant == true }
     private var isApprover: Bool { appState.cashMeta?.isApprover == true }

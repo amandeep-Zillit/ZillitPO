@@ -8,7 +8,7 @@ import UIKit
 struct CardTransactionDetailPage: View {
     let transaction: CardTransaction
     var allowEdit: Bool = true
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     @Environment(\.presentationMode) var presentationMode
     @State private var navigateToEdit = false
     @State private var showOverrideSheet = false
@@ -748,7 +748,7 @@ private struct TransactionQueryMessage: Identifiable {
 }
 
 private struct TransactionQueriesPage: View {
-    @EnvironmentObject var appState: POViewModel
+    @EnvironmentObject var appState: LegacyPOViewModel
     let receiptId: String
     let label: String
 
