@@ -42,6 +42,9 @@ struct ServerRequest {
     // MARK: - Deal Memo
     static let DEAL_MEMO_BASE_URL = "https://accounthub-dev.zillit.com/api/v2/"
 
+    // MARK: - Time Card
+    static let TIMECARD_BASE_URL = "https://accounthub-dev.zillit.com/api/v2/"
+
     // MARK: - Debug flag (live parity — always true for demo)
     static var IF_DEBUG: Bool { true }
 

@@ -19,6 +19,8 @@ struct ContentView: View {
     @State private var showNewAccountHub = false
     /// Deal Memo entry — mirrors `DealMemoModule.jsx`.
     @State private var showDealMemo = false
+    /// Time Card entry — mirrors `TimecardLandingModule.jsx`.
+    @State private var showTimeCard = false
 
     var body: some View {
         NavigationView {
@@ -33,24 +35,31 @@ struct ContentView: View {
                 GeometryReader { proxy in
                     ScrollView(showsIndicators: false) {
                         VStack(spacing: 0) {
-                            // ── Theme toggle (top-right) ─────────────────
-                            HStack {
-                                Spacer()
-                                Button(action: { theme.toggleTheme() }) {
-                                    Image(systemName: theme.isDark ? "sun.max.fill" : "moon.fill")
-                                        .font(.system(size: 18))
-                                        .foregroundColor(.goldDark)
-                                        .frame(width: 36, height: 36)
-                                        .background(Color.gold.opacity(0.12))
-                                        .cornerRadius(10)
-                                }.buttonStyle(BorderlessButtonStyle())
-                            }.padding(.horizontal, 20).padding(.top, 12)
-
-                            VStack(spacing: 6) {
-                                Image(systemName: "building.2.fill").font(.system(size: 36)).foregroundColor(.goldDark)
-                                Text("Zillit Coda").font(.system(size: 24, weight: .bold))
-                                Text("Account Hub").font(.system(size: 13)).foregroundColor(.secondary)
-                            }.padding(.top, 20).padding(.bottom, 30)
+                            // ── Header row: Zillit Coda title centered,
+                            //    theme toggle pinned trailing.
+                            ZStack {
+                                VStack(spacing: 2) {
+                                    Text("Zillit Coda")
+                                        .font(.system(size: 18, weight: .bold))
+                                    Text("Account Hub")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.secondary)
+                                }
+                                HStack {
+                                    Spacer()
+                                    Button(action: { theme.toggleTheme() }) {
+                                        Image(systemName: theme.isDark ? "sun.max.fill" : "moon.fill")
+                                            .font(.system(size: 18))
+                                            .foregroundColor(.goldDark)
+                                            .frame(width: 36, height: 36)
+                                            .background(Color.gold.opacity(0.12))
+                                            .cornerRadius(10)
+                                    }.buttonStyle(BorderlessButtonStyle())
+                                }
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.top, 12)
+                            .padding(.bottom, 24)
 
                             if let user = appState.currentUser {
                                 VStack(spacing: 4) {
@@ -67,27 +76,6 @@ struct ContentView: View {
                             }
 
                             VStack(spacing: 12) {
-                                // ── New live-shape AccountHub entry ──────
-                                // Mirrors live: this tile only appears for
-                                // accountants. Non-accountants see the regular
-                                // module tiles below.
-                                if appState.currentUser?.isAccountant == true {
-                                    NavigationLink(destination: AccountHubAccountantView(), isActive: $showNewAccountHub) {
-                                        HStack(spacing: 12) {
-                                            Image(systemName: "sparkles").font(.system(size: 20)).foregroundColor(.white)
-                                                .frame(width: 36, height: 36).background(Color.goldDark).cornerRadius(8)
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text("Account Hub").font(.system(size: 15, weight: .semibold))
-                                                Text("Vendors, POs, invoices, card & cash expenses").font(.system(size: 12)).foregroundColor(.secondary)
-                                            }
-                                            Spacer()
-                                            Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(.goldDark)
-                                        }.padding(14).background(Color.bgSurface).cornerRadius(12)
-                                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.goldDark.opacity(0.4), lineWidth: 1))
-                                        .contentShape(Rectangle())
-                                    }.buttonStyle(BorderlessButtonStyle())
-                                }
-
                                 Button { showUserPicker = true } label: {
                                     HStack(spacing: 12) {
                                         Image(systemName: "person.crop.circle").font(.system(size: 20)).foregroundColor(.goldDark).frame(width: 36)
@@ -102,6 +90,27 @@ struct ContentView: View {
                                     .contentShape(Rectangle())
                                 }.buttonStyle(BorderlessButtonStyle())
 
+                                // ── Live-shape AccountHub entry (accountants only) ──
+                                // Mirrors live: this tile only appears for
+                                // accountants. Non-accountants see the regular
+                                // module tiles below.
+                                if appState.currentUser?.isAccountant == true {
+                                    NavigationLink(destination: AccountHubAccountantView(), isActive: $showNewAccountHub) {
+                                        HStack(spacing: 12) {
+                                            Image(systemName: "sparkles").font(.system(size: 20)).foregroundColor(.white)
+                                                .frame(width: 36, height: 36).background(Color.goldDark).cornerRadius(8)
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text("Account Hub").font(.system(size: 15, weight: .semibold))
+                                                
+                                            }
+                                            Spacer()
+                                            Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(.goldDark)
+                                        }.padding(14).background(Color.bgSurface).cornerRadius(12)
+                                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.goldDark.opacity(0.4), lineWidth: 1))
+                                        .contentShape(Rectangle())
+                                    }.buttonStyle(BorderlessButtonStyle())
+                                }
+
                                 // Module tiles below are hidden for accountants — they
                                 // get the unified Account Hub entry above instead. Non-
                                 // accountants see the per-module tiles. Deal Memo stays
@@ -114,7 +123,7 @@ struct ContentView: View {
                                                 .frame(width: 36, height: 36).background(Color.gold).cornerRadius(8)
                                             VStack(alignment: .leading, spacing: 2) {
                                                 Text("Purchase Orders").font(.system(size: 15, weight: .semibold))
-                                                Text("Create, track, and manage POs").font(.system(size: 12)).foregroundColor(.secondary)
+                                                
                                             }
                                             Spacer()
                                             Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(.goldDark)
@@ -129,7 +138,6 @@ struct ContentView: View {
                                                 .frame(width: 36, height: 36).background(Color(red: 0.56, green: 0.27, blue: 0.68)).cornerRadius(8)
                                             VStack(alignment: .leading, spacing: 2) {
                                                 Text("Card Expenses").font(.system(size: 15, weight: .semibold))
-                                                Text("Track and manage card expenses").font(.system(size: 12)).foregroundColor(.secondary)
                                             }
                                             Spacer()
                                             Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(Color(red: 0.56, green: 0.27, blue: 0.68))
@@ -145,12 +153,29 @@ struct ContentView: View {
                                             .frame(width: 36, height: 36).background(Color(red: 0.85, green: 0.45, blue: 0.15)).cornerRadius(8)
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text("Deal Memo").font(.system(size: 15, weight: .semibold))
-                                            Text("Crew contracts, rates and signature workflow").font(.system(size: 12)).foregroundColor(.secondary)
+
                                         }
                                         Spacer()
                                         Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(Color(red: 0.85, green: 0.45, blue: 0.15))
                                     }.padding(14).background(Color.bgSurface).cornerRadius(12)
                                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.85, green: 0.45, blue: 0.15).opacity(0.3), lineWidth: 1))
+                                    .contentShape(Rectangle())
+                                }.buttonStyle(BorderlessButtonStyle())
+
+                                // ── Time Card tile (visible to everyone — sub-cards
+                                //    inside are role-gated via TimecardMetadata).
+                                NavigationLink(destination: TimecardLandingModule(), isActive: $showTimeCard) {
+                                    HStack(spacing: 12) {
+                                        Image(systemName: "calendar.badge.clock").font(.system(size: 20)).foregroundColor(.white)
+                                            .frame(width: 36, height: 36).background(Color(red: 0.99, green: 0.58, blue: 0.02)).cornerRadius(8)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Time Cards").font(.system(size: 15, weight: .semibold))
+                                           
+                                        }
+                                        Spacer()
+                                        Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(Color(red: 0.99, green: 0.58, blue: 0.02))
+                                    }.padding(14).background(Color.bgSurface).cornerRadius(12)
+                                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.99, green: 0.58, blue: 0.02).opacity(0.3), lineWidth: 1))
                                     .contentShape(Rectangle())
                                 }.buttonStyle(BorderlessButtonStyle())
 
@@ -161,7 +186,6 @@ struct ContentView: View {
                                                 .frame(width: 36, height: 36).background(Color(red: 0.2, green: 0.7, blue: 0.45)).cornerRadius(8)
                                             VStack(alignment: .leading, spacing: 2) {
                                                 Text("Cash & Expenses").font(.system(size: 15, weight: .semibold))
-                                                Text("Petty cash & out-of-pocket claims").font(.system(size: 12)).foregroundColor(.secondary)
                                             }
                                             Spacer()
                                             Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(Color(red: 0.2, green: 0.7, blue: 0.45))
@@ -216,7 +240,7 @@ struct POHubPage: View {
                             .frame(width: 36, height: 36).background(Color.gold).cornerRadius(8)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("All Purchase Orders").font(.system(size: 15, weight: .semibold))
-                            Text("View, create and manage POs").font(.system(size: 12)).foregroundColor(.secondary)
+       
                         }
                         Spacer()
                         Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(.goldDark)
@@ -232,7 +256,7 @@ struct POHubPage: View {
                             .frame(width: 36, height: 36).background(Color(red: 0.35, green: 0.72, blue: 0.36)).cornerRadius(8)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Vendors").font(.system(size: 15, weight: .semibold))
-                            Text("Manage vendor contacts").font(.system(size: 12)).foregroundColor(.secondary)
+                        
                         }
                         Spacer()
                         Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(Color(red: 0.35, green: 0.72, blue: 0.36))
@@ -248,7 +272,7 @@ struct POHubPage: View {
                             .frame(width: 36, height: 36).background(Color(red: 0.2, green: 0.6, blue: 0.86)).cornerRadius(8)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Invoices").font(.system(size: 15, weight: .semibold))
-                            Text("View and manage invoices").font(.system(size: 12)).foregroundColor(.secondary)
+                  
                         }
                         Spacer()
                         Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(Color(red: 0.2, green: 0.6, blue: 0.86))

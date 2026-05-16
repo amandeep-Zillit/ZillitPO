@@ -19,7 +19,6 @@ struct DealMemoModule: View {
         ZStack {
             Color.bgBase.edgesIgnoringSafeArea(.all)
             VStack(spacing: 0) {
-                header
                 tabBar
                 Divider().background(Color.borderColor)
                 ScrollView {
@@ -49,25 +48,7 @@ struct DealMemoModule: View {
         }
     }
 
-    // MARK: - Header
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Contracts")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(.secondary)
-                .textCase(.uppercase)
-            Text("Deal Memo")
-                .font(.system(size: 20, weight: .bold))
-            Text("Create and manage crew deal memos — rates, allowances, contract periods, and signature workflows.")
-                .font(.system(size: 12))
-                .foregroundColor(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.top, 14)
-        .padding(.bottom, 10)
-    }
 
     // MARK: - Tab bar
 

@@ -15,16 +15,22 @@
 		074EC8CE7A87ECD861AB04FE /* DealMemoViewModel+enums.swift in Sources */ = {isa = PBXBuildFile; fileRef = C67944621F3B63E0DA4F1400 /* DealMemoViewModel+enums.swift */; };
 		08FDABEFA2EE0B541712A4CA /* CodingQueueListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE8884F7DD62533A5A26DCC /* CodingQueueListView.swift */; };
 		0972DD2D5B74A8CBC373F987 /* DMApprovalQueuePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0274DA7B9F348EFF150347E2 /* DMApprovalQueuePage.swift */; };
+		0CD5C61E42A42E7EA578DEE0 /* WeeklyTimecardModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C2251391795E35F73AD2A10 /* WeeklyTimecardModule.swift */; };
+		0E675B4B73D103F8D8C2FBE5 /* AssignedTimecardsModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35B47FD11C9107FFBBA05B55 /* AssignedTimecardsModule.swift */; };
 		0F2D5FFFB36A95BC1E1883DE /* MultilineTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BB0E2DFA3CBA0EC9DCA50E1 /* MultilineTextView.swift */; };
 		10B44507376B154934EB906D /* InvoicesViewModel+apis.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFA61CCBACDB23543392EEA8 /* InvoicesViewModel+apis.swift */; };
+		11A9D64C03E2AC7C0FD5D0BC /* TimecardCodableTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E51AEDC8EA7BAB353C22328 /* TimecardCodableTask.swift */; };
 		1517052305A48B0D8F8381A8 /* ClaimFilePickerPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4893AF093979B596C18AC3F /* ClaimFilePickerPage.swift */; };
 		15C167DE3726ABDF72D2CF51 /* RecordCashReturnPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1287DF4603F34400025E9FA9 /* RecordCashReturnPage.swift */; };
 		19AC6962ECA87E24DC36C0CF /* VendorSearchField.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2F088EA8BF33F8984341382 /* VendorSearchField.swift */; };
 		1A0A1539BC62F64FD5BF81A2 /* DealMemoViewModel+funcs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F209E4BD61CE5A925DEB418 /* DealMemoViewModel+funcs.swift */; };
+		1B6D9CE8488C9BF245069056 /* DMCreatePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = E859B75749DD5305439B1ACC /* DMCreatePage.swift */; };
 		1CC8620810444BC263EC846B /* FormatUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = B532B37DABAB2B4686CF510A /* FormatUtils.swift */; };
+		1D42F2558CCD6E8570535046 /* Step8Documents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5B30F7A539B3B09EF61223D /* Step8Documents.swift */; };
 		1E1402FCF33B13268BC894EA /* POQueriesPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AD3549A32853EC9A0DF3E75 /* POQueriesPage.swift */; };
 		1EFFE7EC6E89555306536B06 /* CardViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57EEA8BA71CFA5AFF4971901 /* CardViewModel.swift */; };
 		202356D615ED6A3481734960 /* LineItemsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = C80493A784C726EAA7E0B381 /* LineItemsPage.swift */; };
+		205599C6B72BF9DEBF2CF295 /* CrewReviewModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B8C61ACDA08A77214F6DF17 /* CrewReviewModule.swift */; };
 		20C76E5751CC7B5185DD821E /* DMMyDealPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CF5DE350E9BEF2C32BA6D47 /* DMMyDealPage.swift */; };
 		245CD6315F2F80DAF47B78CC /* LegacyPOCodableTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA85A79A58DDEAC25A1492E5 /* LegacyPOCodableTask.swift */; };
 		2546B561E19CAECD72A4015E /* DealMemoViewModel+apis.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FF7ED272AA49D632424A236 /* DealMemoViewModel+apis.swift */; };
@@ -38,12 +44,15 @@
 		33E901B2490204392C08ED1A /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09763CA00F19737D01701F26 /* Models.swift */; };
 		3520AC254B0EEB2CE0D3FAB8 /* InvoicesModuleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67A30CA6B2E5D2F7B08311C8 /* InvoicesModuleView.swift */; };
 		352C4D8C067FCBB6BA0E1255 /* PDFViewerPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4A94C2DD016F5C285B4A753 /* PDFViewerPage.swift */; };
+		35EA83D256DDEBE5CFAC1CCB /* Step2Crew.swift in Sources */ = {isa = PBXBuildFile; fileRef = D933FC0868933BAE0ED3FD11 /* Step2Crew.swift */; };
 		39A8C083CBCBB2BE7A834E58 /* LegacyPOViewModel+enums.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2D8A9C0C0CCE0F8C68984C1 /* LegacyPOViewModel+enums.swift */; };
 		3BA39C12F8B0549FE9F57440 /* AccountHubViewModel+funcs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2419589BB0DAF910E07EE4D0 /* AccountHubViewModel+funcs.swift */; };
 		3BFBD16227EB10FFA869FC7A /* CardTransactionDetailPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = D876D985AD3B29E18AA02FB7 /* CardTransactionDetailPage.swift */; };
 		3EC3AF1A30B9C66F20945E18 /* CashViewModel+enums.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B97E03DD4CF427A0F8E68B4 /* CashViewModel+enums.swift */; };
+		3EEEDE591724CEDBE8632902 /* Step1Territory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22584481D5CC36C5A7AEDE04 /* Step1Territory.swift */; };
 		4153B355625DFDBD77E11B4F /* CashExpensesModuleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8358CCE1710D57E65A826ED9 /* CashExpensesModuleView.swift */; };
 		433D01177F8711C7170602F4 /* CardExpensesBadgeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9D7A8634EBB372DB99D1DD3 /* CardExpensesBadgeViewModel.swift */; };
+		44C8B5679F38D9611BB96D2B /* Step6Allowances.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51012101FB490B7E1E8D1FC9 /* Step6Allowances.swift */; };
 		450E92B3106541B4FB2B4882 /* RejectSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3DF5F14E89F20F59FB509F7 /* RejectSheetView.swift */; };
 		4799202A1C7BDD52FE2F89CB /* CardDetailPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3918E4B746E0B5A25A6899C8 /* CardDetailPage.swift */; };
 		48DE48A15B70445A8FC8247C /* FloatRequestFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFC1C2C4F0F74868F1E03A6A /* FloatRequestFormView.swift */; };
@@ -53,19 +62,24 @@
 		4F01E8785B82DB7A08247E5A /* CountryNamePickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49252CE72FE729B7D5AB63A1 /* CountryNamePickerSheet.swift */; };
 		4F536A01E993B625FADBFB3F /* CardRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7079E5340E797EE597F72943 /* CardRow.swift */; };
 		4FF44F8CAB0A380AE7D73548 /* AccountHubRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = C89D5595C77A572395CE146D /* AccountHubRequest.swift */; };
+		5051CE4B8CEFD13441E0D230 /* TimecardViewModel+funcs.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7801396B73946B63D9885AE /* TimecardViewModel+funcs.swift */; };
 		5058608CAF86B34973D6DED6 /* CardExpenseModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2229226472E0263AB2829943 /* CardExpenseModels.swift */; };
 		50C76E96515E74B8F325806D /* CoordinatorApprovalQueueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E64E263B3D86EE17BA6A35B /* CoordinatorApprovalQueueView.swift */; };
 		51CB77D53C2B7D875F30A63B /* ZillitPOApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B57D8C30DC7258CD8598F6A /* ZillitPOApp.swift */; };
+		533F19F01135E80B9B442D9B /* TimecardViewModel+enums.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD915A5B0FF8CB1C9F2A08FD /* TimecardViewModel+enums.swift */; };
 		53D9413220A3D169CFFAA4AC /* ActivateCardPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4877012A9878FF5D8A4F373A /* ActivateCardPage.swift */; };
 		5491E241E6C3B39473B9FCB9 /* DepartmentPOModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4971A25360236769BF3C7A98 /* DepartmentPOModule.swift */; };
+		56C0D6BFF609EBFCB267210B /* DailyLoginRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35735D5C2EB9A22612B8E1EE /* DailyLoginRequest.swift */; };
 		570FEAC722AD2912622D7C40 /* LegacyPOViewModel+funcs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69353D69AC65FC6449D0DC66 /* LegacyPOViewModel+funcs.swift */; };
 		5910FC2723E4E87164768222 /* FloatDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3AEAAF1602608E8450D17D1 /* FloatDetailView.swift */; };
+		592F605CF23BD0CBA5871534 /* TimecardConfigModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = C628EA3145BF5F5A260F18BE /* TimecardConfigModule.swift */; };
 		5944244E38A395FDA01C96E3 /* DMOverviewPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA8B3E7C8F3966BD94B4F3BC /* DMOverviewPage.swift */; };
 		5B80F06B2156BA138C6AAE26 /* InvoiceBadgeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE6032EB577807D738E8F7BA /* InvoiceBadgeViewModel.swift */; };
 		5BAA2513651D16F586F1D375 /* CashViewModel+funcs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BB3C8EE5CEF2A16DD6A3AE7 /* CashViewModel+funcs.swift */; };
 		5F76B049FD78B17E2EDB4E05 /* AccountHubViewModel+enums.swift in Sources */ = {isa = PBXBuildFile; fileRef = 787BA14610AF4D050E702BE6 /* AccountHubViewModel+enums.swift */; };
 		5FD7AF8A279C620027AF4788 /* LegacyPOViewModel+cardExpenses.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67175FE848C3636E886A9F56 /* LegacyPOViewModel+cardExpenses.swift */; };
 		607493DF8747F4AC7EE73833 /* AccountHubViewModel+apis.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6576BD6B8673D1FA498F2DCB /* AccountHubViewModel+apis.swift */; };
+		61577F5A7500848B1F2B0B80 /* Step4DealStructure.swift in Sources */ = {isa = PBXBuildFile; fileRef = C09DB9A9334E95D779F1DBC3 /* Step4DealStructure.swift */; };
 		61DF5102C215F7A9636D36B2 /* EditCardTransactionPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAC4EA39D4F0073B273807BB /* EditCardTransactionPage.swift */; };
 		664014403B1C272B7BDF372F /* CardViewModel+funcs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A21EE3B539D5CFA84FD6AC2 /* CardViewModel+funcs.swift */; };
 		66783DC6DC435D523AD97F49 /* RequestCardPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADAF94DA6906F0420F7AFDDA /* RequestCardPage.swift */; };
@@ -89,7 +103,9 @@
 		7EB041D8D17307BC95E68997 /* AccountantApprovalQueuePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8456432AB9E96A24B9008A11 /* AccountantApprovalQueuePage.swift */; };
 		8150AA87506A238C82BB1135 /* ClaimsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E74AEFB61019CE43107C21D /* ClaimsListView.swift */; };
 		81EB2ED5B1308BC82F4FA0F7 /* CreateTemplatePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57789A5A0536ED2B199C19F7 /* CreateTemplatePage.swift */; };
+		837FF33B19177A61637448A0 /* TimecardViewModel+apis.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC068F5E904CABE0F9836EC0 /* TimecardViewModel+apis.swift */; };
 		84ECE197E96473E0BFA43D5D /* DealMemoModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26A35B368598A15493790955 /* DealMemoModels.swift */; };
+		85520C914599B6F1209ECDCF /* Step5Rates.swift in Sources */ = {isa = PBXBuildFile; fileRef = 644C719CBB4BFCC0253F8864 /* Step5Rates.swift */; };
 		888E8EC508ECB652564FEADF /* DMRatesBiblePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A96F049DDFDEDBB0353B028B /* DMRatesBiblePage.swift */; };
 		8A211DEF994F756F0576FAC2 /* CardViewModel+apis.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2E0FF139EB22212B0A4FD2D /* CardViewModel+apis.swift */; };
 		8B16B47ED029CCD0616A38B2 /* SmartAlertsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 869F4B88C35CE06EF8F6D380 /* SmartAlertsPage.swift */; };
@@ -118,28 +134,37 @@
 		AB206279C8CDB00AAC43557C /* DealMemoCodableTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1861DF15B23AE30E4130ED8E /* DealMemoCodableTask.swift */; };
 		AC65AE01506C45B52DF9ABAE /* VendorsPinnedHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EC99264A3937D962FF532ED /* VendorsPinnedHeader.swift */; };
 		AD8D93DFA0BD8B60AFFED06E /* TopUpDetailPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EDD504297B1BF568F5D9A56 /* TopUpDetailPage.swift */; };
+		AF804F41C2082B1AC3C7F4BF /* TimecardViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 025BB63DC82C6F25E9D7460A /* TimecardViewModel.swift */; };
 		B00C7EBAB11F955F089FCB49 /* InvoiceQueriesPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F276B85045E5C5D3536AE24 /* InvoiceQueriesPage.swift */; };
 		B6817B596555DB7E3D4AB179 /* CashExpenseRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FB867D43BE6C60094565AE4 /* CashExpenseRequest.swift */; };
+		B6C1A2CD5A400AE8D8EA5AE0 /* DMWizardState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AA429FCC15BE2A63135E176 /* DMWizardState.swift */; };
 		B6CEC26AE7A3748A629B8FC3 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2381E2B5CA72D943987DCF8D /* APIClient.swift */; };
+		B7B52F281B958A5D2E7D63D2 /* Step10Preview.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF9FF9BE873A2F6FBF329510 /* Step10Preview.swift */; };
 		B9927BE72490302246F05FFA /* PickerSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C017CA5D9CDAF9BA2F693F8 /* PickerSheetView.swift */; };
+		BA90D20F7C3180067DF03A17 /* Step9Payroll.swift in Sources */ = {isa = PBXBuildFile; fileRef = C23961BEC5DEB0B2DAED8B7E /* Step9Payroll.swift */; };
 		BACE752990C925A79BACBBB4 /* AssignPhysicalCardPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E935C9F0072401B20646A56 /* AssignPhysicalCardPage.swift */; };
 		BB4D162AD3C025F1FD91C91B /* ApprovalQueuePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB1FDD6398ABCBAEC97CC8CA /* ApprovalQueuePage.swift */; };
 		BCAF479A1212FAE60BC9F304 /* PODraftsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88F5B290EDB19FFDBCA0166D /* PODraftsListView.swift */; };
 		BCC567F00969CF7014552161 /* UploadReceiptPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A72F7411469E73A6F7FF1846 /* UploadReceiptPage.swift */; };
 		BE7F74A11D13BD44C7E7F29C /* PODetailModalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E744912AD6F810D89618665 /* PODetailModalView.swift */; };
 		BEEE9F52A26158A0FF76174F /* CodingDetailPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FAEDCD23A9ECDA75F52B029 /* CodingDetailPage.swift */; };
+		BF9C01F427A30A9D86EFF409 /* Step3Compliance.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABD6519451EC354D9CAEE8FD /* Step3Compliance.swift */; };
 		C012352A81D6CBF27CB4D84A /* AccountHubCodableTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3F7F0920459A3F2386E4361 /* AccountHubCodableTask.swift */; };
 		C0BD6D318076BF18B9047ED8 /* InvoicesViewModel+funcs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32E61D4A129D265ACCFB66E3 /* InvoicesViewModel+funcs.swift */; };
 		C39975F17C3B9135CA780CA5 /* CashExpenseModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 787069DCAD9D359090459F1F /* CashExpenseModels.swift */; };
 		C413F9AC28597E95DF76B045 /* ClaimDetailPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = C65D42680BB5CFBB71F232B9 /* ClaimDetailPage.swift */; };
+		C41BB249B295217526EC2C15 /* TimecardLandingModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55F758CB81651476F89FC79A /* TimecardLandingModule.swift */; };
 		C5C764E16A6A96F578DCE033 /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB98136B197D64552FE0229A /* StatusBadge.swift */; };
 		C5E0F08B5613517784C3A8AB /* CardExpenseCodableTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 510EB96594A0052E63424B6D /* CardExpenseCodableTask.swift */; };
 		C68F072365FDD0AA7D41131F /* CardListPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37833F85C8D007026159C51F /* CardListPage.swift */; };
+		C8042FDFF51AD091D065E58A /* TCApprovalQueuePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0F6718E949D979E25A8DD54 /* TCApprovalQueuePage.swift */; };
 		C8346C2A35C9C5119FA7C346 /* DealMemoViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2FD56CE024BE2946EB5793C /* DealMemoViewModel.swift */; };
 		C84CA961BF3075A71125845D /* VendorsScrollableList.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD9B1A556FB9F29CBD0562B /* VendorsScrollableList.swift */; };
 		C8513C0CB794569F4641A11D /* POCodableTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D3264C3EC5905EA70E5D5B9 /* POCodableTask.swift */; };
+		C8F2077F85F545973A5A03D8 /* DMStepPrimitives.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F7DD6BD06C5083EA83799BC /* DMStepPrimitives.swift */; };
 		C916D6F71DFD5AC931D0C9F6 /* POHistoryPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E1E41BBA26016D50B09F66A /* POHistoryPage.swift */; };
 		CC4AE40C0B246270820EE532 /* POEditFormPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE1438268E6B295655AD1540 /* POEditFormPage.swift */; };
+		D05E1695843BBD06EFD7484C /* TimecardRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E97EED13D037225D913E29B /* TimecardRequest.swift */; };
 		D095FCB6EC92B4E87DA182D9 /* RejectPaymentRunSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4786201B41618F720F99410B /* RejectPaymentRunSheetView.swift */; };
 		D19AAFE9DBA707C0B499F964 /* CashExpenseCodableTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD295AAB2A126C093F46942 /* CashExpenseCodableTask.swift */; };
 		D4724E13FCCB3E06B706C0D2 /* EditCardRequestPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B68FB7E67D552FD7E3A9D61 /* EditCardRequestPage.swift */; };
@@ -154,10 +179,12 @@
 		DCBAC28CDED2ADB771A84A94 /* InputField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1605BD2F3FD366139F1B7DBC /* InputField.swift */; };
 		DEA78B934C5ED94E55AC539E /* POFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7349E3AA955C5C02C9E2FEB /* POFormView.swift */; };
 		DFE2A1EBC45EAA5DD7E029E0 /* OutOfPocketModuleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB9A6C88A7297C6732B8E897 /* OutOfPocketModuleView.swift */; };
+		E0574F9706E8A8C7486CDAD3 /* MyTimecardsModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36A9C5AC4C62B6593FF0DE2A /* MyTimecardsModule.swift */; };
 		E18E1A7AC695442F95D2798C /* PORequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA21ACFA37D6D289F4183D9C /* PORequest.swift */; };
 		E425E9D03CB659F20DAA9001 /* VendorFormPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3865A42F7F268790BEEA50E5 /* VendorFormPage.swift */; };
 		E4F0C3324C2DCB6FEF8820D0 /* AccountHubViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FB6286E6F6C1834D154E791 /* AccountHubViewModel.swift */; };
 		E5038F5A75F6B32DADA3F961 /* POViewModel+funcs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 582B2667A97036B1FE62B639 /* POViewModel+funcs.swift */; };
+		E6605D3EDEEF8F05C1605568 /* TimecardModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DB34F749A425B695059ACA7 /* TimecardModels.swift */; };
 		E6A6AA7E2442EF73DCF8F934 /* PaymentRunApprovalPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46D6ACB9E93BF4E34F3CF710 /* PaymentRunApprovalPage.swift */; };
 		E760BEAC4F8F54CF77B44E31 /* InvoicesRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 612497DF3A8D3FC3068385EB /* InvoicesRequest.swift */; };
 		E862C079EAED02BF9356C70D /* AddCodeLineItemsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64366D8B42F2E01538D42064 /* AddCodeLineItemsPage.swift */; };
@@ -175,11 +202,13 @@
 		F9348DB54459F9E2B814AD1A /* CardCodingQueuePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81D9FD93472AA9F011473BE /* CardCodingQueuePage.swift */; };
 		FC9A1196FC63AB01C4D3053D /* FloatRequestListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E782E65AF99DED7E1162CA30 /* FloatRequestListView.swift */; };
 		FD6EE2EF5FAEF72678DC97CF /* QuickFiltersBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = D966C5823F87C20C53E76C1E /* QuickFiltersBar.swift */; };
+		FE674983599562FBCF0DDB84 /* Step7Nominal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26F3790562EC084F9B8A77CC /* Step7Nominal.swift */; };
 		FFA56019A51F3D9C71380D37 /* CardExpenseRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23C6FBEDA567EF57CE1DF0A6 /* CardExpenseRequest.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		021B13F0450B1CDB2E82DEA8 /* ActivityIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityIndicatorView.swift; sourceTree = "<group>"; };
+		025BB63DC82C6F25E9D7460A /* TimecardViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimecardViewModel.swift; sourceTree = "<group>"; };
 		0274DA7B9F348EFF150347E2 /* DMApprovalQueuePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DMApprovalQueuePage.swift; sourceTree = "<group>"; };
 		04B897D2E56645051629A9B7 /* ReceiptInboxPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptInboxPage.swift; sourceTree = "<group>"; };
 		068235616C44CFED37D64082 /* DraftsTemplatesPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftsTemplatesPage.swift; sourceTree = "<group>"; };
@@ -202,24 +231,30 @@
 		1E935C9F0072401B20646A56 /* AssignPhysicalCardPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssignPhysicalCardPage.swift; sourceTree = "<group>"; };
 		1EDD504297B1BF568F5D9A56 /* TopUpDetailPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopUpDetailPage.swift; sourceTree = "<group>"; };
 		2229226472E0263AB2829943 /* CardExpenseModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardExpenseModels.swift; sourceTree = "<group>"; };
+		22584481D5CC36C5A7AEDE04 /* Step1Territory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Step1Territory.swift; sourceTree = "<group>"; };
 		2381E2B5CA72D943987DCF8D /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		23C6FBEDA567EF57CE1DF0A6 /* CardExpenseRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardExpenseRequest.swift; sourceTree = "<group>"; };
 		2419589BB0DAF910E07EE4D0 /* AccountHubViewModel+funcs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AccountHubViewModel+funcs.swift"; sourceTree = "<group>"; };
 		242CEB7C6876FC17034C4262 /* ReceiptDetailPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptDetailPage.swift; sourceTree = "<group>"; };
 		26A35B368598A15493790955 /* DealMemoModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DealMemoModels.swift; sourceTree = "<group>"; };
+		26F3790562EC084F9B8A77CC /* Step7Nominal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Step7Nominal.swift; sourceTree = "<group>"; };
 		2736C28D805D99F6CADAAD00 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		28E79E80D085384B606D1C43 /* ApprovalHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApprovalHelpers.swift; sourceTree = "<group>"; };
 		2A21EE3B539D5CFA84FD6AC2 /* CardViewModel+funcs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CardViewModel+funcs.swift"; sourceTree = "<group>"; };
 		2FD88BCEF76ED1437B8C1C7E /* ReceiptsTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptsTabView.swift; sourceTree = "<group>"; };
 		311EC1942826E075C2B9652A /* PhoneField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneField.swift; sourceTree = "<group>"; };
 		32E61D4A129D265ACCFB66E3 /* InvoicesViewModel+funcs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "InvoicesViewModel+funcs.swift"; sourceTree = "<group>"; };
+		35735D5C2EB9A22612B8E1EE /* DailyLoginRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyLoginRequest.swift; sourceTree = "<group>"; };
+		35B47FD11C9107FFBBA05B55 /* AssignedTimecardsModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssignedTimecardsModule.swift; sourceTree = "<group>"; };
 		35B6D59018CDDAFDC9643FD6 /* LegacyPOViewModel+cashExpenses.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LegacyPOViewModel+cashExpenses.swift"; sourceTree = "<group>"; };
 		35F8E05F3CC328B28F9B51D8 /* CardTransactionRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardTransactionRow.swift; sourceTree = "<group>"; };
+		36A9C5AC4C62B6593FF0DE2A /* MyTimecardsModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyTimecardsModule.swift; sourceTree = "<group>"; };
 		37833F85C8D007026159C51F /* CardListPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardListPage.swift; sourceTree = "<group>"; };
 		37F621DE001328FE4B12CDD1 /* CompatActionSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompatActionSheet.swift; sourceTree = "<group>"; };
 		3863662F8CB21BC9405DC64F /* POViewModel+enums.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "POViewModel+enums.swift"; sourceTree = "<group>"; };
 		3865A42F7F268790BEEA50E5 /* VendorFormPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VendorFormPage.swift; sourceTree = "<group>"; };
 		3918E4B746E0B5A25A6899C8 /* CardDetailPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardDetailPage.swift; sourceTree = "<group>"; };
+		3AA429FCC15BE2A63135E176 /* DMWizardState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DMWizardState.swift; sourceTree = "<group>"; };
 		3B97E03DD4CF427A0F8E68B4 /* CashViewModel+enums.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CashViewModel+enums.swift"; sourceTree = "<group>"; };
 		3C43A60BE1FDD9125F16E13E /* RejectInvoiceSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RejectInvoiceSheetView.swift; sourceTree = "<group>"; };
 		3E744912AD6F810D89618665 /* PODetailModalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PODetailModalView.swift; sourceTree = "<group>"; };
@@ -238,9 +273,11 @@
 		4C6536869232178BFAD734A1 /* POViewModel+apis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "POViewModel+apis.swift"; sourceTree = "<group>"; };
 		4FAEDCD23A9ECDA75F52B029 /* CodingDetailPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodingDetailPage.swift; sourceTree = "<group>"; };
 		4FF7ED272AA49D632424A236 /* DealMemoViewModel+apis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DealMemoViewModel+apis.swift"; sourceTree = "<group>"; };
+		51012101FB490B7E1E8D1FC9 /* Step6Allowances.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Step6Allowances.swift; sourceTree = "<group>"; };
 		510EB96594A0052E63424B6D /* CardExpenseCodableTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardExpenseCodableTask.swift; sourceTree = "<group>"; };
 		518C6C6B249D5120AB683E63 /* SubmitClaimFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubmitClaimFormView.swift; sourceTree = "<group>"; };
 		55664FF99A310209BF54E7D3 /* POViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = POViewModel.swift; sourceTree = "<group>"; };
+		55F758CB81651476F89FC79A /* TimecardLandingModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimecardLandingModule.swift; sourceTree = "<group>"; };
 		57789A5A0536ED2B199C19F7 /* CreateTemplatePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateTemplatePage.swift; sourceTree = "<group>"; };
 		57EEA8BA71CFA5AFF4971901 /* CardViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardViewModel.swift; sourceTree = "<group>"; };
 		582B2667A97036B1FE62B639 /* POViewModel+funcs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "POViewModel+funcs.swift"; sourceTree = "<group>"; };
@@ -252,6 +289,7 @@
 		612497DF3A8D3FC3068385EB /* InvoicesRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvoicesRequest.swift; sourceTree = "<group>"; };
 		63260BDFF19DBF4A6DC6DAE6 /* VendorDetailPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VendorDetailPage.swift; sourceTree = "<group>"; };
 		64366D8B42F2E01538D42064 /* AddCodeLineItemsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddCodeLineItemsPage.swift; sourceTree = "<group>"; };
+		644C719CBB4BFCC0253F8864 /* Step5Rates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Step5Rates.swift; sourceTree = "<group>"; };
 		649AF989815CDF2B06B118FC /* InvoicesCodableTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvoicesCodableTask.swift; sourceTree = "<group>"; };
 		6576BD6B8673D1FA498F2DCB /* AccountHubViewModel+apis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AccountHubViewModel+apis.swift"; sourceTree = "<group>"; };
 		6659BE5956A7630BA255FB91 /* StaticData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StaticData.swift; sourceTree = "<group>"; };
@@ -286,13 +324,21 @@
 		8EC99264A3937D962FF532ED /* VendorsPinnedHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VendorsPinnedHeader.swift; sourceTree = "<group>"; };
 		8FB867D43BE6C60094565AE4 /* CashExpenseRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashExpenseRequest.swift; sourceTree = "<group>"; };
 		953E39F973DA385032D23049 /* DMDealsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DMDealsPage.swift; sourceTree = "<group>"; };
+		9B8C61ACDA08A77214F6DF17 /* CrewReviewModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrewReviewModule.swift; sourceTree = "<group>"; };
 		9BB0E2DFA3CBA0EC9DCA50E1 /* MultilineTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultilineTextView.swift; sourceTree = "<group>"; };
+		9C2251391795E35F73AD2A10 /* WeeklyTimecardModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyTimecardModule.swift; sourceTree = "<group>"; };
 		9C9A060A9194E5D777ED0642 /* EditTemplatePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditTemplatePage.swift; sourceTree = "<group>"; };
 		9D96523BE6EC49850CF6841E /* ZillitPO.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ZillitPO.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		9DB34F749A425B695059ACA7 /* TimecardModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimecardModels.swift; sourceTree = "<group>"; };
+		9E51AEDC8EA7BAB353C22328 /* TimecardCodableTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimecardCodableTask.swift; sourceTree = "<group>"; };
+		9E97EED13D037225D913E29B /* TimecardRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimecardRequest.swift; sourceTree = "<group>"; };
+		9F7DD6BD06C5083EA83799BC /* DMStepPrimitives.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DMStepPrimitives.swift; sourceTree = "<group>"; };
 		A2D8A9C0C0CCE0F8C68984C1 /* LegacyPOViewModel+enums.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LegacyPOViewModel+enums.swift"; sourceTree = "<group>"; };
 		A52E479C7FB63D3E79DBED57 /* TemplateNameSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemplateNameSheet.swift; sourceTree = "<group>"; };
 		A72F7411469E73A6F7FF1846 /* UploadReceiptPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadReceiptPage.swift; sourceTree = "<group>"; };
 		A96F049DDFDEDBB0353B028B /* DMRatesBiblePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DMRatesBiblePage.swift; sourceTree = "<group>"; };
+		ABD6519451EC354D9CAEE8FD /* Step3Compliance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Step3Compliance.swift; sourceTree = "<group>"; };
+		AC068F5E904CABE0F9836EC0 /* TimecardViewModel+apis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TimecardViewModel+apis.swift"; sourceTree = "<group>"; };
 		AC9760F879C5586168A06276 /* POFormPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = POFormPage.swift; sourceTree = "<group>"; };
 		ADAF94DA6906F0420F7AFDDA /* RequestCardPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RequestCardPage.swift; sourceTree = "<group>"; };
 		AFDF8920C5BAC4A0A2F26032 /* ApprovalCardRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApprovalCardRow.swift; sourceTree = "<group>"; };
@@ -306,9 +352,13 @@
 		BB98136B197D64552FE0229A /* StatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBadge.swift; sourceTree = "<group>"; };
 		BB9A6C88A7297C6732B8E897 /* OutOfPocketModuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutOfPocketModuleView.swift; sourceTree = "<group>"; };
 		BBA002E58F9C4544002AF7E1 /* CardViewModel+enums.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CardViewModel+enums.swift"; sourceTree = "<group>"; };
+		BD915A5B0FF8CB1C9F2A08FD /* TimecardViewModel+enums.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TimecardViewModel+enums.swift"; sourceTree = "<group>"; };
 		BDE8884F7DD62533A5A26DCC /* CodingQueueListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodingQueueListView.swift; sourceTree = "<group>"; };
 		BFA61CCBACDB23543392EEA8 /* InvoicesViewModel+apis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "InvoicesViewModel+apis.swift"; sourceTree = "<group>"; };
+		C09DB9A9334E95D779F1DBC3 /* Step4DealStructure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Step4DealStructure.swift; sourceTree = "<group>"; };
+		C23961BEC5DEB0B2DAED8B7E /* Step9Payroll.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Step9Payroll.swift; sourceTree = "<group>"; };
 		C3F7F0920459A3F2386E4361 /* AccountHubCodableTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountHubCodableTask.swift; sourceTree = "<group>"; };
+		C628EA3145BF5F5A260F18BE /* TimecardConfigModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimecardConfigModule.swift; sourceTree = "<group>"; };
 		C65D42680BB5CFBB71F232B9 /* ClaimDetailPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaimDetailPage.swift; sourceTree = "<group>"; };
 		C67944621F3B63E0DA4F1400 /* DealMemoViewModel+enums.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DealMemoViewModel+enums.swift"; sourceTree = "<group>"; };
 		C7FB978BE982A6D4950C9380 /* InvoiceDocumentViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvoiceDocumentViewer.swift; sourceTree = "<group>"; };
@@ -326,12 +376,15 @@
 		D2F088EA8BF33F8984341382 /* VendorSearchField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VendorSearchField.swift; sourceTree = "<group>"; };
 		D3DF5F14E89F20F59FB509F7 /* RejectSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RejectSheetView.swift; sourceTree = "<group>"; };
 		D55047FCDAC2A292E3C4B174 /* PettyCashModuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PettyCashModuleView.swift; sourceTree = "<group>"; };
+		D7801396B73946B63D9885AE /* TimecardViewModel+funcs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TimecardViewModel+funcs.swift"; sourceTree = "<group>"; };
 		D876D985AD3B29E18AA02FB7 /* CardTransactionDetailPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardTransactionDetailPage.swift; sourceTree = "<group>"; };
+		D933FC0868933BAE0ED3FD11 /* Step2Crew.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Step2Crew.swift; sourceTree = "<group>"; };
 		D966C5823F87C20C53E76C1E /* QuickFiltersBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickFiltersBar.swift; sourceTree = "<group>"; };
 		DB13831EEC67C33EED7BFD34 /* DetailRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailRow.swift; sourceTree = "<group>"; };
 		DC846F0DB232B84FFACE5F1A /* DateFieldView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateFieldView.swift; sourceTree = "<group>"; };
 		DE0A003A517AFAA7397444BD /* CashViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashViewModel.swift; sourceTree = "<group>"; };
 		DEADD6F899B8A91D292338E7 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		DF9FF9BE873A2F6FBF329510 /* Step10Preview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Step10Preview.swift; sourceTree = "<group>"; };
 		E2FD56CE024BE2946EB5793C /* DealMemoViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DealMemoViewModel.swift; sourceTree = "<group>"; };
 		E3249A0D4B64A7008A670D3D /* POStatsCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = POStatsCards.swift; sourceTree = "<group>"; };
 		E3AEAAF1602608E8450D17D1 /* FloatDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatDetailView.swift; sourceTree = "<group>"; };
@@ -339,12 +392,15 @@
 		E4A94C2DD016F5C285B4A753 /* PDFViewerPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFViewerPage.swift; sourceTree = "<group>"; };
 		E50C21579E0C799B9F379434 /* LegacyPOViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyPOViewModel.swift; sourceTree = "<group>"; };
 		E782E65AF99DED7E1162CA30 /* FloatRequestListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatRequestListView.swift; sourceTree = "<group>"; };
+		E859B75749DD5305439B1ACC /* DMCreatePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DMCreatePage.swift; sourceTree = "<group>"; };
 		EA21ACFA37D6D289F4183D9C /* PORequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PORequest.swift; sourceTree = "<group>"; };
 		EF38B0F1B39DE5E18FF0FEED /* LoaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoaderView.swift; sourceTree = "<group>"; };
 		EFC1C2C4F0F74868F1E03A6A /* FloatRequestFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatRequestFormView.swift; sourceTree = "<group>"; };
+		F0F6718E949D979E25A8DD54 /* TCApprovalQueuePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TCApprovalQueuePage.swift; sourceTree = "<group>"; };
 		F1A88473ECF61A28888BA4BD /* CardExpensesModuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardExpensesModuleView.swift; sourceTree = "<group>"; };
 		F2E0FF139EB22212B0A4FD2D /* CardViewModel+apis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CardViewModel+apis.swift"; sourceTree = "<group>"; };
 		F4893AF093979B596C18AC3F /* ClaimFilePickerPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaimFilePickerPage.swift; sourceTree = "<group>"; };
+		F5B30F7A539B3B09EF61223D /* Step8Documents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Step8Documents.swift; sourceTree = "<group>"; };
 		F7349E3AA955C5C02C9E2FEB /* POFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = POFormView.swift; sourceTree = "<group>"; };
 		FAC4EA39D4F0073B273807BB /* EditCardTransactionPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditCardTransactionPage.swift; sourceTree = "<group>"; };
 		FDD490C552D99D18571AF9B6 /* CardExpensesAccountantHub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardExpensesAccountantHub.swift; sourceTree = "<group>"; };
@@ -363,6 +419,7 @@
 				BA4C0B68DF12408C887D71A5 /* Invoices */,
 				557BBC76ECCB809C29A3E704 /* Legacy */,
 				4976A8147219E5CC1A6F91CF /* PO */,
+				7EC5BE608D61761FA4A903E5 /* Timecard */,
 			);
 			path = ViewModel;
 			sourceTree = "<group>";
@@ -457,6 +514,20 @@
 				582B2667A97036B1FE62B639 /* POViewModel+funcs.swift */,
 			);
 			path = PO;
+			sourceTree = "<group>";
+		};
+		525DECC6C5EEAF2C2C652B35 /* Timecard */ = {
+			isa = PBXGroup;
+			children = (
+				35B47FD11C9107FFBBA05B55 /* AssignedTimecardsModule.swift */,
+				9B8C61ACDA08A77214F6DF17 /* CrewReviewModule.swift */,
+				36A9C5AC4C62B6593FF0DE2A /* MyTimecardsModule.swift */,
+				F0F6718E949D979E25A8DD54 /* TCApprovalQueuePage.swift */,
+				C628EA3145BF5F5A260F18BE /* TimecardConfigModule.swift */,
+				55F758CB81651476F89FC79A /* TimecardLandingModule.swift */,
+				9C2251391795E35F73AD2A10 /* WeeklyTimecardModule.swift */,
+			);
+			path = Timecard;
 			sourceTree = "<group>";
 		};
 		53660599FF00059E551A3041 /* Legacy */ = {
@@ -579,6 +650,16 @@
 			path = Card;
 			sourceTree = "<group>";
 		};
+		6A69F274018A51CD0EA7282B /* Timecard */ = {
+			isa = PBXGroup;
+			children = (
+				35735D5C2EB9A22612B8E1EE /* DailyLoginRequest.swift */,
+				9E51AEDC8EA7BAB353C22328 /* TimecardCodableTask.swift */,
+				9E97EED13D037225D913E29B /* TimecardRequest.swift */,
+			);
+			path = Timecard;
+			sourceTree = "<group>";
+		};
 		6E23371D4F6A6F8171A87026 /* DealMemo */ = {
 			isa = PBXGroup;
 			children = (
@@ -606,6 +687,17 @@
 				612497DF3A8D3FC3068385EB /* InvoicesRequest.swift */,
 			);
 			path = Invoices;
+			sourceTree = "<group>";
+		};
+		7EC5BE608D61761FA4A903E5 /* Timecard */ = {
+			isa = PBXGroup;
+			children = (
+				025BB63DC82C6F25E9D7460A /* TimecardViewModel.swift */,
+				AC068F5E904CABE0F9836EC0 /* TimecardViewModel+apis.swift */,
+				BD915A5B0FF8CB1C9F2A08FD /* TimecardViewModel+enums.swift */,
+				D7801396B73946B63D9885AE /* TimecardViewModel+funcs.swift */,
+			);
+			path = Timecard;
 			sourceTree = "<group>";
 		};
 		80DF9A27220F2745238907B8 /* User:Common */ = {
@@ -668,6 +760,7 @@
 			children = (
 				FE479347F79205C90256687D /* DealMemoModule.swift */,
 				0274DA7B9F348EFF150347E2 /* DMApprovalQueuePage.swift */,
+				E859B75749DD5305439B1ACC /* DMCreatePage.swift */,
 				953E39F973DA385032D23049 /* DMDealsPage.swift */,
 				1CF5DE350E9BEF2C32BA6D47 /* DMMyDealPage.swift */,
 				CA8B3E7C8F3966BD94B4F3BC /* DMOverviewPage.swift */,
@@ -713,6 +806,7 @@
 				79C1CFD2BAC0C2592B95D212 /* Invoices */,
 				53660599FF00059E551A3041 /* Legacy */,
 				E8C12980E71B146EB8EF99A3 /* PurchaseOrder */,
+				6A69F274018A51CD0EA7282B /* Timecard */,
 			);
 			path = Network;
 			sourceTree = "<group>";
@@ -751,6 +845,7 @@
 				A0DC193E8D008C1D3CC95748 /* Invoices */,
 				C9DAE5FAEC94B5815B2F94B7 /* Main */,
 				53C135B79BB0488524F26701 /* PurchaseOrders */,
+				525DECC6C5EEAF2C2C652B35 /* Timecard */,
 				FFA644E33260D58A44987975 /* Vendors */,
 			);
 			path = Views;
@@ -768,6 +863,17 @@
 		CB499F534488EE992221E7A6 /* Steps */ = {
 			isa = PBXGroup;
 			children = (
+				9F7DD6BD06C5083EA83799BC /* DMStepPrimitives.swift */,
+				22584481D5CC36C5A7AEDE04 /* Step1Territory.swift */,
+				D933FC0868933BAE0ED3FD11 /* Step2Crew.swift */,
+				ABD6519451EC354D9CAEE8FD /* Step3Compliance.swift */,
+				C09DB9A9334E95D779F1DBC3 /* Step4DealStructure.swift */,
+				644C719CBB4BFCC0253F8864 /* Step5Rates.swift */,
+				51012101FB490B7E1E8D1FC9 /* Step6Allowances.swift */,
+				26F3790562EC084F9B8A77CC /* Step7Nominal.swift */,
+				F5B30F7A539B3B09EF61223D /* Step8Documents.swift */,
+				C23961BEC5DEB0B2DAED8B7E /* Step9Payroll.swift */,
+				DF9FF9BE873A2F6FBF329510 /* Step10Preview.swift */,
 			);
 			path = Steps;
 			sourceTree = "<group>";
@@ -781,6 +887,7 @@
 				26A35B368598A15493790955 /* DealMemoModels.swift */,
 				7CA007516937912F3BA4A52E /* InvoiceModels.swift */,
 				09763CA00F19737D01701F26 /* Models.swift */,
+				9DB34F749A425B695059ACA7 /* TimecardModels.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -818,6 +925,7 @@
 				4FF7ED272AA49D632424A236 /* DealMemoViewModel+apis.swift */,
 				C67944621F3B63E0DA4F1400 /* DealMemoViewModel+enums.swift */,
 				5F209E4BD61CE5A925DEB418 /* DealMemoViewModel+funcs.swift */,
+				3AA429FCC15BE2A63135E176 /* DMWizardState.swift */,
 			);
 			path = DealMemo;
 			sourceTree = "<group>";
@@ -909,6 +1017,7 @@
 				2C316BD666D7D372ABED8EAD /* ApprovalHelpers.swift in Sources */,
 				BB4D162AD3C025F1FD91C91B /* ApprovalQueuePage.swift in Sources */,
 				BACE752990C925A79BACBBB4 /* AssignPhysicalCardPage.swift in Sources */,
+				0E675B4B73D103F8D8C2FBE5 /* AssignedTimecardsModule.swift in Sources */,
 				F9348DB54459F9E2B814AD1A /* CardCodingQueuePage.swift in Sources */,
 				4799202A1C7BDD52FE2F89CB /* CardDetailPage.swift in Sources */,
 				C5E0F08B5613517784C3A8AB /* CardExpenseCodableTask.swift in Sources */,
@@ -951,11 +1060,16 @@
 				F566F67B23C04163DD520F20 /* CountryCodePickerSheet.swift in Sources */,
 				4F01E8785B82DB7A08247E5A /* CountryNamePickerSheet.swift in Sources */,
 				81EB2ED5B1308BC82F4FA0F7 /* CreateTemplatePage.swift in Sources */,
+				205599C6B72BF9DEBF2CF295 /* CrewReviewModule.swift in Sources */,
 				0972DD2D5B74A8CBC373F987 /* DMApprovalQueuePage.swift in Sources */,
+				1B6D9CE8488C9BF245069056 /* DMCreatePage.swift in Sources */,
 				03F8D6C5BCA9AEEB212B51F0 /* DMDealsPage.swift in Sources */,
 				20C76E5751CC7B5185DD821E /* DMMyDealPage.swift in Sources */,
 				5944244E38A395FDA01C96E3 /* DMOverviewPage.swift in Sources */,
 				888E8EC508ECB652564FEADF /* DMRatesBiblePage.swift in Sources */,
+				C8F2077F85F545973A5A03D8 /* DMStepPrimitives.swift in Sources */,
+				B6C1A2CD5A400AE8D8EA5AE0 /* DMWizardState.swift in Sources */,
+				56C0D6BFF609EBFCB267210B /* DailyLoginRequest.swift in Sources */,
 				6B094D5A95D4758E1AD76D50 /* DateFieldView.swift in Sources */,
 				AB206279C8CDB00AAC43557C /* DealMemoCodableTask.swift in Sources */,
 				84ECE197E96473E0BFA43D5D /* DealMemoModels.swift in Sources */,
@@ -1004,6 +1118,7 @@
 				774B7FC104CA594323D21856 /* LoaderView.swift in Sources */,
 				33E901B2490204392C08ED1A /* Models.swift in Sources */,
 				0F2D5FFFB36A95BC1E1883DE /* MultilineTextView.swift in Sources */,
+				E0574F9706E8A8C7486CDAD3 /* MyTimecardsModule.swift in Sources */,
 				DFE2A1EBC45EAA5DD7E029E0 /* OutOfPocketModuleView.swift in Sources */,
 				352C4D8C067FCBB6BA0E1255 /* PDFViewerPage.swift in Sources */,
 				6A0EBFB1D071C270FC50F5F6 /* POBadgeViewModel.swift in Sources */,
@@ -1044,8 +1159,28 @@
 				8B16B47ED029CCD0616A38B2 /* SmartAlertsPage.swift in Sources */,
 				D626AE1BB7F5118FD2D5C1B8 /* StaticData.swift in Sources */,
 				C5C764E16A6A96F578DCE033 /* StatusBadge.swift in Sources */,
+				B7B52F281B958A5D2E7D63D2 /* Step10Preview.swift in Sources */,
+				3EEEDE591724CEDBE8632902 /* Step1Territory.swift in Sources */,
+				35EA83D256DDEBE5CFAC1CCB /* Step2Crew.swift in Sources */,
+				BF9C01F427A30A9D86EFF409 /* Step3Compliance.swift in Sources */,
+				61577F5A7500848B1F2B0B80 /* Step4DealStructure.swift in Sources */,
+				85520C914599B6F1209ECDCF /* Step5Rates.swift in Sources */,
+				44C8B5679F38D9611BB96D2B /* Step6Allowances.swift in Sources */,
+				FE674983599562FBCF0DDB84 /* Step7Nominal.swift in Sources */,
+				1D42F2558CCD6E8570535046 /* Step8Documents.swift in Sources */,
+				BA90D20F7C3180067DF03A17 /* Step9Payroll.swift in Sources */,
 				A2EBD14583871F8EC19AC0EE /* SubmitClaimFormView.swift in Sources */,
+				C8042FDFF51AD091D065E58A /* TCApprovalQueuePage.swift in Sources */,
 				7385B7E899533A06A43A9F2C /* TemplateNameSheet.swift in Sources */,
+				11A9D64C03E2AC7C0FD5D0BC /* TimecardCodableTask.swift in Sources */,
+				592F605CF23BD0CBA5871534 /* TimecardConfigModule.swift in Sources */,
+				C41BB249B295217526EC2C15 /* TimecardLandingModule.swift in Sources */,
+				E6605D3EDEEF8F05C1605568 /* TimecardModels.swift in Sources */,
+				D05E1695843BBD06EFD7484C /* TimecardRequest.swift in Sources */,
+				837FF33B19177A61637448A0 /* TimecardViewModel+apis.swift in Sources */,
+				533F19F01135E80B9B442D9B /* TimecardViewModel+enums.swift in Sources */,
+				5051CE4B8CEFD13441E0D230 /* TimecardViewModel+funcs.swift in Sources */,
+				AF804F41C2082B1AC3C7F4BF /* TimecardViewModel.swift in Sources */,
 				AD8D93DFA0BD8B60AFFED06E /* TopUpDetailPage.swift in Sources */,
 				EFA8E9E097AA26A998F90FC0 /* TopUpToDoPage.swift in Sources */,
 				2D65997DFFD7A6C8F4DD48F0 /* UploadInvoicePage.swift in Sources */,
@@ -1057,6 +1192,7 @@
 				670B7CB8CFD3440F3E658CB9 /* VendorsModuleView.swift in Sources */,
 				AC65AE01506C45B52DF9ABAE /* VendorsPinnedHeader.swift in Sources */,
 				C84CA961BF3075A71125845D /* VendorsScrollableList.swift in Sources */,
+				0CD5C61E42A42E7EA578DEE0 /* WeeklyTimecardModule.swift in Sources */,
 				51CB77D53C2B7D875F30A63B /* ZillitPOApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
