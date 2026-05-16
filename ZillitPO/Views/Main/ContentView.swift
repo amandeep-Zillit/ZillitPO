@@ -68,20 +68,25 @@ struct ContentView: View {
 
                             VStack(spacing: 12) {
                                 // ── New live-shape AccountHub entry ──────
-                                NavigationLink(destination: AccountHubAccountantView(), isActive: $showNewAccountHub) {
-                                    HStack(spacing: 12) {
-                                        Image(systemName: "sparkles").font(.system(size: 20)).foregroundColor(.white)
-                                            .frame(width: 36, height: 36).background(Color.goldDark).cornerRadius(8)
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text("Account Hub (live-shape)").font(.system(size: 15, weight: .semibold))
-                                            Text("New split-VM entry — mirrors live structure").font(.system(size: 12)).foregroundColor(.secondary)
-                                        }
-                                        Spacer()
-                                        Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(.goldDark)
-                                    }.padding(14).background(Color.bgSurface).cornerRadius(12)
-                                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.goldDark.opacity(0.4), lineWidth: 1))
-                                    .contentShape(Rectangle())
-                                }.buttonStyle(BorderlessButtonStyle())
+                                // Mirrors live: this tile only appears for
+                                // accountants. Non-accountants see the regular
+                                // module tiles below.
+                                if appState.currentUser?.isAccountant == true {
+                                    NavigationLink(destination: AccountHubAccountantView(), isActive: $showNewAccountHub) {
+                                        HStack(spacing: 12) {
+                                            Image(systemName: "sparkles").font(.system(size: 20)).foregroundColor(.white)
+                                                .frame(width: 36, height: 36).background(Color.goldDark).cornerRadius(8)
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text("Account Hub").font(.system(size: 15, weight: .semibold))
+                                                Text("Vendors, POs, invoices, card & cash expenses").font(.system(size: 12)).foregroundColor(.secondary)
+                                            }
+                                            Spacer()
+                                            Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(.goldDark)
+                                        }.padding(14).background(Color.bgSurface).cornerRadius(12)
+                                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.goldDark.opacity(0.4), lineWidth: 1))
+                                        .contentShape(Rectangle())
+                                    }.buttonStyle(BorderlessButtonStyle())
+                                }
 
                                 Button { showUserPicker = true } label: {
                                     HStack(spacing: 12) {
@@ -97,35 +102,42 @@ struct ContentView: View {
                                     .contentShape(Rectangle())
                                 }.buttonStyle(BorderlessButtonStyle())
 
-                                NavigationLink(destination: POHubPage(), isActive: $showPurchaseOrders) {
-                                    HStack(spacing: 12) {
-                                        Image(systemName: "cart.fill").font(.system(size: 20)).foregroundColor(.white)
-                                            .frame(width: 36, height: 36).background(Color.gold).cornerRadius(8)
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text("Purchase Orders").font(.system(size: 15, weight: .semibold))
-                                            Text("Create, track, and manage POs").font(.system(size: 12)).foregroundColor(.secondary)
-                                        }
-                                        Spacer()
-                                        Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(.goldDark)
-                                    }.padding(14).background(Color.bgSurface).cornerRadius(12)
-                                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.gold.opacity(0.3), lineWidth: 1))
-                                    .contentShape(Rectangle())
-                                }.buttonStyle(BorderlessButtonStyle())
+                                // Module tiles below are hidden for accountants — they
+                                // get the unified Account Hub entry above instead. Non-
+                                // accountants see the per-module tiles. Deal Memo stays
+                                // visible to both roles (its tab shell handles role gating
+                                // internally).
+                                if appState.currentUser?.isAccountant != true {
+                                    NavigationLink(destination: POHubPage(), isActive: $showPurchaseOrders) {
+                                        HStack(spacing: 12) {
+                                            Image(systemName: "cart.fill").font(.system(size: 20)).foregroundColor(.white)
+                                                .frame(width: 36, height: 36).background(Color.gold).cornerRadius(8)
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text("Purchase Orders").font(.system(size: 15, weight: .semibold))
+                                                Text("Create, track, and manage POs").font(.system(size: 12)).foregroundColor(.secondary)
+                                            }
+                                            Spacer()
+                                            Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(.goldDark)
+                                        }.padding(14).background(Color.bgSurface).cornerRadius(12)
+                                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.gold.opacity(0.3), lineWidth: 1))
+                                        .contentShape(Rectangle())
+                                    }.buttonStyle(BorderlessButtonStyle())
 
-                                NavigationLink(destination: CardExpensesModuleView().environmentObject(appState), isActive: $showCardExpenses) {
-                                    HStack(spacing: 12) {
-                                        Image(systemName: "creditcard.fill").font(.system(size: 20)).foregroundColor(.white)
-                                            .frame(width: 36, height: 36).background(Color(red: 0.56, green: 0.27, blue: 0.68)).cornerRadius(8)
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text("Card Expenses").font(.system(size: 15, weight: .semibold))
-                                            Text("Track and manage card expenses").font(.system(size: 12)).foregroundColor(.secondary)
-                                        }
-                                        Spacer()
-                                        Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(Color(red: 0.56, green: 0.27, blue: 0.68))
-                                    }.padding(14).background(Color.bgSurface).cornerRadius(12)
-                                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.56, green: 0.27, blue: 0.68).opacity(0.3), lineWidth: 1))
-                                    .contentShape(Rectangle())
-                                }.buttonStyle(BorderlessButtonStyle())
+                                    NavigationLink(destination: CardExpensesModuleView().environmentObject(appState), isActive: $showCardExpenses) {
+                                        HStack(spacing: 12) {
+                                            Image(systemName: "creditcard.fill").font(.system(size: 20)).foregroundColor(.white)
+                                                .frame(width: 36, height: 36).background(Color(red: 0.56, green: 0.27, blue: 0.68)).cornerRadius(8)
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text("Card Expenses").font(.system(size: 15, weight: .semibold))
+                                                Text("Track and manage card expenses").font(.system(size: 12)).foregroundColor(.secondary)
+                                            }
+                                            Spacer()
+                                            Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(Color(red: 0.56, green: 0.27, blue: 0.68))
+                                        }.padding(14).background(Color.bgSurface).cornerRadius(12)
+                                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.56, green: 0.27, blue: 0.68).opacity(0.3), lineWidth: 1))
+                                        .contentShape(Rectangle())
+                                    }.buttonStyle(BorderlessButtonStyle())
+                                }
 
                                 NavigationLink(destination: DealMemoModule(), isActive: $showDealMemo) {
                                     HStack(spacing: 12) {
@@ -142,20 +154,22 @@ struct ContentView: View {
                                     .contentShape(Rectangle())
                                 }.buttonStyle(BorderlessButtonStyle())
 
-                                NavigationLink(destination: CashExpensesHubView().environmentObject(appState), isActive: $showCashExpenses) {
-                                    HStack(spacing: 12) {
-                                        Image(systemName: "sterlingsign.circle.fill").font(.system(size: 20)).foregroundColor(.white)
-                                            .frame(width: 36, height: 36).background(Color(red: 0.2, green: 0.7, blue: 0.45)).cornerRadius(8)
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text("Cash & Expenses").font(.system(size: 15, weight: .semibold))
-                                            Text("Petty cash & out-of-pocket claims").font(.system(size: 12)).foregroundColor(.secondary)
-                                        }
-                                        Spacer()
-                                        Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(Color(red: 0.2, green: 0.7, blue: 0.45))
-                                    }.padding(14).background(Color.bgSurface).cornerRadius(12)
-                                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.2, green: 0.7, blue: 0.45).opacity(0.3), lineWidth: 1))
-                                    .contentShape(Rectangle())
-                                }.buttonStyle(BorderlessButtonStyle())
+                                if appState.currentUser?.isAccountant != true {
+                                    NavigationLink(destination: CashExpensesHubView().environmentObject(appState), isActive: $showCashExpenses) {
+                                        HStack(spacing: 12) {
+                                            Image(systemName: "sterlingsign.circle.fill").font(.system(size: 20)).foregroundColor(.white)
+                                                .frame(width: 36, height: 36).background(Color(red: 0.2, green: 0.7, blue: 0.45)).cornerRadius(8)
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text("Cash & Expenses").font(.system(size: 15, weight: .semibold))
+                                                Text("Petty cash & out-of-pocket claims").font(.system(size: 12)).foregroundColor(.secondary)
+                                            }
+                                            Spacer()
+                                            Image(systemName: "chevron.right").font(.system(size: 13)).foregroundColor(Color(red: 0.2, green: 0.7, blue: 0.45))
+                                        }.padding(14).background(Color.bgSurface).cornerRadius(12)
+                                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.2, green: 0.7, blue: 0.45).opacity(0.3), lineWidth: 1))
+                                        .contentShape(Rectangle())
+                                    }.buttonStyle(BorderlessButtonStyle())
+                                }
 
                             }.padding(.horizontal, 20)
 
